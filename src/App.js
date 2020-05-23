@@ -1,37 +1,27 @@
-import React, { Component } from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React, { useState, useEffect } from 'react';
+
 import { subscribeToTimer } from './test';
 
+const App = () => {
 
-class App extends Component {
+	const [timestamp, setTimestamp] = useState(0);
 
-	constructor(props) {
-	  super(props);
+	useEffect(()=> {
+		subscribeToTimer((err, updatedTimestamp) => {
+			if(err) {
+			  console.log(err);
+			}
+			setTimestamp(updatedTimestamp);
+		  });
+	}, []);
 
-	  subscribeToTimer((err, timestamp) => {
-	    if(err) {
-	      console.log(err);
-	    }
-	    this.setState({ 
-		    timestamp 
-	    });
-	  });
-	}
-
-	state = {
-		timestamp: 'no timestamp yet'
-	};
-
-	render() {
-	  return (
-		<div className="App">
-		  <p className="App-intro">
-		  This is the timer value: {this.state.timestamp}
+	return (
+		<div>
+		  <p>
+		  This is the timer value: {timestamp}
 		  </p>
 		</div>
 	  );
-	}
 }
 
 export default App;
