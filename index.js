@@ -4,6 +4,7 @@ const fs = require('fs');
 const unzipper = require('unzipper');
 const { processFile } = require('./util/processFile');
 const { rawDir, unzippedDir } = require('./util/constants');
+const { queryHash, writePageCheck } = require('./util/queries');
 
 // watch filesystem and compute hash of incoming file.
 chokidar
@@ -34,15 +35,29 @@ console.log('listening...\n');
 
 function checkDBforHash(path, computedHash) {
   // todo write page_check record to serverless aurora
+  // writePageCheck()
+  //   .then(result => {
+  //     console.log(result);
+  //   })
+  //   .catch(err => {
+  //     console.log(err);
+  //   });
 
   // todo call serverless aurora and find out if hash is already in DB
+  queryHash()
+    .then(result => {
+      console.log(result);
+    })
+    .catch(err => {
+      console.log(err);
+    });
 
   // if is in database, END
 
   // if not in database write a record in the download table
 
   // then extract
-  extractZip(path, computedHash);
+  // extractZip(path, computedHash);
 }
 
 function extractZip(path, computedHash) {

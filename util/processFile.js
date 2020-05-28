@@ -143,4 +143,6 @@ exports.processFile = async function (fileName, fileType) {
 
   console.log(`processed ${transformed} features`);
   console.log(`found ${errored} errors`);
+
+  // TODO create UUID and upload to S3, write serverless aurora record
 };
