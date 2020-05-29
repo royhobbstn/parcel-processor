@@ -10,10 +10,20 @@ const slsAuroraClient = require('data-api-client')({
 exports.queryHash = function () {
   // queries the database for a given hash
   // (if found, than we already have the most recent download)
-  return slsAuroraClient.query(`SELECT * FROM pages`); // TODO change query
+  return slsAuroraClient.query(`SELECT * FROM pages;`); // TODO change query
 };
 
-exports.writePageCheck = function () {
+exports.queryPage = function (pageName) {
+  // queries if a page exists in the page table
+  return slsAuroraClient.query('SELECT * FROM pages WHERE page_url = :pageName;', { pageName });
+};
+
+exports.writePage = function (pageName) {
+  // writes a new page record in the page table
+  return slsAuroraClient.query('INSERT INTO pages(page_url) VALUES (:pageName);', { pageName });
+};
+
+exports.queryWritePageCheck = function () {
   // write a 'pageCheck' record to the database
   // it's a record that a page was checked for a more recent download version
   // it is written whether or not a more recent version was found

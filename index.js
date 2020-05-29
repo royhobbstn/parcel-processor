@@ -4,7 +4,10 @@ const fs = require('fs');
 const unzipper = require('unzipper');
 const { processFile } = require('./util/processFile');
 const { rawDir, unzippedDir } = require('./util/constants');
-const { queryHash, writePageCheck } = require('./util/queries');
+const { queryHash, queryPage, writePage } = require('./util/queries');
+const prompt = require('prompt');
+
+// TODO ping the database to make sure its up / get it ready
 
 // watch filesystem and compute hash of incoming file.
 chokidar
@@ -12,9 +15,29 @@ chokidar
     ignored: /(^|[\/\\])\../, // ignore dotfiles
     awaitWriteFinish: true,
   })
-  .on('add', path => {
+  .on('add', async path => {
     console.log(`\nFile found: ${path}`);
-    console.log('processing...');
+
+    try {
+      const pageNameInput = await pageInputPrompt();
+
+      const pageId = await fetchPageIdIfExists(pageNameInput);
+
+      if (pageId > -1) {
+        await writePageCheckRecord(pageId);
+      } else {
+        const newPageId = await createPage(pageNameInput);
+        await writePageCheckRecord(newPageId);
+      }
+    } catch (e) {
+      console.error('unexpected error');
+      console.error(e);
+      process.exit();
+    }
+
+    console.log('processing file...');
+
+    process.exit();
 
     const hash = crypto.createHash('md5');
     const stream = fs.createReadStream(path);
@@ -32,6 +55,40 @@ chokidar
   });
 
 console.log('listening...\n');
+
+function pageInputPrompt() {
+  return new Promise((resolve, reject) => {
+    prompt.start();
+
+    prompt.get(['pageName'], function (err, result) {
+      if (err) {
+        reject(err);
+      }
+      console.log('Command-line input received:');
+      console.log('  layer: ' + result.pageName);
+      resolve(result.pageName);
+    });
+  });
+}
+
+async function fetchPageIdIfExists(pageName) {
+  const query = await queryPage(pageName);
+  console.log(`queryPage: ${pageName}`, query);
+
+  if (query.records.length) {
+    return query.records[0].page_id;
+  }
+  return -1;
+}
+
+async function createPage(pageName) {
+  const query = await writePage(pageName);
+  console.log(`createPage: ${pageName}`, query);
+  if (query.numberOfRecordsUpdated === 1) {
+    return query.insertId;
+  }
+  throw new Error(`unable to create page record for: ${pageName}`);
+}
 
 function checkDBforHash(path, computedHash) {
   // todo write page_check record to serverless aurora
