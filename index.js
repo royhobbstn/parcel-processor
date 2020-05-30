@@ -3,57 +3,98 @@ const crypto = require('crypto');
 const fs = require('fs');
 const unzipper = require('unzipper');
 const { processFile } = require('./util/processFile');
-const { rawDir, unzippedDir } = require('./util/constants');
+const { rawDir, unzippedDir, processedDir } = require('./util/constants');
 const {
   queryHash,
   queryPage,
   queryWritePage,
   queryWritePageCheck,
   queryCreateDownloadRecord,
+  queryHealth,
 } = require('./util/queries');
+const { moveFile } = require('./util/filesystemUtil');
 const prompt = require('prompt');
 
-// TODO ping the database to make sure its up / get it ready
+// ping the database to make sure its up / get it ready
+// after that, keep-alives from data-api-client should do the rest
+async function init() {
+  const seconds = 10;
+  let connected = false;
+  do {
+    console.log('attempting to connect to database');
+    connected = await checkHealth();
+    if (!connected) {
+      console.log(`attempt failed.  trying again in ${seconds} seconds...`);
+      await setPause(seconds * 1000);
+    }
+  } while (!connected);
+
+  console.log('connected');
+  watchFilesystem();
+}
+
+function setPause(timer) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve();
+    }, timer);
+  });
+}
+
+async function checkHealth() {
+  try {
+    await queryHealth();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+init().catch(err => {
+  console.error('unexpected error');
+  console.error(err);
+});
 
 // watch filesystem and compute hash of incoming file.
-chokidar
-  .watch(rawDir, {
-    ignored: /(^|[\/\\])\../, // ignore dotfiles
-    awaitWriteFinish: true,
-  })
-  .on('add', async path => {
-    console.log(`\nFile found: ${path}`);
+function watchFilesystem() {
+  chokidar
+    .watch(rawDir, {
+      ignored: /(^|[\/\\])\../, // ignore dotfiles
+      awaitWriteFinish: true,
+    })
+    .on('add', async path => {
+      console.log(`\nFile found: ${path}`);
 
-    let pageId;
+      let pageId;
 
-    const pageNameInput = await pageInputPrompt();
+      const pageNameInput = await pageInputPrompt();
 
-    pageId = await fetchPageIdIfExists(pageNameInput);
+      pageId = await fetchPageIdIfExists(pageNameInput);
 
-    if (pageId === -1) {
-      pageId = await createPage(pageNameInput);
-    }
+      if (pageId === -1) {
+        pageId = await createPage(pageNameInput);
+      }
 
-    const checkId = await recordPageCheck(pageId);
+      const checkId = await recordPageCheck(pageId);
 
-    console.log('processing file...');
+      console.log('processing file...');
 
-    const hash = crypto.createHash('md5');
-    const stream = fs.createReadStream(path);
+      const hash = crypto.createHash('md5');
+      const stream = fs.createReadStream(path);
 
-    stream.on('data', data => {
-      hash.update(data, 'utf8');
+      stream.on('data', data => {
+        hash.update(data, 'utf8');
+      });
+
+      stream.on('end', () => {
+        computedHash = hash.digest('hex');
+        console.log(`Computed Hash: ${computedHash}`);
+
+        checkDBforHash(path, computedHash, pageId, checkId);
+      });
     });
-
-    stream.on('end', () => {
-      computedHash = hash.digest('hex');
-      console.log(`Computed Hash: ${computedHash}`);
-
-      checkDBforHash(path, computedHash, pageId, checkId);
-    });
-  });
-
-console.log('listening...\n');
+  console.log('listening...\n');
+}
 
 async function recordPageCheck(pageId) {
   const query = await queryWritePageCheck(pageId);
@@ -108,9 +149,28 @@ async function checkDBforHash(path, computedHash, pageId, checkId) {
   }
 
   // otherwise, file has already been processed.
-  console.log('Hash exists in database.  File has already been processed.');
+  console.log('Hash exists in database.  File has already been processed.\n');
 
-  // TODO Cleanup()
+  doBasicCleanup();
+}
+
+function doBasicCleanup() {
+  // move all files from raw into processed
+  fs.readdir(rawDir, (err, files) => {
+    if (err) throw err;
+
+    const filteredFiles = files.filter(file => {
+      return !file.includes('gitignore');
+    });
+
+    const movedFiles = filteredFiles.map(file => {
+      moveFile(`${rawDir}/${file}`, `${processedDir}/${file}`);
+    });
+
+    Promise.all(movedFiles).then(() => {
+      console.log(`all files from '${rawDir}' moved to '${processedDir}'.  Done.\n`);
+    });
+  });
 }
 
 async function doesHashExist() {

@@ -7,12 +7,16 @@ const slsAuroraClient = require('data-api-client')({
   region: config.get('region'),
 });
 
+exports.queryHealth = function () {
+  return slsAuroraClient.query(`SELECT 1 + 1;`);
+};
+
 exports.queryHash = function (computedHash) {
   // queries the database for a given hash
   // (if found, than we already have the most recent download)
   return slsAuroraClient.query(`SELECT * FROM downloads where checksum = :computedHash;`, {
     computedHash,
-  }); // TODO change query
+  });
 };
 
 exports.queryPage = function (pageName) {
