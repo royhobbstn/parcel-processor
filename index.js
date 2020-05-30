@@ -4,7 +4,13 @@ const fs = require('fs');
 const unzipper = require('unzipper');
 const { processFile } = require('./util/processFile');
 const { rawDir, unzippedDir } = require('./util/constants');
-const { queryHash, queryPage, writePage } = require('./util/queries');
+const {
+  queryHash,
+  queryPage,
+  queryWritePage,
+  queryWritePageCheck,
+  queryCreateDownloadRecord,
+} = require('./util/queries');
 const prompt = require('prompt');
 
 // TODO ping the database to make sure its up / get it ready
@@ -18,26 +24,19 @@ chokidar
   .on('add', async path => {
     console.log(`\nFile found: ${path}`);
 
-    try {
-      const pageNameInput = await pageInputPrompt();
+    let pageId;
 
-      const pageId = await fetchPageIdIfExists(pageNameInput);
+    const pageNameInput = await pageInputPrompt();
 
-      if (pageId > -1) {
-        await writePageCheckRecord(pageId);
-      } else {
-        const newPageId = await createPage(pageNameInput);
-        await writePageCheckRecord(newPageId);
-      }
-    } catch (e) {
-      console.error('unexpected error');
-      console.error(e);
-      process.exit();
+    pageId = await fetchPageIdIfExists(pageNameInput);
+
+    if (pageId === -1) {
+      pageId = await createPage(pageNameInput);
     }
 
-    console.log('processing file...');
+    const checkId = await recordPageCheck(pageId);
 
-    process.exit();
+    console.log('processing file...');
 
     const hash = crypto.createHash('md5');
     const stream = fs.createReadStream(path);
@@ -50,11 +49,16 @@ chokidar
       computedHash = hash.digest('hex');
       console.log(`Computed Hash: ${computedHash}`);
 
-      checkDBforHash(path, computedHash);
+      checkDBforHash(path, computedHash, pageId, checkId);
     });
   });
 
 console.log('listening...\n');
+
+async function recordPageCheck(pageId) {
+  const query = await queryWritePageCheck(pageId);
+  return query.insertId;
+}
 
 function pageInputPrompt() {
   return new Promise((resolve, reject) => {
@@ -74,7 +78,6 @@ function pageInputPrompt() {
 async function fetchPageIdIfExists(pageName) {
   const query = await queryPage(pageName);
   console.log(`queryPage: ${pageName}`, query);
-
   if (query.records.length) {
     return query.records[0].page_id;
   }
@@ -82,7 +85,7 @@ async function fetchPageIdIfExists(pageName) {
 }
 
 async function createPage(pageName) {
-  const query = await writePage(pageName);
+  const query = await queryWritePage(pageName);
   console.log(`createPage: ${pageName}`, query);
   if (query.numberOfRecordsUpdated === 1) {
     return query.insertId;
@@ -90,34 +93,35 @@ async function createPage(pageName) {
   throw new Error(`unable to create page record for: ${pageName}`);
 }
 
-function checkDBforHash(path, computedHash) {
-  // todo write page_check record to serverless aurora
-  // writePageCheck()
-  //   .then(result => {
-  //     console.log(result);
-  //   })
-  //   .catch(err => {
-  //     console.log(err);
-  //   });
-
+async function checkDBforHash(path, computedHash, pageId, checkId) {
   // todo call serverless aurora and find out if hash is already in DB
-  queryHash()
-    .then(result => {
-      console.log(result);
-    })
-    .catch(err => {
-      console.log(err);
-    });
-
-  // if is in database, END
+  const hashExists = await doesHashExist(computedHash);
 
   // if not in database write a record in the download table
+  if (!hashExists) {
+    console.log('Hash is unique.  Processing new download.');
+    queryCreateDownloadRecord(pageId, checkId, computedHash);
+    console.log('new download record created');
 
-  // then extract
-  // extractZip(path, computedHash);
+    // then extract
+    extractZip(path);
+  }
+
+  // otherwise, file has already been processed.
+  console.log('Hash exists in database.  File has already been processed.');
+
+  // TODO Cleanup()
 }
 
-function extractZip(path, computedHash) {
+async function doesHashExist() {
+  const query = await queryHash(computedHash);
+  if (query.records.length) {
+    return true;
+  }
+  return false;
+}
+
+function extractZip(path) {
   fs.createReadStream(path)
     .pipe(unzipper.Extract({ path: unzippedDir }))
     .on('error', err => {
