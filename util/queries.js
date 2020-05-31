@@ -45,3 +45,16 @@ exports.queryCreateDownloadRecord = function (pageId, checkId, checksum) {
     { pageId, checkId, checksum },
   );
 };
+
+exports.queryCreateProductRecord = function (downloadId, productType, geoid) {
+  // create product record
+  return slsAuroraClient.query(
+    'INSERT INTO products(download_id, product_type, geoid) VALUES (:downloadId, :productType, :geoid);',
+    { downloadId, productType, geoid },
+  );
+};
+
+exports.queryGeographicIdentifier = function () {
+  //
+  return slsAuroraClient.query();
+};

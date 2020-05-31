@@ -5,10 +5,12 @@ const gdal = require('gdal-next');
 const { getGeoJsonFromGdalFeature } = require('./parseFeature');
 const { StatContext } = require('./StatContext');
 const { outputDir, unzippedDir } = require('./constants');
+const { queryGeographicIdentifier, queryCreateProductRecord } = require('./queries');
+const { promptGeoIdentifiers } = require('./prompts');
 
 // fileName is the file name without the extension
 // fileType supports 'shapefile' and 'geodatabase'
-exports.processFile = async function (fileName, fileType) {
+exports.processFile = async function (fileName, fileType, downloadId) {
   // TODO use downloadID
   console.log(`Found file: ${fileName}`);
 
@@ -27,7 +29,7 @@ exports.processFile = async function (fileName, fileType) {
   if (driver_metadata.DCAP_VECTOR !== 'YES') {
     console.error('Source file is not a vector');
     console.error('download record and s3 file are now orphaned.');
-    // todo log DownloadID
+    console.log({ downloadId });
     process.exit(1);
   }
 
@@ -86,7 +88,7 @@ exports.processFile = async function (fileName, fileType) {
   let writeStream = fs.createWriteStream(`${outputDir}/${splitFileName}.ndgeojson`);
 
   // the finish event is emitted when all data has been flushed from the stream
-  writeStream.on('finish', () => {
+  writeStream.on('finish', async () => {
     fs.writeFileSync(
       `${outputDir}/${splitFileName}.json`,
       JSON.stringify(statCounter.export()),
@@ -95,6 +97,58 @@ exports.processFile = async function (fileName, fileType) {
     console.log(
       `wrote all ${statCounter.rowCount} rows to file: ${outputDir}/${splitFileName}.ndgeojson\n`,
     );
+
+    let fipsDetails;
+    do {
+      fipsDetails = await promptGeoIdentifiers();
+    } while (!fipsDetails);
+    console.log({ fipsDetails });
+
+    // TODO get geo name corresponding to FIPS
+    // this is up here so i can validate the geoid in the database before writing a product record
+    // todo can probably move the figuring of geoid logic here
+    // log to user the geoName so that the can have some assurance
+    const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
+
+    // This is probably done but hasnt been run
+    const productId = await createProductRecord(fipsDetails, downloadId);
+
+    // todo move these two functions out of here
+
+    async function createProductRecord(geoid, downloadId) {
+      const productType = 1; // original product (not filtered from a different product)
+
+      const query = await queryCreateProductRecord(downloadId, productType, geoid);
+      console.log(query);
+      // todo something here
+    }
+
+    async function lookupCleanGeoName(fipsDetails) {
+      const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
+
+      let geoid;
+
+      if (SUMLEV === '040') {
+        geoid = STATEFIPS;
+      } else if (SUMLEV === '050') {
+        geoid = `${STATEFIPS}${COUNTYFIPS}`;
+      } else if (SUMLEV === '160') {
+        geoid = `${STATEFIPS}${PLACEFIPS}`;
+      } else {
+        console.error('SUMLEV out of range.  Exiting.');
+        process.exit();
+      }
+
+      const query = queryGeographicIdentifier();
+      console.log('remove this: geographic identifier query results:');
+      console.log(query);
+      // todo query for identifier
+      // TODO Alter geo name to be s3 key friendly (all non alphanumeric become -)
+
+      return { geoid, geoName };
+    }
+
+    // TODO upload ndgeojson and state files to S3 using downloadId and productId (concurrent)
   });
 
   try {
@@ -146,9 +200,4 @@ exports.processFile = async function (fileName, fileType) {
 
   console.log(`processed ${transformed} features`);
   console.log(`found ${errored} feature errors`);
-
-  // TODO prompt user for SUMLEV, STATEFIPS, and either COUNTYFIPS or PLACEFIPS
-  // validate input
-
-  // TODO create product record and upload to S3
 };

@@ -169,7 +169,7 @@ async function checkDBforHash(filePath, computedHash, pageId, checkId) {
     await putFileToS3(rawBucket, s3KeyName, filePath, 'application/zip', false);
 
     // then extract
-    return extractZip(filePath);
+    return extractZip(filePath, downloadRecordId);
   }
 
   // otherwise, file has already been processed.
@@ -215,7 +215,7 @@ async function doesHashExist() {
   return false;
 }
 
-function extractZip(filePath) {
+function extractZip(filePath, downloadId) {
   fs.createReadStream(filePath)
     .pipe(unzipper.Extract({ path: unzippedDir }))
     .on('error', err => {
@@ -225,12 +225,12 @@ function extractZip(filePath) {
     })
     .on('close', () => {
       console.log(`Finished unzipping file: ${filePath}`);
-      checkForFileType();
+      checkForFileType(downloadId);
     });
 }
 
 // determine if the unzipped folder contains a shapefile or FGDB
-function checkForFileType() {
+function checkForFileType(downloadId) {
   const arrayOfFiles = fs.readdirSync(unzippedDir);
 
   console.log({ arrayOfFiles });
@@ -256,7 +256,7 @@ function checkForFileType() {
   }
 
   if (gdbFilenames.size === 1) {
-    processFile(Array.from(gdbFilenames)[0], 'geodatabase');
+    processFile(Array.from(gdbFilenames)[0], 'geodatabase', downloadId);
   }
 
   if (gdbFilenames.size > 1) {
@@ -266,7 +266,7 @@ function checkForFileType() {
   }
 
   if (shpFilenames.size === 1) {
-    processFile(Array.from(shpFilenames)[0], 'shapefile');
+    processFile(Array.from(shpFilenames)[0], 'shapefile', downloadId);
   }
 
   if (shpFilenames.size > 1) {
