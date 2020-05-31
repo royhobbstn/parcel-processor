@@ -4,6 +4,7 @@ CREATE table pages(
    page_url VARCHAR(500) NOT NULL,
    PRIMARY KEY ( page_id ));
    
+CREATE UNIQUE INDEX idx_pages ON pages(page_url);
    
 CREATE table page_checks(
    check_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

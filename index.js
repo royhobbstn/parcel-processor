@@ -1,9 +1,17 @@
 const chokidar = require('chokidar');
 const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
 const unzipper = require('unzipper');
 const { processFile } = require('./util/processFile');
-const { rawDir, unzippedDir, processedDir } = require('./util/constants');
+const {
+  rawDir,
+  unzippedDir,
+  processedDir,
+  rawBucket,
+  productsBucket,
+} = require('./util/constants');
+const { putFileToS3 } = require('./util/s3Operations');
 const {
   queryHash,
   queryPage,
@@ -14,6 +22,11 @@ const {
 } = require('./util/queries');
 const { moveFile } = require('./util/filesystemUtil');
 const prompt = require('prompt');
+
+init().catch(err => {
+  console.error('unexpected error');
+  console.error(err);
+});
 
 // ping the database to make sure its up / get it ready
 // after that, keep-alives from data-api-client should do the rest
@@ -50,11 +63,6 @@ async function checkHealth() {
   }
 }
 
-init().catch(err => {
-  console.error('unexpected error');
-  console.error(err);
-});
-
 // watch filesystem and compute hash of incoming file.
 function watchFilesystem() {
   chokidar
@@ -62,8 +70,8 @@ function watchFilesystem() {
       ignored: /(^|[\/\\])\../, // ignore dotfiles
       awaitWriteFinish: true,
     })
-    .on('add', async path => {
-      console.log(`\nFile found: ${path}`);
+    .on('add', async filePath => {
+      console.log(`\nFile found: ${filePath}`);
 
       let pageId;
 
@@ -80,7 +88,7 @@ function watchFilesystem() {
       console.log('processing file...');
 
       const hash = crypto.createHash('md5');
-      const stream = fs.createReadStream(path);
+      const stream = fs.createReadStream(filePath);
 
       stream.on('data', data => {
         hash.update(data, 'utf8');
@@ -90,7 +98,7 @@ function watchFilesystem() {
         computedHash = hash.digest('hex');
         console.log(`Computed Hash: ${computedHash}`);
 
-        checkDBforHash(path, computedHash, pageId, checkId);
+        checkDBforHash(filePath, computedHash, pageId, checkId);
       });
     });
   console.log('listening...\n');
@@ -134,24 +142,50 @@ async function createPage(pageName) {
   throw new Error(`unable to create page record for: ${pageName}`);
 }
 
-async function checkDBforHash(path, computedHash, pageId, checkId) {
+async function checkDBforHash(filePath, computedHash, pageId, checkId) {
   // todo call serverless aurora and find out if hash is already in DB
   const hashExists = await doesHashExist(computedHash);
 
   // if not in database write a record in the download table
   if (!hashExists) {
     console.log('Hash is unique.  Processing new download.');
-    queryCreateDownloadRecord(pageId, checkId, computedHash);
-    console.log('new download record created');
+    const downloadRecordId = await constructDownloadRecord(pageId, checkId, computedHash);
+
+    // remove leading './' in rawDir path
+    const rep = rawDir.replace('./', '');
+
+    const originalFileName = filePath.split(`${rep}/`)[1];
+    const s3KeyName = `${downloadRecordId}-${originalFileName}`;
+
+    const extension = path.extname(originalFileName);
+
+    if (extension !== '.zip') {
+      console.error('expected filename extension to be .zip');
+      console.error('unsure of what to do.  exiting.');
+      process.exit();
+    }
+
+    // save downloaded file to the raw bucket in s3 (don't gzip here)
+    await putFileToS3(rawBucket, s3KeyName, filePath, 'application/zip', false);
 
     // then extract
-    extractZip(path);
+    return extractZip(filePath);
   }
 
   // otherwise, file has already been processed.
   console.log('Hash exists in database.  File has already been processed.\n');
 
   doBasicCleanup();
+}
+
+async function constructDownloadRecord(pageId, checkId, computedHash) {
+  const query = await queryCreateDownloadRecord(pageId, checkId, computedHash);
+  console.log(query);
+  if (!query || !query.insertId) {
+    throw new Error('unexpected result from create download request');
+  }
+  console.log('new download record created');
+  return query.insertId;
 }
 
 function doBasicCleanup() {
@@ -181,16 +215,16 @@ async function doesHashExist() {
   return false;
 }
 
-function extractZip(path) {
-  fs.createReadStream(path)
+function extractZip(filePath) {
+  fs.createReadStream(filePath)
     .pipe(unzipper.Extract({ path: unzippedDir }))
     .on('error', err => {
-      console.error(`Error unzipping file: ${path}`);
+      console.error(`Error unzipping file: ${filePath}`);
       console.error(err);
       process.exit();
     })
     .on('close', () => {
-      console.log(`Finished unzipping file: ${path}`);
+      console.log(`Finished unzipping file: ${filePath}`);
       checkForFileType();
     });
 }

@@ -9,6 +9,7 @@ const { outputDir, unzippedDir } = require('./constants');
 // fileName is the file name without the extension
 // fileType supports 'shapefile' and 'geodatabase'
 exports.processFile = async function (fileName, fileType) {
+  // TODO use downloadID
   console.log(`Found file: ${fileName}`);
 
   console.log({ fileName, fileType });
@@ -25,6 +26,8 @@ exports.processFile = async function (fileName, fileType) {
 
   if (driver_metadata.DCAP_VECTOR !== 'YES') {
     console.error('Source file is not a vector');
+    console.error('download record and s3 file are now orphaned.');
+    // todo log DownloadID
     process.exit(1);
   }
 
@@ -142,7 +145,10 @@ exports.processFile = async function (fileName, fileType) {
   } while (cont);
 
   console.log(`processed ${transformed} features`);
-  console.log(`found ${errored} errors`);
+  console.log(`found ${errored} feature errors`);
 
-  // TODO create UUID and upload to S3, write serverless aurora record
+  // TODO prompt user for SUMLEV, STATEFIPS, and either COUNTYFIPS or PLACEFIPS
+  // validate input
+
+  // TODO create product record and upload to S3
 };
