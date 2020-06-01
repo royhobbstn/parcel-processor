@@ -4,9 +4,11 @@ const prompt = require('prompt');
 const gdal = require('gdal-next');
 const { getGeoJsonFromGdalFeature } = require('./parseFeature');
 const { StatContext } = require('./StatContext');
-const { outputDir, unzippedDir } = require('./constants');
+const { outputDir, unzippedDir, productsBucket } = require('./constants');
 const { queryGeographicIdentifier, queryCreateProductRecord } = require('./queries');
 const { promptGeoIdentifiers } = require('./prompts');
+const { putFileToS3 } = require('./s3Operations');
+const { lookupState } = require('./lookupState');
 
 // fileName is the file name without the extension
 // fileType supports 'shapefile' and 'geodatabase'
@@ -39,7 +41,7 @@ exports.processFile = async function (fileName, fileType, downloadId) {
 
   // print out info for each layer in file
   dataset.layers.forEach(layer => {
-    console.log(chalk.bold.red(`#${total_layers++}: ${layer.name}`));
+    console.log(chalk.bold.cyan(`#${total_layers++}: ${layer.name}`));
     console.log(`  Geometry Type = ${gdal.Geometry.getName(layer.geomType)}`);
     console.log(chalk.dim(`  Spatial Reference = ${layer.srs ? layer.srs.toWKT() : 'null'}`));
     console.log('  Fields: ');
@@ -85,18 +87,16 @@ exports.processFile = async function (fileName, fileType, downloadId) {
   const splitFileName = fileName.split(SPLITTER)[0];
   console.log(`processing file: ${fileName}`);
 
-  let writeStream = fs.createWriteStream(`${outputDir}/${splitFileName}.ndgeojson`);
+  const outputPath = `${outputDir}/${splitFileName}.json`;
+
+  let writeStream = fs.createWriteStream(`${outputPath}.ndgeojson`);
 
   // the finish event is emitted when all data has been flushed from the stream
   writeStream.on('finish', async () => {
-    fs.writeFileSync(
-      `${outputDir}/${splitFileName}.json`,
-      JSON.stringify(statCounter.export()),
-      'utf8',
-    );
-    console.log(
-      `wrote all ${statCounter.rowCount} rows to file: ${outputDir}/${splitFileName}.ndgeojson\n`,
-    );
+    fs.writeFileSync(`${outputPath}.json`, JSON.stringify(statCounter.export()), 'utf8');
+    console.log(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson\n`);
+
+    // todo everything below belongs somewhere else
 
     let fipsDetails;
     do {
@@ -104,51 +104,28 @@ exports.processFile = async function (fileName, fileType, downloadId) {
     } while (!fipsDetails);
     console.log({ fipsDetails });
 
-    // TODO get geo name corresponding to FIPS
-    // this is up here so i can validate the geoid in the database before writing a product record
-    // todo can probably move the figuring of geoid logic here
-    // log to user the geoName so that the can have some assurance
+    // get geoname corresponding to FIPS
     const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
 
-    // This is probably done but hasnt been run
-    const productId = await createProductRecord(fipsDetails, downloadId);
+    const productId = await createProductRecord(geoid, downloadId);
 
-    // todo move these two functions out of here
+    // upload ndgeojson and state files to S3 using downloadId and productId (concurrent)
+    await uploadProductFiles(
+      downloadId,
+      productId,
+      geoName,
+      geoid,
+      productsBucket,
+      fipsDetails,
+      outputPath,
+    );
 
-    async function createProductRecord(geoid, downloadId) {
-      const productType = 1; // original product (not filtered from a different product)
+    console.log('cleaning up old files.\n');
+    // todo cleanup
 
-      const query = await queryCreateProductRecord(downloadId, productType, geoid);
-      console.log(query);
-      // todo something here
-    }
+    console.log('done.\n');
 
-    async function lookupCleanGeoName(fipsDetails) {
-      const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
-
-      let geoid;
-
-      if (SUMLEV === '040') {
-        geoid = STATEFIPS;
-      } else if (SUMLEV === '050') {
-        geoid = `${STATEFIPS}${COUNTYFIPS}`;
-      } else if (SUMLEV === '160') {
-        geoid = `${STATEFIPS}${PLACEFIPS}`;
-      } else {
-        console.error('SUMLEV out of range.  Exiting.');
-        process.exit();
-      }
-
-      const query = queryGeographicIdentifier();
-      console.log('remove this: geographic identifier query results:');
-      console.log(query);
-      // todo query for identifier
-      // TODO Alter geo name to be s3 key friendly (all non alphanumeric become -)
-
-      return { geoid, geoName };
-    }
-
-    // TODO upload ndgeojson and state files to S3 using downloadId and productId (concurrent)
+    console.log('awaiting a new file...\n');
   });
 
   try {
@@ -201,3 +178,95 @@ exports.processFile = async function (fileName, fileType, downloadId) {
   console.log(`processed ${transformed} features`);
   console.log(`found ${errored} feature errors`);
 };
+
+async function createProductRecord(geoid, downloadId) {
+  const productType = 1; // original product (not filtered from a different product)
+
+  const query = await queryCreateProductRecord(downloadId, productType, geoid);
+  console.log(query);
+
+  return query.insertId;
+}
+
+async function lookupCleanGeoName(fipsDetails) {
+  const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
+
+  let geoid;
+
+  if (SUMLEV === '040') {
+    geoid = STATEFIPS;
+  } else if (SUMLEV === '050') {
+    geoid = `${STATEFIPS}${COUNTYFIPS}`;
+  } else if (SUMLEV === '160') {
+    geoid = `${STATEFIPS}${PLACEFIPS}`;
+  } else {
+    console.error('SUMLEV out of range.  Exiting.');
+    process.exit();
+  }
+
+  const query = await queryGeographicIdentifier(geoid);
+  console.log(query);
+
+  if (!query || !query.records || !query.records.length) {
+    throw new Error(
+      `No geographic match found.  SUMLEV:${SUMLEV} STATEFIPS:${STATEFIPS} COUNTYFIPS:${COUNTYFIPS} PLACEFIPS:${PLACEFIPS}`,
+    );
+  }
+
+  const rawGeoName = query.records[0].geoname;
+
+  console.log(`Found corresponding geographic area: ${rawGeoName}`);
+
+  // Alter geo name to be s3 key friendly (all non alphanumeric become -)
+  const geoName = rawGeoName.replace(/[^a-z0-9]+/gi, '-');
+
+  return { geoid, geoName };
+}
+
+async function uploadProductFiles(
+  downloadId,
+  productId,
+  geoName,
+  geoid,
+  productsBucket,
+  fipsDetails,
+  outputPath,
+) {
+  const stateName = lookupState(fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
+
+  let key;
+
+  if (fipsDetails.SUMLEV === '040' || fipsDetails.SUMLEV === '050') {
+    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadId}-${productId}-${geoid}-${geoName}-${stateName}`;
+  } else if (fipsDetails.SUMLEV === '160') {
+    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.PLACEFIPS}-${geoName}/${downloadId}-${productId}-${geoid}-${geoName}-${stateName}`;
+  } else {
+    throw new Error('unexpected sumlev.');
+  }
+
+  const statFile = putFileToS3(
+    productsBucket,
+    `${key}-stat.json`,
+    `${outputPath}.json`,
+    'application/json',
+    true,
+  );
+  const ndgeojsonFile = putFileToS3(
+    productsBucket,
+    `${key}.ndgeojson`,
+    `${outputPath}.ndgeojson`,
+    'application/x-ndjson',
+    true,
+  );
+
+  try {
+    await Promise.all([statFile, ndgeojsonFile]);
+    console.log('Output files were successfully loaded to S3');
+  } catch (err) {
+    console.error('Error uploading output files to S3');
+    console.error(err);
+    process.exit();
+  }
+
+  return;
+}

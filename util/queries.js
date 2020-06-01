@@ -54,7 +54,9 @@ exports.queryCreateProductRecord = function (downloadId, productType, geoid) {
   );
 };
 
-exports.queryGeographicIdentifier = function () {
+exports.queryGeographicIdentifier = function (geoid) {
   //
-  return slsAuroraClient.query();
+  return slsAuroraClient.query('SELECT * FROM geographic_identifiers WHERE geoid = :geoid;', {
+    geoid,
+  });
 };
