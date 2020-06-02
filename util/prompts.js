@@ -1,7 +1,31 @@
 const prompt = require('prompt');
 
-// returns either an object with identifiers, or false
+exports.pageInputPrompt = function () {
+  return new Promise((resolve, reject) => {
+    prompt.start();
+
+    prompt.get(['pageName'], function (err, result) {
+      if (err) {
+        reject(err);
+      }
+      console.log('Command-line input received:');
+      console.log('  layer: ' + result.pageName);
+      resolve(result.pageName);
+    });
+  });
+};
+
 exports.promptGeoIdentifiers = async function () {
+  let fipsDetails;
+  do {
+    fipsDetails = await getGeoIdentifiers();
+  } while (!fipsDetails);
+  console.log({ fipsDetails });
+  return fipsDetails;
+};
+
+// returns either an object with identifiers, or false
+async function getGeoIdentifiers() {
   // prompt user for SUMLEV, STATEFIPS, and either COUNTYFIPS or PLACEFIPS
   prompt.start();
 
@@ -97,4 +121,31 @@ exports.promptGeoIdentifiers = async function () {
     );
     return false;
   }
+}
+
+exports.chooseGeoLayer = async function (total_layers) {
+  let chosenLayer = 0;
+
+  if (total_layers !== 1) {
+    // if just one layer, use it
+    // otherwise, prompt for layer number
+
+    const table_choice = await new Promise((resolve, reject) => {
+      prompt.start();
+
+      prompt.get(['layer'], function (err, result) {
+        if (err) {
+          reject(err);
+        }
+        console.log('Command-line input received:');
+        console.log('  layer: ' + result.layer);
+        resolve(result.layer);
+      });
+    });
+    chosenLayer = parseInt(table_choice);
+
+    console.log({ chosenLayer });
+  }
+
+  return chosenLayer;
 };
