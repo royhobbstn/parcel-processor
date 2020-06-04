@@ -1,13 +1,15 @@
+const path = require('path');
 const {
-  queryWritePageCheck,
+  queryWriteSourceCheck,
   queryHealth,
-  queryPage,
-  queryWritePage,
+  querySource,
+  queryWriteSource,
   queryHash,
   queryCreateDownloadRecord,
   queryGeographicIdentifier,
   queryCreateProductRecord,
 } = require('../primitives/queries');
+const { sourceTypes, dispositions } = require('../constants');
 
 exports.checkHealth = async function () {
   try {
@@ -18,23 +20,29 @@ exports.checkHealth = async function () {
   }
 };
 
-exports.recordPageCheck = async function (pageId) {
-  const query = await queryWritePageCheck(pageId);
+exports.recordSourceCheck = async function (sourceId, sourceType) {
+  if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
+    throw new Error('unexpected sourceType');
+  }
+
+  const disposition =
+    sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
+  const query = await queryWriteSourceCheck(sourceId, disposition);
   return query.insertId;
 };
 
-exports.fetchPageIdIfExists = async function (pageName) {
-  const query = await queryPage(pageName);
-  console.log(`queryPage: ${pageName}`, query);
+exports.fetchSourceIdIfExists = async function (sourceName) {
+  const query = await querySource(sourceName);
+  console.log(`queryPage: ${sourceName}`, query);
   if (query.records.length) {
-    return query.records[0].page_id;
+    return query.records[0].source_id;
   }
   return -1;
 };
 
-exports.createPage = async function (pageName) {
-  const query = await queryWritePage(pageName);
-  console.log(`createPage: ${pageName}`, query);
+exports.createSource = async function (sourceName, sourceType) {
+  const query = await queryWriteSource(sourceName, sourceType);
+  console.log(`createSource: ${sourceName}`, query);
   if (query.numberOfRecordsUpdated === 1) {
     return query.insertId;
   }
@@ -51,8 +59,24 @@ exports.doesHashExist = async function () {
   return false;
 };
 
-exports.constructDownloadRecord = async function (pageId, checkId, computedHash) {
-  const query = await queryCreateDownloadRecord(pageId, checkId, computedHash);
+exports.constructDownloadRecord = async function (
+  sourceId,
+  checkId,
+  computedHash,
+  rawKey,
+  downloadRef,
+  filePath,
+) {
+  const originalFilename = path.parse(filePath).base;
+
+  const query = await queryCreateDownloadRecord(
+    sourceId,
+    checkId,
+    computedHash,
+    rawKey,
+    downloadRef,
+    originalFilename,
+  );
   console.log(query);
   if (!query || !query.insertId) {
     throw new Error('unexpected result from create download request');
@@ -61,10 +85,15 @@ exports.constructDownloadRecord = async function (pageId, checkId, computedHash)
   return query.insertId;
 };
 
-exports.createProductRecord = async function (geoid, downloadId) {
-  const productType = 1; // original product (not filtered from a different product)
-
-  const query = await queryCreateProductRecord(downloadId, productType, geoid);
+exports.createProductRecord = async function (downloadId, productRef, geoid, productKey) {
+  const query = await queryCreateProductRecord(
+    downloadId,
+    productRef,
+    'ndgeojson',
+    'original',
+    geoid,
+    productKey,
+  );
   console.log(query);
 
   return query.insertId;

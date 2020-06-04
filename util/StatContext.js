@@ -23,8 +23,8 @@ exports.StatContext = function () {
           types: [],
           uniques: {},
           mean: 0,
-          max: 0,
-          min: 0,
+          max: -Infinity,
+          min: Infinity,
           numCount: 0,
           strCount: 0,
         };

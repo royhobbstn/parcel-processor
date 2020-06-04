@@ -1,33 +1,34 @@
 
-CREATE table pages(
-   page_id INT NOT NULL AUTO_INCREMENT,
-   page_url VARCHAR(500) NOT NULL,
-   PRIMARY KEY ( page_id ));
+CREATE table sources(
+   source_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+   source_name VARCHAR(500) NOT NULL,
+   source_type ENUM('webpage', 'email')
+);
    
-CREATE UNIQUE INDEX idx_pages ON pages(page_url);
+CREATE UNIQUE INDEX idx_sources ON sources(source_name);
    
-CREATE table page_checks(
+CREATE table source_checks(
    check_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   page_id INT,
+   source_id INT,
    last_checked TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-   CONSTRAINT fk_page FOREIGN KEY (page_id) REFERENCES pages(page_id)
+   disposition ENUM('viewed', 'inquired', 'received'),
+   CONSTRAINT fk_source FOREIGN KEY (source_id) REFERENCES sources(source_id)
 );
 
 CREATE table downloads(
    download_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   page_id INT,
+   download_ref VARCHAR(16),
+   source_id INT,
    check_id INT,
    checksum CHAR(32),
-   CONSTRAINT fk_dl_page FOREIGN KEY (page_id) REFERENCES pages(page_id),
-   CONSTRAINT fk_check FOREIGN KEY (check_id) REFERENCES page_checks(check_id)
+   raw_key VARCHAR(500),
+   original_filename VARCHAR(500),
+   CONSTRAINT fk_dl_source FOREIGN KEY (source_id) REFERENCES sources(source_id),
+   CONSTRAINT fk_check FOREIGN KEY (check_id) REFERENCES source_checks(check_id)
 );
 
 CREATE UNIQUE INDEX idx_checksum ON downloads(checksum);
-
-CREATE table product_types(
-   type_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   type_name VARCHAR(100)
-);
+CREATE UNIQUE INDEX idx_dl_ref ON downloads(download_ref);
 
 CREATE table summary_levels(
    sumlev CHAR(3) NOT NULL PRIMARY KEY,
@@ -44,15 +45,17 @@ CREATE table geographic_identifiers(
 CREATE table products(
    product_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
    download_id INT,
-   product_type INT,
+   product_ref VARCHAR(16),
+   product_type ENUM('ndgeojson', 'shp', 'gdb', 'geojson', 'gpkg'),
+   product_origin ENUM('original', 'derived'),
    geoid VARCHAR(7),
+   product_key VARCHAR(500),
    CONSTRAINT fk_geoid FOREIGN KEY (geoid) REFERENCES geographic_identifiers(geoid),
-   CONSTRAINT fk_dl_id FOREIGN KEY (download_id) REFERENCES downloads(download_id),
-   CONSTRAINT fk_prod_type_id FOREIGN KEY (product_type) REFERENCES product_types(type_id)
+   CONSTRAINT fk_dl_id FOREIGN KEY (download_id) REFERENCES downloads(download_id)
 );
 
-INSERT INTO product_types(type_name) VALUES ("original");
-INSERT INTO product_types(type_name) VALUES ("derived");
+CREATE UNIQUE INDEX idx_pr_ref ON products(product_ref);
+CREATE UNIQUE INDEX idx_pr_geoid ON products(geoid);
 
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("040", "state");
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("050", "county");
@@ -3271,11 +3274,6 @@ INSERT INTO geographic_identifiers(geoid, geoname, sumlev) VALUES ("51650", "Ham
 ("56041", "Uinta County", "050"),
 ("56043", "Washakie County", "050"),
 ("56045", "Weston County", "050");
-
-
-
-
-
 
 
 

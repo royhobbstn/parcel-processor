@@ -14,11 +14,11 @@ exports.putTextToS3 = function (bucketName, keyName) {
       .then(data => {
         console.log(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
         console.log(data);
-        resolve();
+        return resolve();
       })
       .catch(err => {
         console.error(err);
-        reject(err);
+        return reject(err);
       });
   });
 };
@@ -65,12 +65,12 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
           `uploading (${filePathToUpload} as s3://${bucket}/${key}) completed successfully.`,
         );
         console.log(result);
-        resolve();
+        return resolve();
       })
       .catch(err => {
         console.error(`upload (${filePathToUpload} as s3://${bucket}/${key}) failed.`);
         console.error(err);
-        reject(err);
+        return reject(err);
       });
   });
 };

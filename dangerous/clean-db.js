@@ -33,8 +33,8 @@ async function init() {
   console.log('connected');
   await truncateTable('products');
   await truncateTable('downloads');
-  await truncateTable('page_checks');
-  await truncateTable('pages');
+  await truncateTable('source_checks');
+  await truncateTable('sources');
 
   console.log('done');
 }
@@ -42,7 +42,7 @@ async function init() {
 function setPause(timer) {
   return new Promise(resolve => {
     setTimeout(() => {
-      resolve();
+      return resolve();
     }, timer);
   });
 }

@@ -20,7 +20,7 @@ exports.acquireConnection = async function () {
 function setPause(timer) {
   return new Promise(resolve => {
     setTimeout(() => {
-      resolve();
+      return resolve();
     }, timer);
   });
 }

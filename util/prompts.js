@@ -1,16 +1,54 @@
 const prompt = require('prompt');
+const { sourceTypes } = require('./constants');
 
-exports.pageInputPrompt = function () {
+exports.sourceTypePrompt = function (sourceNameInput) {
+  return new Promise((resolve, reject) => {
+    if (
+      sourceNameInput.includes('http://') ||
+      sourceNameInput.includes('https://') ||
+      sourceNameInput.includes('ftp://')
+    ) {
+      console.log('\nDetermined to be a WEBPAGE source.\n');
+      return resolve(sourceTypes.WEBPAGE);
+    } else if (sourceNameInput.includes('@') && sourceNameInput.includes('.')) {
+      // can probably validate better than this
+      console.log('\nDetermined to be an EMAIL source.\n');
+      return resolve(sourceTypes.EMAIL);
+    } else {
+      console.log('\nCould not determine source type.  Prompting...\n');
+    }
+
+    prompt.start();
+
+    console.log(`\nPlease enter a number:\n 1: webpage\n 2: email address`);
+
+    prompt.get(['sourceType'], function (err, result) {
+      if (err) {
+        return reject(err);
+      }
+
+      if (result.sourceType !== '1' && result.sourceType !== '2') {
+        throw new Error('unexpected sourceType input in prompt');
+      }
+
+      const sourceType = result.sourceType === '1' ? sourceTypes.WEBPAGE : sourceTypes.EMAIL;
+
+      return resolve(sourceType);
+    });
+  });
+};
+
+exports.sourceInputPrompt = function () {
   return new Promise((resolve, reject) => {
     prompt.start();
 
-    prompt.get(['pageName'], function (err, result) {
+    console.log(`\nPlease enter the webpage or email address of the source:`);
+
+    prompt.get(['sourceName'], function (err, result) {
       if (err) {
-        reject(err);
+        return reject(err);
       }
-      console.log('Command-line input received:');
-      console.log('  layer: ' + result.pageName);
-      resolve(result.pageName);
+      return resolve(result.sourceName);
     });
   });
 };
@@ -38,11 +76,11 @@ async function getGeoIdentifiers() {
     prompt.get(['SUMLEV', 'STATEFIPS'], (err, result) => {
       if (err) {
         console.error(err);
-        reject(err);
+        return reject(err);
       }
       SUMLEV = result.SUMLEV;
       STATEFIPS = result.STATEFIPS;
-      resolve();
+      return resolve();
     });
   });
 
@@ -64,10 +102,10 @@ async function getGeoIdentifiers() {
         prompt.get(['COUNTYFIPS'], (err, result) => {
           if (err) {
             console.error(err);
-            reject(err);
+            return reject(err);
           }
           COUNTYFIPS = result.COUNTYFIPS;
-          resolve();
+          return resolve();
         });
       });
 
@@ -90,10 +128,10 @@ async function getGeoIdentifiers() {
         prompt.get(['PLACEFIPS'], function (err, result) {
           if (err) {
             console.error(err);
-            reject(err);
+            return reject(err);
           }
           PLACEFIPS = result.PLACEFIPS;
-          resolve();
+          return resolve();
         });
       });
 
@@ -135,11 +173,11 @@ exports.chooseGeoLayer = async function (total_layers) {
 
       prompt.get(['layer'], function (err, result) {
         if (err) {
-          reject(err);
+          return reject(err);
         }
         console.log('Command-line input received:');
         console.log('  layer: ' + result.layer);
-        resolve(result.layer);
+        return resolve(result.layer);
       });
     });
     chosenLayer = parseInt(table_choice);

@@ -9,10 +9,10 @@ exports.moveFile = function (oldPath, newPath) {
         if (err.code === 'EXDEV') {
           copy();
         } else {
-          reject(err);
+          return reject(err);
         }
       }
-      resolve();
+      return resolve();
     });
 
     function copy() {
@@ -20,14 +20,14 @@ exports.moveFile = function (oldPath, newPath) {
       var writeStream = fs.createWriteStream(newPath);
 
       readStream.on('error', err => {
-        reject(err);
+        return reject(err);
       });
       writeStream.on('error', err => {
-        reject(err);
+        return reject(err);
       });
       readStream.on('close', function () {
         fs.unlink(oldPath, () => {
-          resolve();
+          return resolve();
         });
       });
 
@@ -43,11 +43,11 @@ exports.extractZip = function (filePath) {
       .on('error', err => {
         console.error(`Error unzipping file: ${filePath}`);
         console.error(err);
-        reject(err);
+        return reject(err);
       })
       .on('close', () => {
         console.log(`Finished unzipping file: ${filePath}`);
-        resolve();
+        return resolve();
       });
   });
 };
@@ -76,31 +76,31 @@ exports.checkForFileType = function () {
     });
 
     if (shpFilenames.size > 0 && gdbFilenames.size > 0) {
-      reject('ERROR: mix of shapefiles and geodatabases in raw folder.  Exiting.');
+      return reject('ERROR: mix of shapefiles and geodatabases in raw folder.  Exiting.');
     }
 
     if (gdbFilenames.size === 1) {
-      resolve([Array.from(gdbFilenames)[0], 'geodatabase']);
+      return resolve([Array.from(gdbFilenames)[0], 'geodatabase']);
     }
 
     if (gdbFilenames.size > 1) {
       // TODO multiple geodatabases
-      reject('ERROR: multiple geodatabases in raw folder.  Exiting.');
+      return reject('ERROR: multiple geodatabases in raw folder.  Exiting.');
     }
 
     if (shpFilenames.size === 1) {
-      resolve([Array.from(shpFilenames)[0], 'shapefile']);
+      return resolve([Array.from(shpFilenames)[0], 'shapefile']);
     }
 
     if (shpFilenames.size > 1) {
       // TODO multiple shapefiles
-      reject('ERROR: multiple shapefiles in raw folder.  Exiting.');
+      return reject('ERROR: multiple shapefiles in raw folder.  Exiting.');
     }
 
     if (shpFilenames.size + gdbFilenames.size === 0) {
-      reject('Unknown filetypes in raw folder.  Nothing will be processed.');
+      return reject('Unknown filetypes in raw folder.  Nothing will be processed.');
     }
 
-    reject('unknown state in checkForFileType');
+    return reject('unknown state in checkForFileType');
   });
 };

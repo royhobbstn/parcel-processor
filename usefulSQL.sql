@@ -2,6 +2,7 @@
 SHOW TABLES
 
 SELECT COUNT(*) FROM geographic_identifiers;
+33064
 
 SELECT ENGINE
 FROM information_schema.TABLES

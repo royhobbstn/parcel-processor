@@ -1,13 +1,18 @@
 
 s3
 bucket: raw-data-po
- downloadid-originalName.zip
+ statefips-name (06-Colorado)
+    countyfips-name (state-level is 000-statewide) (031-Denver-County)
+        key: dlref-fullfips-countyName-stateName.extension
+        334555-06031-Denver-County-Colorado.zip
+    placefips-name (replace weird characters with -) (06123400-City-and-County-Denver)
+        344555-06132400-Denver-Colorado.zip
 
 bucket: data-products-po
  statefips-name (06-Colorado)
     countyfips-name (state-level is 000-statewide) (031-Denver-County)
-            key: dlId-prId-fullfips-countyName-stateName.extension (123-3423-06031-Denver-County-Colorado.ndgeojson)
+            key: dlref-prref-fullfips-countyName-stateName.extension (123345-342334-06031-Denver-County-Colorado.ndgeojson)
             
     placefips-name (replace weird characters with -) (06123400-City-and-County-Denver)
-            key: dlId-prId-fullfips-placeName-stateName.extension (234-2344-06123400-City-and-County-Denver-Colorado.ndjson)
+            key: dlref-prref-fullfips-placeName-stateName.extension (234345-234434-06123400-City-and-County-Denver-Colorado.ndjson)
    

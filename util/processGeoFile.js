@@ -4,7 +4,7 @@ const gdal = require('gdal-next');
 const { StatContext } = require('./StatContext');
 const { unzippedDir } = require('./constants');
 
-exports.inspectFile = function (fileName, fileType, downloadId) {
+exports.inspectFile = function (fileName, fileType) {
   console.log(`Found file: ${fileName}`);
 
   console.log({ fileName, fileType });
@@ -45,7 +45,7 @@ exports.inspectFile = function (fileName, fileType, downloadId) {
   return [dataset, total_layers];
 };
 
-exports.parseFile = function (dataset, chosenLayer, fileType, fileName, outputPath) {
+exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
   return new Promise((resolve, reject) => {
     try {
       // setup coordinate projections
@@ -57,7 +57,7 @@ exports.parseFile = function (dataset, chosenLayer, fileType, fileName, outputPa
       console.error('Unknown problem reading table');
       console.error(gdal.lastError);
       console.error(e);
-      reject(e);
+      return reject(e);
     }
 
     const statCounter = new StatContext();
@@ -73,7 +73,7 @@ exports.parseFile = function (dataset, chosenLayer, fileType, fileName, outputPa
 
       console.log(`processed ${transformed} features`);
       console.log(`found ${errored} feature errors\n`);
-      resolve();
+      return resolve();
     });
 
     // load features
@@ -115,7 +115,7 @@ exports.parseFile = function (dataset, chosenLayer, fileType, fileName, outputPa
 exports.parseOutputPath = function (fileName, fileType, outputDir) {
   const SPLITTER = fileType === 'shapefile' ? '.shp' : '.gdb';
   const splitFileName = fileName.split(SPLITTER)[0];
-  const outputPath = `${outputDir}/${splitFileName}.json`;
+  const outputPath = `${outputDir}/${splitFileName}`;
   return outputPath;
 };
 

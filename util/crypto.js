@@ -1,5 +1,12 @@
 const crypto = require('crypto');
 const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+
+exports.generateRef = function (digits) {
+  const uuid = uuidv4();
+  const plainString = uuid.replace(/-,/g);
+  return plainString.slice(0, digits);
+};
 
 exports.computeHash = function (filePath) {
   return new Promise((resolve, reject) => {
@@ -14,13 +21,13 @@ exports.computeHash = function (filePath) {
 
     stream.on('error', err => {
       console.error(err);
-      reject(err);
+      return reject(err);
     });
 
     stream.on('end', () => {
       computedHash = hash.digest('hex');
       console.log(`Computed Hash: ${computedHash}`);
-      resolve(computedHash);
+      return resolve(computedHash);
     });
   });
 };

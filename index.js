@@ -1,18 +1,28 @@
 const chokidar = require('chokidar');
-const { rawDir, outputDir } = require('./util/constants');
+const { rawDir, outputDir, unzippedDir, referenceIdLength } = require('./util/constants');
 const { acquireConnection } = require('./util/acquireConnection');
-const { pageInputPrompt, promptGeoIdentifiers, chooseGeoLayer } = require('./util/prompts');
 const {
-  fetchPageIdIfExists,
-  createPage,
-  recordPageCheck,
+  sourceInputPrompt,
+  promptGeoIdentifiers,
+  chooseGeoLayer,
+  sourceTypePrompt,
+} = require('./util/prompts');
+const {
+  fetchSourceIdIfExists,
+  createSource,
+  recordSourceCheck,
   doesHashExist,
   constructDownloadRecord,
   createProductRecord,
   lookupCleanGeoName,
 } = require('./util/wrappers/wrapQuery');
-const { uploadRawFileToS3, uploadProductFiles } = require('./util/wrappers/wrapS3');
-const { computeHash } = require('./util/crypto');
+const {
+  uploadRawFileToS3,
+  uploadProductFiles,
+  createRawDownloadKey,
+  createProductDownloadKey,
+} = require('./util/wrappers/wrapS3');
+const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
@@ -37,15 +47,20 @@ function watchFilesystem() {
     .on('add', async filePath => {
       console.log(`\nFile found: ${filePath}`);
 
-      const pageNameInput = await pageInputPrompt();
+      const sourceNameInput = await sourceInputPrompt();
 
-      let pageId = await fetchPageIdIfExists(pageNameInput);
+      const sourceType = await sourceTypePrompt(sourceNameInput);
 
-      if (pageId === -1) {
-        pageId = await createPage(pageNameInput);
+      let sourceId = await fetchSourceIdIfExists(sourceNameInput);
+
+      if (sourceId === -1) {
+        console.log(`Source doesn't exist in database.  Creating a new source.`);
+        sourceId = await createSource(sourceNameInput, sourceType);
       }
 
-      const checkId = await recordPageCheck(pageId);
+      console.log({ sourceType });
+
+      const checkId = await recordSourceCheck(sourceId, sourceType);
 
       const computedHash = await computeHash(filePath);
 
@@ -53,18 +68,8 @@ function watchFilesystem() {
       const hashExists = await doesHashExist(computedHash);
 
       if (hashExists) {
-        return doBasicCleanup();
+        return doBasicCleanup([rawDir]);
       }
-
-      // if not in database write a record in the download table
-      const downloadId = await constructDownloadRecord(pageId, checkId, computedHash);
-
-      await uploadRawFileToS3(filePath, downloadId);
-
-      await extractZip(filePath);
-
-      // determines if file(s) are of type shapefile or geodatabase
-      const [fileName, fileType] = await checkForFileType(downloadId);
 
       // get SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS
       const fipsDetails = await promptGeoIdentifiers();
@@ -72,29 +77,61 @@ function watchFilesystem() {
       // get geoname corresponding to FIPS
       const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
 
+      const downloadRef = generateRef(referenceIdLength);
+
+      // Contains ZIP extension.  create the key (path) to be used to store the zipfile in S3
+      const rawKey = createRawDownloadKey(fipsDetails, geoid, geoName, downloadRef);
+
+      // if not in database write a record in the download table
+      const downloadId = await constructDownloadRecord(
+        sourceId,
+        checkId,
+        computedHash,
+        rawKey,
+        downloadRef,
+        filePath,
+      );
+
+      await uploadRawFileToS3(filePath, rawKey);
+
+      await extractZip(filePath);
+
+      // determines if file(s) are of type shapefile or geodatabase
+      const [fileName, fileType] = await checkForFileType();
+
       // open file with OGR/GDAL
-      const [dataset, total_layers] = inspectFile(fileName, fileType, downloadId);
+      const [dataset, total_layers] = inspectFile(fileName, fileType);
 
       // choose layer to operate on (mostly for geodatabase)
       const chosenLayer = await chooseGeoLayer(total_layers);
 
+      // determine where on the local disk the output geo products will be written
       const outputPath = parseOutputPath(fileName, fileType, outputDir);
 
       // process all features and convert them to WGS84 ndgeojson
       // while gathering stats on the data
-      await parseFile(dataset, chosenLayer, fileType, fileName, outputPath);
+      await parseFile(dataset, chosenLayer, fileName, outputPath);
 
-      const productId = await createProductRecord(geoid, downloadId);
+      const productRef = generateRef(referenceIdLength);
+
+      // contains no file extension.  Used as base key for -stat.json  and .ndgeojson
+      const productKey = createProductDownloadKey(
+        fipsDetails,
+        geoid,
+        geoName,
+        downloadRef,
+        productRef,
+      );
+
+      await createProductRecord(downloadId, productRef, geoid, `${productKey}.ndgeojson`);
 
       // upload ndgeojson and stat files to S3 (concurrent)
-      await uploadProductFiles(downloadId, productId, geoName, geoid, fipsDetails, outputPath);
+      await uploadProductFiles(productKey, outputPath);
 
-      console.log('cleaning up old files.\n');
-      // todo cleanup
+      await doBasicCleanup([rawDir, outputDir, unzippedDir]);
 
-      console.log('done.\n');
-
-      console.log('awaiting a new file...\n');
+      console.log('\nawaiting a new file...\n');
     });
+
   console.log('listening...\n');
 }
