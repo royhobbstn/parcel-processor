@@ -28,7 +28,7 @@ CREATE table downloads(
 );
 
 CREATE UNIQUE INDEX idx_checksum ON downloads(checksum);
-CREATE UNIQUE INDEX idx_dl_ref ON downloads(download_ref);
+CREATE INDEX idx_dl_ref ON downloads(download_ref);
 
 CREATE table summary_levels(
    sumlev CHAR(3) NOT NULL PRIMARY KEY,
@@ -54,8 +54,8 @@ CREATE table products(
    CONSTRAINT fk_dl_id FOREIGN KEY (download_id) REFERENCES downloads(download_id)
 );
 
-CREATE UNIQUE INDEX idx_pr_ref ON products(product_ref);
-CREATE UNIQUE INDEX idx_pr_geoid ON products(geoid);
+CREATE INDEX idx_pr_ref ON products(product_ref);
+CREATE INDEX idx_pr_geoid ON products(geoid);
 
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("040", "state");
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("050", "county");

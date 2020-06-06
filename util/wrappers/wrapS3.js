@@ -26,7 +26,7 @@ exports.uploadProductFiles = async function (key, outputPath) {
     productsBucket,
     `${key}.ndgeojson`,
     `${outputPath}.ndgeojson`,
-    'application/x-ndjson',
+    'application/geo+json-seq',
     true,
   );
 

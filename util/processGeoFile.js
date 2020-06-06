@@ -1,5 +1,6 @@
 const fs = require('fs');
 const chalk = require('chalk');
+const exec = require('child_process').exec;
 const gdal = require('gdal-next');
 const { StatContext } = require('./StatContext');
 const { unzippedDir } = require('./constants');
@@ -20,10 +21,8 @@ exports.inspectFile = function (fileName, fileType) {
   const driver_metadata = driver.getMetadata();
 
   if (driver_metadata.DCAP_VECTOR !== 'YES') {
-    console.error('Source file is not a vector');
-    console.error('download record and s3 file are now orphaned.');
-    console.log({ downloadId });
-    process.exit(1);
+    console.error('Source file is not a valid vector file.');
+    process.exit();
   }
 
   console.log(`Driver = ${driver.description}\n`);
@@ -155,6 +154,7 @@ function getGeoJsonFromGdalFeature(feature, coordTransform) {
   var obj;
   if (geometry && clone) {
     try {
+      clone.swapXY(); // ugh, you would think .toObject would take care of this
       obj = clone.toObject();
     } catch (e) {
       console.error('Unable to convert geometry .toObject()');
@@ -166,3 +166,24 @@ function getGeoJsonFromGdalFeature(feature, coordTransform) {
   geoJsonFeature.properties = feature.fields.toObject();
   return geoJsonFeature;
 }
+
+exports.convertToFormat = function (format, outputPath) {
+  // convert from ndgeojson into geojson, gpkg, shp, etc
+
+  return new Promise((resolve, reject) => {
+    const command = `ogr2ogr -f "${format.driver}" ${outputPath}.${format.extension} ${outputPath}.ndgeojson`;
+    console.log(`running: ${command}`);
+    exec(command, function (error, stdout, stderr) {
+      if (stdout) {
+        console.log(`stdout: ${stdout}`);
+      }
+      if (error) {
+        console.error(`error code: ${error.code}`);
+        console.error(`stderr: ${stderr}`);
+        return reject(`error: ${error.code} ${stderr}`);
+      }
+      console.log(`completed creating format: ${format.driver}.`);
+      return resolve(`completed creating format: ${format.driver}.`);
+    });
+  });
+};

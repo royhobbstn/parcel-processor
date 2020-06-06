@@ -20,3 +20,15 @@ exports.dispositions = {
   VIEWED: 'viewed',
   INQUIRED: 'inquired',
 };
+
+exports.fileFormats = {
+  NDGEOJSON: { driver: 'GeoJSONSeq', extension: 'ndgeojson' },
+  GEOJSON: { driver: 'GeoJSON', extension: 'geojson' },
+  GPKG: { driver: 'GPKG', extension: 'gpkg' },
+  SHP: { driver: 'ESRI Shapefile', extension: 'shp' },
+};
+
+exports.productOrigins = {
+  ORIGINAL: 'original',
+  DERIVED: 'derived',
+};

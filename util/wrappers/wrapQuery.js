@@ -85,20 +85,6 @@ exports.constructDownloadRecord = async function (
   return query.insertId;
 };
 
-exports.createProductRecord = async function (downloadId, productRef, geoid, productKey) {
-  const query = await queryCreateProductRecord(
-    downloadId,
-    productRef,
-    'ndgeojson',
-    'original',
-    geoid,
-    productKey,
-  );
-  console.log(query);
-
-  return query.insertId;
-};
-
 exports.lookupCleanGeoName = async function (fipsDetails) {
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 

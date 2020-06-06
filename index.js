@@ -13,32 +13,22 @@ const {
   recordSourceCheck,
   doesHashExist,
   constructDownloadRecord,
-  createProductRecord,
   lookupCleanGeoName,
 } = require('./util/wrappers/wrapQuery');
-const {
-  uploadRawFileToS3,
-  uploadProductFiles,
-  createRawDownloadKey,
-  createProductDownloadKey,
-} = require('./util/wrappers/wrapS3');
+const { uploadRawFileToS3, createRawDownloadKey } = require('./util/wrappers/wrapS3');
 const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
+const { releaseProducts } = require('./util/releaseProducts');
 
 init().catch(err => {
   console.error('unexpected error');
   console.error(err);
 });
 
-async function init() {
-  await acquireConnection();
-  watchFilesystem();
-}
-
 // watch filesystem and compute hash of incoming file.
-function watchFilesystem() {
+async function init() {
   chokidar
     .watch(rawDir, {
       ignored: /(^|[\/\\])\../, // ignore dotfiles
@@ -46,6 +36,10 @@ function watchFilesystem() {
     })
     .on('add', async filePath => {
       console.log(`\nFile found: ${filePath}`);
+
+      await acquireConnection();
+
+      await doBasicCleanup([outputDir, unzippedDir]);
 
       const sourceNameInput = await sourceInputPrompt();
 
@@ -109,29 +103,17 @@ function watchFilesystem() {
       const outputPath = parseOutputPath(fileName, fileType, outputDir);
 
       // process all features and convert them to WGS84 ndgeojson
-      // while gathering stats on the data
+      // while gathering stats on the data.  Writes ndgeojson and stat files to output.
       await parseFile(dataset, chosenLayer, fileName, outputPath);
 
-      const productRef = generateRef(referenceIdLength);
+      await releaseProducts(fipsDetails, geoid, geoName, downloadRef, downloadId, outputPath);
 
-      // contains no file extension.  Used as base key for -stat.json  and .ndgeojson
-      const productKey = createProductDownloadKey(
-        fipsDetails,
-        geoid,
-        geoName,
-        downloadRef,
-        productRef,
-      );
+      // todo construct tiles
 
-      await createProductRecord(downloadId, productRef, geoid, `${productKey}.ndgeojson`);
-
-      // upload ndgeojson and stat files to S3 (concurrent)
-      await uploadProductFiles(productKey, outputPath);
-
-      await doBasicCleanup([rawDir, outputDir, unzippedDir]);
+      // await doBasicCleanup([rawDir, outputDir, unzippedDir]);
 
       console.log('\nawaiting a new file...\n');
     });
 
-  console.log('listening...\n');
+  console.log('\nlistening...\n');
 }
