@@ -107,11 +107,33 @@ async function init() {
       await parseFile(dataset, chosenLayer, fileName, outputPath);
 
       // todo uncomment
-      await releaseProducts(fipsDetails, geoid, geoName, downloadRef, downloadId, outputPath);
+      const productKeys = await releaseProducts(
+        fipsDetails,
+        geoid,
+        geoName,
+        downloadRef,
+        downloadId,
+        outputPath,
+      );
 
-      // todo construct tiles
-      const productRefTiles = generateRef(referenceIdLength);
-      await createTiles(outputPath, downloadRef, productRefTiles);
+      // construct tiles (states dont get tiles.  too big.)
+      if (fipsDetails.SUMLEV !== '040') {
+        const productRefTiles = generateRef(referenceIdLength);
+        const meta = {
+          filePath,
+          sourceId,
+          geoid,
+          geoName,
+          fipsDetails,
+          downloadId,
+          downloadRef,
+          outputPath,
+          productRefTiles,
+          rawKey,
+          productKeys,
+        };
+        await createTiles(outputPath, downloadRef, productRefTiles, meta);
+      }
 
       // await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
 

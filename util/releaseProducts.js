@@ -125,15 +125,15 @@ exports.releaseProducts = async function (
   } catch (e) {
     console.error(e);
   }
+
+  return { productKey, productKeyGeoJSON, productKeyGPKG, productKeySHP };
 };
 
-exports.createTiles = async function (outputPath, downloadRef, productRefTiles) {
+exports.createTiles = async function (outputPath, downloadRef, productRefTiles, meta) {
   const tilesDir = `${directories.processedDir}/${downloadRef}-${productRefTiles}`;
   const commandInput = await runTippecanoe(outputPath, tilesDir);
   const maxZoom = getMaxDirectoryLevel(tilesDir);
-  // todo so much more... original filename, webpage, date processed, everything at all
-  // todo like links to download in SHP, GPKG, GeoJSON, Original
-  const metadata = { ...commandInput, maxZoom };
+  const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
   // sync tiles
   await s3Sync(tilesDir, buckets.tilesBucket, `${downloadRef}-${productRefTiles}`);
   // write metadata

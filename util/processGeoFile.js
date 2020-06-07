@@ -208,7 +208,7 @@ exports.runTippecanoe = function (outputPath, tilesDir) {
         return reject(`error: ${error.code} ${stderr}`);
       }
       console.log(`completed creating tiles.`);
-      return resolve({ command, layername, attribution, description, name });
+      return resolve({ command, layername });
     });
   });
 };
