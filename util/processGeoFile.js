@@ -3,18 +3,19 @@ const chalk = require('chalk');
 const exec = require('child_process').exec;
 const gdal = require('gdal-next');
 const { StatContext } = require('./StatContext');
-const { unzippedDir } = require('./constants');
+const { directories } = require('./constants');
 
 exports.inspectFile = function (fileName, fileType) {
   console.log(`Found file: ${fileName}`);
 
   console.log({ fileName, fileType });
   console.log(
-    'opening from ' + `${unzippedDir}/${fileName + (fileType === 'shapefile' ? '.shp' : '')}`,
+    'opening from ' +
+      `${directories.unzippedDir}/${fileName + (fileType === 'shapefile' ? '.shp' : '')}`,
   );
 
   const dataset = gdal.open(
-    `${unzippedDir}/${fileName + (fileType === 'shapefile' ? '.shp' : '')}`,
+    `${directories.unzippedDir}/${fileName + (fileType === 'shapefile' ? '.shp' : '')}`,
   );
 
   const driver = dataset.driver;
@@ -111,10 +112,10 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
   });
 };
 
-exports.parseOutputPath = function (fileName, fileType, outputDir) {
+exports.parseOutputPath = function (fileName, fileType) {
   const SPLITTER = fileType === 'shapefile' ? '.shp' : '.gdb';
   const splitFileName = fileName.split(SPLITTER)[0];
-  const outputPath = `${outputDir}/${splitFileName}`;
+  const outputPath = `${directories.outputDir}/${splitFileName}`;
   return outputPath;
 };
 
@@ -184,6 +185,30 @@ exports.convertToFormat = function (format, outputPath) {
       }
       console.log(`completed creating format: ${format.driver}.`);
       return resolve(`completed creating format: ${format.driver}.`);
+    });
+  });
+};
+
+exports.runTippecanoe = function (outputPath, tilesDir) {
+  return new Promise((resolve, reject) => {
+    const layername = 'parcelslayer';
+    const attribution = 'parcel-outlet.com';
+    const description = 'This is sample description text.';
+    const name = 'unclear what this does';
+    // const command = `tippecanoe -f -l parcelslayer -o ${outputPath}.mbtiles -zg -pS -D10 -M 2500000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
+    const command = `tippecanoe -f -l parcelslayer -e ${tilesDir} --attribution="parcel-outlet.com" --description="test" --name="thisname" -zg -pS -D10 -M 2500000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
+    console.log(`running: ${command}`);
+    exec(command, function (error, stdout, stderr) {
+      if (stdout) {
+        console.log(`stdout: ${stdout}`);
+      }
+      if (error) {
+        console.error(`error code: ${error.code}`);
+        console.error(`stderr: ${stderr}`);
+        return reject(`error: ${error.code} ${stderr}`);
+      }
+      console.log(`completed creating tiles.`);
+      return resolve({ command, layername, attribution, description, name });
     });
   });
 };

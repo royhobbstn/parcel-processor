@@ -1,5 +1,5 @@
 const path = require('path');
-const { rawBucket, productsBucket } = require('../constants');
+const { buckets } = require('../constants');
 const { putFileToS3 } = require('../primitives/s3Operations');
 const { lookupState } = require('../lookupState');
 
@@ -11,19 +11,19 @@ exports.uploadRawFileToS3 = async function (filePath, rawKey) {
   }
 
   // save downloaded file to the raw bucket in s3 (don't gzip here)
-  await putFileToS3(rawBucket, rawKey, filePath, 'application/zip', false);
+  await putFileToS3(buckets.rawBucket, rawKey, filePath, 'application/zip', false);
 };
 
 exports.uploadProductFiles = async function (key, outputPath) {
   const statFile = putFileToS3(
-    productsBucket,
+    buckets.productsBucket,
     `${key}-stat.json`,
     `${outputPath}.json`,
     'application/json',
     true,
   );
   const ndgeojsonFile = putFileToS3(
-    productsBucket,
+    buckets.productsBucket,
     `${key}.ndgeojson`,
     `${outputPath}.ndgeojson`,
     'application/geo+json-seq',

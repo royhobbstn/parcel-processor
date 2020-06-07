@@ -2,7 +2,7 @@ const fs = require('fs');
 const unzipper = require('unzipper');
 var archiver = require('archiver');
 const path = require('path');
-const { unzippedDir, outputDir } = require('./constants');
+const { directories } = require('./constants');
 
 exports.moveFile = function (oldPath, newPath) {
   return new Promise((resolve, reject) => {
@@ -41,7 +41,7 @@ exports.moveFile = function (oldPath, newPath) {
 exports.extractZip = function (filePath) {
   return new Promise((resolve, reject) => {
     fs.createReadStream(filePath)
-      .pipe(unzipper.Extract({ path: unzippedDir }))
+      .pipe(unzipper.Extract({ path: directories.unzippedDir }))
       .on('error', err => {
         console.error(`Error unzipping file: ${filePath}`);
         console.error(err);
@@ -58,7 +58,7 @@ exports.extractZip = function (filePath) {
 // determine if the unzipped folder contains a shapefile or FGDB
 exports.checkForFileType = function () {
   return new Promise((resolve, reject) => {
-    const arrayOfFiles = fs.readdirSync(unzippedDir);
+    const arrayOfFiles = fs.readdirSync(directories.unzippedDir);
 
     console.log({ arrayOfFiles });
 
@@ -111,7 +111,7 @@ exports.zipShapefile = async function (outputPath, productKeySHP) {
   return new Promise((resolve, reject) => {
     const keyBase = path.parse(productKeySHP).base;
     // create a file to stream archive data to.
-    var output = fs.createWriteStream(`${outputDir}/${keyBase}-shp.zip`);
+    var output = fs.createWriteStream(`${directories.outputDir}/${keyBase}-shp.zip`);
     var archive = archiver('zip', {
       zlib: { level: 9 }, // Sets the compression level.
     });
@@ -171,4 +171,16 @@ exports.zipShapefile = async function (outputPath, productKeySHP) {
     // 'close', 'end' or 'finish' may be fired right after calling this method so register to them beforehand
     archive.finalize();
   });
+};
+
+exports.getMaxDirectoryLevel = function (dir) {
+  const directories = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => parseInt(dirent.name));
+
+  console.log({ directories });
+
+  console.log(Math.max(...directories));
+  return Math.max(...directories);
 };

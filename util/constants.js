@@ -1,12 +1,17 @@
 // application constants
 
-exports.outputDir = './output';
-exports.rawDir = './raw';
-exports.unzippedDir = './unzipped';
-exports.processedDir = './processed';
+exports.directories = {
+  outputDir: './output',
+  rawDir: './raw',
+  unzippedDir: './unzipped',
+  processedDir: './processed',
+};
 
-exports.rawBucket = 'raw-data-po';
-exports.productsBucket = 'data-products-po';
+exports.buckets = {
+  rawBucket: 'raw-data-po',
+  productsBucket: 'data-products-po',
+  tilesBucket: 'tile-server-po',
+};
 
 exports.referenceIdLength = 8;
 

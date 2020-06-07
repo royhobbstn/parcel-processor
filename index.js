@@ -1,5 +1,5 @@
 const chokidar = require('chokidar');
-const { rawDir, outputDir, unzippedDir, referenceIdLength } = require('./util/constants');
+const { directories, referenceIdLength, buckets } = require('./util/constants');
 const { acquireConnection } = require('./util/acquireConnection');
 const {
   sourceInputPrompt,
@@ -20,7 +20,7 @@ const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
-const { releaseProducts } = require('./util/releaseProducts');
+const { releaseProducts, createTiles } = require('./util/releaseProducts');
 
 init().catch(err => {
   console.error('unexpected error');
@@ -30,7 +30,7 @@ init().catch(err => {
 // watch filesystem and compute hash of incoming file.
 async function init() {
   chokidar
-    .watch(rawDir, {
+    .watch(directories.rawDir, {
       ignored: /(^|[\/\\])\../, // ignore dotfiles
       awaitWriteFinish: true,
     })
@@ -39,7 +39,7 @@ async function init() {
 
       await acquireConnection();
 
-      await doBasicCleanup([outputDir, unzippedDir]);
+      await doBasicCleanup([directories.outputDir, directories.unzippedDir]);
 
       const sourceNameInput = await sourceInputPrompt();
 
@@ -62,7 +62,7 @@ async function init() {
       const hashExists = await doesHashExist(computedHash);
 
       if (hashExists) {
-        return doBasicCleanup([rawDir]);
+        return doBasicCleanup([directories.rawDir]);
       }
 
       // get SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS
@@ -100,17 +100,20 @@ async function init() {
       const chosenLayer = await chooseGeoLayer(total_layers);
 
       // determine where on the local disk the output geo products will be written
-      const outputPath = parseOutputPath(fileName, fileType, outputDir);
+      const outputPath = parseOutputPath(fileName, fileType);
 
       // process all features and convert them to WGS84 ndgeojson
       // while gathering stats on the data.  Writes ndgeojson and stat files to output.
       await parseFile(dataset, chosenLayer, fileName, outputPath);
 
+      // todo uncomment
       await releaseProducts(fipsDetails, geoid, geoName, downloadRef, downloadId, outputPath);
 
       // todo construct tiles
+      const productRefTiles = generateRef(referenceIdLength);
+      await createTiles(outputPath, downloadRef, productRefTiles);
 
-      // await doBasicCleanup([rawDir, outputDir, unzippedDir]);
+      // await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
 
       console.log('\nawaiting a new file...\n');
     });

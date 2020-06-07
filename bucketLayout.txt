@@ -15,4 +15,7 @@ bucket: data-products-po
             
     placefips-name (replace weird characters with -) (06123400-City-and-County-Denver)
             key: dlref-prref-fullfips-placeName-stateName.extension (234345-234434-06123400-City-and-County-Denver-Colorado.ndjson)
-   
+
+bucket: tile-server-po
+  - meta/dlref-prref.json
+  - dlref-prref/...tiles...

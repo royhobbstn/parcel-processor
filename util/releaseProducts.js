@@ -1,17 +1,17 @@
 const path = require('path');
 const {
-  outputDir,
+  directories,
   fileFormats,
   referenceIdLength,
-  productsBucket,
+  buckets,
   productOrigins,
 } = require('./constants');
 const { uploadProductFiles, createProductDownloadKey } = require('./wrappers/wrapS3');
-const { putFileToS3 } = require('./primitives/s3Operations');
+const { putFileToS3, putTextToS3, s3Sync } = require('./primitives/s3Operations');
 const { queryCreateProductRecord } = require('./primitives/queries');
-const { convertToFormat } = require('./processGeoFile');
+const { convertToFormat, runTippecanoe } = require('./processGeoFile');
 const { generateRef } = require('./crypto');
-const { zipShapefile } = require('./filesystemUtil');
+const { zipShapefile, getMaxDirectoryLevel } = require('./filesystemUtil');
 
 exports.releaseProducts = async function (
   fipsDetails,
@@ -58,7 +58,7 @@ exports.releaseProducts = async function (
     `${productKeyGeoJSON}.geojson`,
   );
   await putFileToS3(
-    productsBucket,
+    buckets.productsBucket,
     `${productKeyGeoJSON}.geojson`,
     `${outputPath}.geojson`,
     'application/geo+json',
@@ -86,7 +86,7 @@ exports.releaseProducts = async function (
       `${productKeyGPKG}.gpkg`,
     );
     await putFileToS3(
-      productsBucket,
+      buckets.productsBucket,
       `${productKeyGPKG}.gpkg`,
       `${outputPath}.gpkg`,
       'application/geopackage+sqlite3',
@@ -116,13 +116,31 @@ exports.releaseProducts = async function (
       `${productKeySHP}-shp.zip`,
     );
     await putFileToS3(
-      productsBucket,
+      buckets.productsBucket,
       `${productKeySHP}-shp.zip`,
-      `${outputDir}/${path.parse(productKeySHP).base}-shp.zip`,
+      `${directories.outputDir}/${path.parse(productKeySHP).base}-shp.zip`,
       'application/zip',
       false,
     );
   } catch (e) {
     console.error(e);
   }
+};
+
+exports.createTiles = async function (outputPath, downloadRef, productRefTiles) {
+  const tilesDir = `${directories.processedDir}/${downloadRef}-${productRefTiles}`;
+  const commandInput = await runTippecanoe(outputPath, tilesDir);
+  const maxZoom = getMaxDirectoryLevel(tilesDir);
+  // todo so much more... original filename, webpage, date processed, everything at all
+  // todo like links to download in SHP, GPKG, GeoJSON, Original
+  const metadata = { ...commandInput, maxZoom };
+  // sync tiles
+  await s3Sync(tilesDir, buckets.tilesBucket, `${downloadRef}-${productRefTiles}`);
+  // write metadata
+  await putTextToS3(
+    buckets.tilesBucket,
+    `${downloadRef}-${productRefTiles}/info.json`,
+    JSON.stringify(metadata),
+    'application/json',
+  );
 };

@@ -16,7 +16,7 @@
   "scripts": {
     "start": "NODE_ENV=production node index.js",
     "dangerous-clean-db": "NODE_ENV=production node ./dangerous/clean-db.js",
-    "dangerous-clean-s3": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive"
+    "dangerous-clean-s3": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive"
   },
   "devDependencies": {
     "prettier": "2.0.5"

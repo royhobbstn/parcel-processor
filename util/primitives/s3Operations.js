@@ -2,11 +2,16 @@ const AWS = require('aws-sdk');
 const fs = require('fs');
 const stream = require('stream');
 const zlib = require('zlib');
+const exec = require('child_process').exec;
 
-exports.putTextToS3 = function (bucketName, keyName) {
-  // not used.  update to streaming and content type & encoding options if that changes.
+exports.putTextToS3 = function (bucketName, keyName, text, contentType) {
   return new Promise((resolve, reject) => {
-    const objectParams = { Bucket: bucketName, Key: keyName, Body: 'Hello World!' };
+    const objectParams = {
+      Bucket: bucketName,
+      Key: keyName,
+      Body: text,
+      ContentType: contentType,
+    };
     const uploadPromise = new AWS.S3({ apiVersion: '2006-03-01' })
       .putObject(objectParams)
       .promise();
@@ -72,5 +77,24 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
         console.error(err);
         return reject(err);
       });
+  });
+};
+
+exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder) {
+  return new Promise((resolve, reject) => {
+    const command = `aws s3 sync ${currentTilesDir} s3://${bucketName}/${destinationFolder} --content-encoding gzip`;
+    console.log(`running: ${command}`);
+    exec(command, function (error, stdout, stderr) {
+      if (stdout) {
+        console.log(`stdout: ${stdout}`);
+      }
+      if (error) {
+        console.error(`error code: ${error.code}`);
+        console.error(`stderr: ${stderr}`);
+        return reject(`error: ${error.code} ${stderr}`);
+      }
+      console.log(`completed copying tiles to s3.`);
+      return resolve();
+    });
   });
 };
