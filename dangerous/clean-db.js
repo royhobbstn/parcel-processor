@@ -1,36 +1,27 @@
-const config = require('config');
+const mysql = require('mysql2/promise');
+let connection;
 
-const slsAuroraClient = require('data-api-client')({
-  secretArn: config.get('secretArn'),
-  resourceArn: config.get('resourceArn'),
-  database: config.get('database'),
-  region: config.get('region'),
-});
+init()
+  .catch(err => {
+    console.error('unexpected error');
+    console.error(err);
+  })
+  .finally(async () => {
+    await connection.end();
+  });
 
-function queryHealth() {
-  return slsAuroraClient.query(`SELECT 1 + 1;`);
-}
-
-async function truncateTable(table) {
-  const query = await slsAuroraClient.query(`DELETE FROM ${table};`);
-  console.log(query);
-}
-
-// ping the database to make sure its up / get it ready
-// after that, keep-alives from data-api-client should do the rest
 async function init() {
-  const seconds = 10;
-  let connected = false;
-  do {
-    console.log('attempting to connect to database');
-    connected = await checkHealth();
-    if (!connected) {
-      console.log(`attempt failed.  trying again in ${seconds} seconds...`);
-      await setPause(seconds * 1000);
-    }
-  } while (!connected);
+  connection = await mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    database: 'main',
+  });
+
+  const [rows] = await connection.execute(`SELECT 1 + 1;`);
+  console.log(rows[0]);
 
   console.log('connected');
+
   await truncateTable('products');
   await truncateTable('downloads');
   await truncateTable('source_checks');
@@ -39,24 +30,8 @@ async function init() {
   console.log('done');
 }
 
-function setPause(timer) {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      return resolve();
-    }, timer);
-  });
+async function truncateTable(tbl) {
+  // wth, why cant escape tbl?
+  const resultSet = await connection.execute(`DELETE FROM ` + tbl);
+  console.log(`Deleted ${resultSet[0].affectedRows} records from ${tbl}`);
 }
-
-async function checkHealth() {
-  try {
-    await queryHealth();
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-init().catch(err => {
-  console.error('unexpected error');
-  console.error(err);
-});

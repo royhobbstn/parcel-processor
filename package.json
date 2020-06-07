@@ -10,13 +10,16 @@
     "config": "^3.3.1",
     "data-api-client": "^1.0.1",
     "gdal-next": "^1.0.3",
+    "mysql2": "^2.1.0",
     "prompt": "^1.0.0",
     "unzipper": "^0.10.11"
   },
   "scripts": {
     "start": "NODE_ENV=production node index.js",
     "dangerous-clean-db": "NODE_ENV=production node ./dangerous/clean-db.js",
-    "dangerous-clean-s3": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive"
+    "dangerous-clean-s3": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive",
+    "start-db": "sudo /opt/lampp/lampp start",
+    "stop-db": "sudo /opt/lampp/lampp stop"
   },
   "devDependencies": {
     "prettier": "2.0.5"

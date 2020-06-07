@@ -31,6 +31,7 @@ exports.fileFormats = {
   GEOJSON: { driver: 'GeoJSON', extension: 'geojson' },
   GPKG: { driver: 'GPKG', extension: 'gpkg' },
   SHP: { driver: 'ESRI Shapefile', extension: 'shp' },
+  TILES: { driver: '', extension: 'pbf' },
 };
 
 exports.productOrigins = {

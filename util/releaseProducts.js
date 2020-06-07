@@ -14,6 +14,7 @@ const { generateRef } = require('./crypto');
 const { zipShapefile, getMaxDirectoryLevel } = require('./filesystemUtil');
 
 exports.releaseProducts = async function (
+  connection,
   fipsDetails,
   geoid,
   geoName,
@@ -27,6 +28,7 @@ exports.releaseProducts = async function (
   const productKey = createProductDownloadKey(fipsDetails, geoid, geoName, downloadRef, productRef);
 
   await queryCreateProductRecord(
+    connection,
     downloadId,
     productRef,
     fileFormats.NDGEOJSON.extension,
@@ -50,6 +52,7 @@ exports.releaseProducts = async function (
     productRefGeoJSON,
   );
   await queryCreateProductRecord(
+    connection,
     downloadId,
     productRefGeoJSON,
     fileFormats.GEOJSON.extension,
@@ -67,10 +70,14 @@ exports.releaseProducts = async function (
 
   // file conversion is bound to be problematic for GPKG and SHP
   // dont crash program on account of failures here
+
+  let productKeyGPKG;
+  let productKeySHP;
+
   try {
     await convertToFormat(fileFormats.GPKG, outputPath);
     const productRefGPKG = generateRef(referenceIdLength);
-    const productKeyGPKG = createProductDownloadKey(
+    productKeyGPKG = createProductDownloadKey(
       fipsDetails,
       geoid,
       geoName,
@@ -78,6 +85,7 @@ exports.releaseProducts = async function (
       productRefGPKG,
     );
     await queryCreateProductRecord(
+      connection,
       downloadId,
       productRefGPKG,
       fileFormats.GPKG.extension,
@@ -99,7 +107,7 @@ exports.releaseProducts = async function (
   try {
     await convertToFormat(fileFormats.SHP, outputPath);
     const productRefSHP = generateRef(referenceIdLength);
-    const productKeySHP = createProductDownloadKey(
+    productKeySHP = createProductDownloadKey(
       fipsDetails,
       geoid,
       geoName,
@@ -108,6 +116,7 @@ exports.releaseProducts = async function (
     );
     await zipShapefile(outputPath, productKeySHP);
     await queryCreateProductRecord(
+      connection,
       downloadId,
       productRefSHP,
       fileFormats.SHP.extension,
@@ -129,18 +138,27 @@ exports.releaseProducts = async function (
   return { productKey, productKeyGeoJSON, productKeyGPKG, productKeySHP };
 };
 
-exports.createTiles = async function (outputPath, downloadRef, productRefTiles, meta) {
-  const tilesDir = `${directories.processedDir}/${downloadRef}-${productRefTiles}`;
-  const commandInput = await runTippecanoe(outputPath, tilesDir);
+exports.createTiles = async function (connection, meta) {
+  const tilesDir = `${directories.processedDir}/${meta.downloadRef}-${meta.productRefTiles}`;
+  const commandInput = await runTippecanoe(meta.outputPath, tilesDir);
   const maxZoom = getMaxDirectoryLevel(tilesDir);
   const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
   // sync tiles
-  await s3Sync(tilesDir, buckets.tilesBucket, `${downloadRef}-${productRefTiles}`);
+  await s3Sync(tilesDir, buckets.tilesBucket, `${meta.downloadRef}-${meta.productRefTiles}`);
   // write metadata
   await putTextToS3(
     buckets.tilesBucket,
-    `${downloadRef}-${productRefTiles}/info.json`,
+    `${meta.downloadRef}-${meta.productRefTiles}/info.json`,
     JSON.stringify(metadata),
     'application/json',
+  );
+  await queryCreateProductRecord(
+    connection,
+    meta.downloadId,
+    meta.productRefTiles,
+    fileFormats.TILES.extension,
+    productOrigins.ORIGINAL,
+    meta.geoid,
+    `${meta.downloadRef}-${meta.productRefTiles}`,
   );
 };

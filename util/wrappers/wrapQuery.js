@@ -7,51 +7,55 @@ const {
   queryHash,
   queryCreateDownloadRecord,
   queryGeographicIdentifier,
-  queryCreateProductRecord,
 } = require('../primitives/queries');
 const { sourceTypes, dispositions } = require('../constants');
 
-exports.checkHealth = async function () {
+exports.checkHealth = async function (connection) {
   try {
-    await queryHealth();
+    const [rows] = await queryHealth(connection);
+    const sum = rows[0]['1 + 1'];
+    if (sum !== 2) {
+      throw new Error('unexpected response from database health check');
+    }
     return true;
   } catch (e) {
     return false;
   }
 };
 
-exports.recordSourceCheck = async function (sourceId, sourceType) {
+exports.recordSourceCheck = async function (connection, sourceId, sourceType) {
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
   }
 
   const disposition =
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
-  const query = await queryWriteSourceCheck(sourceId, disposition);
-  return query.insertId;
+  const resultSet = await queryWriteSourceCheck(connection, sourceId, disposition);
+  console.log('writeSourceCheck', resultSet);
+  return resultSet[0].insertId;
 };
 
-exports.fetchSourceIdIfExists = async function (sourceName) {
-  const query = await querySource(sourceName);
-  console.log(`queryPage: ${sourceName}`, query);
-  if (query.records.length) {
-    return query.records[0].source_id;
+exports.fetchSourceIdIfExists = async function (connection, sourceName) {
+  const [rows] = await querySource(connection, sourceName);
+  console.log(`queryPage: ${sourceName}`, rows);
+  if (rows.length) {
+    return rows[0].source_id;
   }
   return -1;
 };
 
-exports.createSource = async function (sourceName, sourceType) {
-  const query = await queryWriteSource(sourceName, sourceType);
-  console.log(`createSource: ${sourceName}`, query);
-  if (query.numberOfRecordsUpdated === 1) {
-    return query.insertId;
+exports.createSource = async function (connection, sourceName, sourceType) {
+  const resultSet = await queryWriteSource(connection, sourceName, sourceType);
+  console.log(`createSource: ${sourceName}`, resultSet);
+  if (resultSet[0].affectedRows === 1) {
+    return resultSet[0].insertId;
   }
-  throw new Error(`unable to create page record for: ${pageName}`);
+  throw new Error(`unable to create page record for: ${sourceName}`);
 };
 
-exports.doesHashExist = async function () {
-  const query = await queryHash(computedHash);
-  if (query.records.length) {
+exports.doesHashExist = async function (connection) {
+  const [rows] = await queryHash(connection, computedHash);
+  if (rows.length) {
     console.log('Hash exists in database.  File has already been processed.\n');
     return true;
   }
@@ -60,6 +64,7 @@ exports.doesHashExist = async function () {
 };
 
 exports.constructDownloadRecord = async function (
+  connection,
   sourceId,
   checkId,
   computedHash,
@@ -69,7 +74,8 @@ exports.constructDownloadRecord = async function (
 ) {
   const originalFilename = path.parse(filePath).base;
 
-  const query = await queryCreateDownloadRecord(
+  const resultSet = await queryCreateDownloadRecord(
+    connection,
     sourceId,
     checkId,
     computedHash,
@@ -77,15 +83,15 @@ exports.constructDownloadRecord = async function (
     downloadRef,
     originalFilename,
   );
-  console.log(query);
-  if (!query || !query.insertId) {
+  console.log(resultSet);
+  if (!resultSet || !resultSet[0].insertId) {
     throw new Error('unexpected result from create download request');
   }
   console.log('new download record created');
-  return query.insertId;
+  return resultSet[0].insertId;
 };
 
-exports.lookupCleanGeoName = async function (fipsDetails) {
+exports.lookupCleanGeoName = async function (connection, fipsDetails) {
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 
   let geoid;
@@ -101,16 +107,16 @@ exports.lookupCleanGeoName = async function (fipsDetails) {
     process.exit();
   }
 
-  const query = await queryGeographicIdentifier(geoid);
-  console.log(query);
+  const [rows] = await queryGeographicIdentifier(connection, geoid);
+  console.log(rows);
 
-  if (!query || !query.records || !query.records.length) {
+  if (!rows || !rows.length) {
     throw new Error(
       `No geographic match found.  SUMLEV:${SUMLEV} STATEFIPS:${STATEFIPS} COUNTYFIPS:${COUNTYFIPS} PLACEFIPS:${PLACEFIPS}`,
     );
   }
 
-  const rawGeoName = query.records[0].geoname;
+  const rawGeoName = rows[0].geoname;
 
   console.log(`Found corresponding geographic area: ${rawGeoName}`);
 
