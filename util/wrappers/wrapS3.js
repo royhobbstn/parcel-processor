@@ -1,6 +1,7 @@
+const AWS = require('aws-sdk');
 const path = require('path');
-const { buckets } = require('../constants');
-const { putFileToS3 } = require('../primitives/s3Operations');
+const { buckets, s3deleteType } = require('../constants');
+const { putFileToS3, emptyS3Directory } = require('../primitives/s3Operations');
 const { lookupState } = require('../lookupState');
 
 exports.uploadRawFileToS3 = async function (filePath, rawKey) {
@@ -70,4 +71,23 @@ exports.createProductDownloadKey = function (fipsDetails, geoid, geoName, downlo
   }
 
   return key;
+};
+
+exports.removeS3Files = function (cleanupS3) {
+  const s3 = new AWS.S3();
+
+  return cleanupS3.map(item => {
+    if (item.type === s3deleteType.FILE) {
+      return s3
+        .deleteObject({
+          Bucket: item.bucket,
+          Key: item.key,
+        })
+        .promise();
+    } else if (item.type === s3deleteType.DIRECTORY) {
+      return emptyS3Directory(item.bucket, item.key);
+    } else {
+      throw new Error(`unexpected type: ${item.type} in removeS3Files`);
+    }
+  });
 };

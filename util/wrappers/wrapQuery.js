@@ -13,7 +13,7 @@ const { sourceTypes, dispositions } = require('../constants');
 exports.checkHealth = async function (connection) {
   try {
     const [rows] = await queryHealth(connection);
-    const sum = rows[0]['1 + 1'];
+    const sum = rows[0]['sum'];
     if (sum !== 2) {
       throw new Error('unexpected response from database health check');
     }
@@ -31,22 +31,19 @@ exports.recordSourceCheck = async function (connection, sourceId, sourceType) {
   const disposition =
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
   const resultSet = await queryWriteSourceCheck(connection, sourceId, disposition);
-  console.log('writeSourceCheck', resultSet);
   return resultSet[0].insertId;
 };
 
 exports.fetchSourceIdIfExists = async function (connection, sourceName) {
   const [rows] = await querySource(connection, sourceName);
-  console.log(`queryPage: ${sourceName}`, rows);
   if (rows.length) {
-    return rows[0].source_id;
+    return [rows[0].source_id, rows[0].source_type];
   }
-  return -1;
+  return [-1, -1];
 };
 
 exports.createSource = async function (connection, sourceName, sourceType) {
   const resultSet = await queryWriteSource(connection, sourceName, sourceType);
-  console.log(`createSource: ${sourceName}`, resultSet);
   if (resultSet[0].affectedRows === 1) {
     return resultSet[0].insertId;
   }
@@ -83,7 +80,6 @@ exports.constructDownloadRecord = async function (
     downloadRef,
     originalFilename,
   );
-  console.log(resultSet);
   if (!resultSet || !resultSet[0].insertId) {
     throw new Error('unexpected result from create download request');
   }
@@ -108,7 +104,6 @@ exports.lookupCleanGeoName = async function (connection, fipsDetails) {
   }
 
   const [rows] = await queryGeographicIdentifier(connection, geoid);
-  console.log(rows);
 
   if (!rows || !rows.length) {
     throw new Error(

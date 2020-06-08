@@ -5,6 +5,7 @@ const {
   referenceIdLength,
   buckets,
   productOrigins,
+  s3deleteType,
 } = require('./constants');
 const { uploadProductFiles, createProductDownloadKey } = require('./wrappers/wrapS3');
 const { putFileToS3, putTextToS3, s3Sync } = require('./primitives/s3Operations');
@@ -21,6 +22,8 @@ exports.releaseProducts = async function (
   downloadRef,
   downloadId,
   outputPath,
+  executiveSummary,
+  cleanupS3,
 ) {
   const productRef = generateRef(referenceIdLength);
 
@@ -36,9 +39,21 @@ exports.releaseProducts = async function (
     geoid,
     `${productKey}.ndgeojson`,
   );
+  executiveSummary.push(`wrote NDgeoJSON product record.  ref: ${productRef}`);
 
   // upload ndgeojson and stat files to S3 (concurrent)
   await uploadProductFiles(productKey, outputPath);
+  cleanupS3.push({
+    bucket: buckets.productsBucket,
+    key: `${productKey}-stat.json`,
+    type: s3deleteType.FILE,
+  });
+  cleanupS3.push({
+    bucket: buckets.productsBucket,
+    key: `${productKey}.ndgeojson`,
+    type: s3deleteType.FILE,
+  });
+  executiveSummary.push(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
 
   // ADDITIONAL FORMATS //
 
@@ -51,6 +66,7 @@ exports.releaseProducts = async function (
     downloadRef,
     productRefGeoJSON,
   );
+
   await queryCreateProductRecord(
     connection,
     downloadId,
@@ -60,6 +76,8 @@ exports.releaseProducts = async function (
     geoid,
     `${productKeyGeoJSON}.geojson`,
   );
+  executiveSummary.push(`created geoJSON product record.  ref: ${productRefGeoJSON}`);
+
   await putFileToS3(
     buckets.productsBucket,
     `${productKeyGeoJSON}.geojson`,
@@ -67,6 +85,12 @@ exports.releaseProducts = async function (
     'application/geo+json',
     true,
   );
+  cleanupS3.push({
+    bucket: buckets.productsBucket,
+    key: `${productKeyGeoJSON}.geojson`,
+    type: s3deleteType.FILE,
+  });
+  executiveSummary.push(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
 
   // file conversion is bound to be problematic for GPKG and SHP
   // dont crash program on account of failures here
@@ -93,6 +117,8 @@ exports.releaseProducts = async function (
       geoid,
       `${productKeyGPKG}.gpkg`,
     );
+    executiveSummary.push(`created GPKG product record.  ref: ${productRefGPKG}`);
+
     await putFileToS3(
       buckets.productsBucket,
       `${productKeyGPKG}.gpkg`,
@@ -100,8 +126,15 @@ exports.releaseProducts = async function (
       'application/geopackage+sqlite3',
       true,
     );
+    cleanupS3.push({
+      bucket: buckets.productsBucket,
+      key: `${productKeyGPKG}.gpkg`,
+      type: s3deleteType.FILE,
+    });
+    executiveSummary.push(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
   } catch (e) {
     console.error(e);
+    executiveSummary.push(`ERROR:  !!! uploading or product record creation failed on GPKG.`);
   }
 
   try {
@@ -124,6 +157,8 @@ exports.releaseProducts = async function (
       geoid,
       `${productKeySHP}-shp.zip`,
     );
+    executiveSummary.push(`created SHP product record.  ref: ${productRefSHP}`);
+
     await putFileToS3(
       buckets.productsBucket,
       `${productKeySHP}-shp.zip`,
@@ -131,20 +166,36 @@ exports.releaseProducts = async function (
       'application/zip',
       false,
     );
+    cleanupS3.push({
+      bucket: buckets.productsBucket,
+      key: `${productKeySHP}-shp.zip`,
+      type: s3deleteType.FILE,
+    });
+    executiveSummary.push(`uploaded SHP file to S3  key: ${productKeySHP}`);
   } catch (e) {
     console.error(e);
+    executiveSummary.push(`ERROR:  !!! uploading or product record creation failed on SHP.`);
   }
 
   return { productKey, productKeyGeoJSON, productKeyGPKG, productKeySHP };
 };
 
-exports.createTiles = async function (connection, meta) {
+exports.createTiles = async function (connection, meta, executiveSummary, cleanupS3) {
   const tilesDir = `${directories.processedDir}/${meta.downloadRef}-${meta.productRefTiles}`;
   const commandInput = await runTippecanoe(meta.outputPath, tilesDir);
   const maxZoom = getMaxDirectoryLevel(tilesDir);
   const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
   // sync tiles
   await s3Sync(tilesDir, buckets.tilesBucket, `${meta.downloadRef}-${meta.productRefTiles}`);
+  executiveSummary.push(
+    `uploaded TILES directory to S3.  Dir: ${meta.downloadRef}-${meta.productRefTiles}`,
+  );
+  cleanupS3.push({
+    bucket: buckets.tilesBucket,
+    key: `${meta.downloadRef}-${meta.productRefTiles}`,
+    type: s3deleteType.DIRECTORY,
+  });
+
   // write metadata
   await putTextToS3(
     buckets.tilesBucket,
@@ -152,6 +203,11 @@ exports.createTiles = async function (connection, meta) {
     JSON.stringify(metadata),
     'application/json',
   );
+
+  executiveSummary.push(
+    `uploaded TILES meta file to S3.  Dir: ${meta.downloadRef}-${meta.productRefTiles}/info.json`,
+  );
+
   await queryCreateProductRecord(
     connection,
     meta.downloadId,
@@ -161,4 +217,5 @@ exports.createTiles = async function (connection, meta) {
     meta.geoid,
     `${meta.downloadRef}-${meta.productRefTiles}`,
   );
+  executiveSummary.push(`created TILES product record.  ref: ${meta.productRefTiles}`);
 };

@@ -12,22 +12,19 @@ exports.getConnection = async function () {
 };
 
 exports.queryHealth = function (connection) {
-  return connection.query(`SELECT 1 + 1;`);
+  return connection.query(`SELECT 1 + 1 AS sum;`);
 };
 
 exports.startTransaction = async function (connection) {
-  const response = await connection.query(`START TRANSACTION;`);
-  console.log(response);
+  return await connection.query(`START TRANSACTION;`);
 };
 
 exports.commitTransaction = async function (connection) {
-  const response = await connection.query(`COMMIT;`);
-  console.log(response);
+  return await connection.query(`COMMIT;`);
 };
 
 exports.rollbackTransaction = async function (connection) {
-  const response = await connection.query(`ROLLBACK;`);
-  console.log(response);
+  return await connection.query(`ROLLBACK;`);
 };
 
 exports.queryHash = function (connection, computedHash) {

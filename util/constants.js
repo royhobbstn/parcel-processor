@@ -38,3 +38,8 @@ exports.productOrigins = {
   ORIGINAL: 'original',
   DERIVED: 'derived',
 };
+
+exports.s3deleteType = {
+  FILE: 'file',
+  DIRECTORY: 'directory',
+};

@@ -2,7 +2,7 @@ const fs = require('fs');
 const { directories } = require('./constants');
 const { moveFile } = require('./filesystemUtil');
 
-exports.doBasicCleanup = async function (dirs) {
+exports.doBasicCleanup = async function (dirs, silent) {
   // move all files from given array dirs into processed
 
   const movedFiles = [];
@@ -23,9 +23,11 @@ exports.doBasicCleanup = async function (dirs) {
 
   await Promise.all(movedFiles);
 
-  dirs.forEach(dir => {
-    console.log(`all files from '${dir}' moved to '${directories.processedDir}'.`);
-  });
+  if (!silent) {
+    dirs.forEach(dir => {
+      console.log(`all files from '${dir}' moved to '${directories.processedDir}'.`);
+    });
 
-  console.log('Done moving files.\n');
+    console.log('Done moving files.\n');
+  }
 };

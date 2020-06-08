@@ -1,10 +1,11 @@
 const chokidar = require('chokidar');
-const { directories, referenceIdLength, buckets } = require('./util/constants');
+const { directories, referenceIdLength, buckets, s3deleteType } = require('./util/constants');
 const {
   sourceInputPrompt,
   promptGeoIdentifiers,
   chooseGeoLayer,
   sourceTypePrompt,
+  execSummaryPrompt,
 } = require('./util/prompts');
 const {
   fetchSourceIdIfExists,
@@ -15,7 +16,11 @@ const {
   lookupCleanGeoName,
   checkHealth,
 } = require('./util/wrappers/wrapQuery');
-const { uploadRawFileToS3, createRawDownloadKey } = require('./util/wrappers/wrapS3');
+const {
+  uploadRawFileToS3,
+  createRawDownloadKey,
+  removeS3Files,
+} = require('./util/wrappers/wrapS3');
 const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
@@ -31,6 +36,7 @@ const {
 init().catch(err => {
   console.error('unexpected error');
   console.error(err);
+  process.exit();
 });
 
 // watch filesystem and compute hash of incoming file.
@@ -50,6 +56,7 @@ async function init() {
 
       currentlyProcessing = true;
       const cleanupS3 = [];
+      const executiveSummary = [];
 
       console.log(`\nFile found: ${filePath}`);
 
@@ -57,39 +64,69 @@ async function init() {
       await checkHealth(connection);
       await startTransaction(connection);
 
-      runMain(connection, filePath)
+      await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
+
+      runMain(connection, executiveSummary, cleanupS3, filePath)
         .then(async () => {
+          console.log(executiveSummary.join('\n') + '\n');
+          // prompt with summary - throw if they say no
+          await execSummaryPrompt();
+
           await commitTransaction(connection);
+          console.log('All database and S3 transactions completed successfully.');
+          // await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
         })
         .catch(async err => {
-          await rollbackTransaction(connection);
+          console.error(err);
+
+          try {
+            await rollbackTransaction(connection);
+            console.error('All database transactions have been rolled back.');
+          } catch (e) {
+            console.error(e);
+            console.error('Unable to rollback database!  Uh oh.');
+          }
+
+          try {
+            await removeS3Files(cleanupS3);
+            console.error('All created S3 assets have been deleted');
+          } catch (e) {
+            console.error(e);
+            console.error('Unable to delete S3 files.');
+          }
+
+          await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
+          console.log('output and unzipped directories cleaned.  Original raw file left in place.');
         })
         .finally(async () => {
           await connection.end();
           currentlyProcessing = false;
+          console.log('\n\nawaiting a new file...\n');
         });
     });
 
   console.log('\nlistening...\n');
 }
 
-async function runMain(connection, filePath) {
-  await doBasicCleanup([directories.outputDir, directories.unzippedDir]);
-
+async function runMain(connection, executiveSummary, cleanupS3, filePath) {
   const sourceNameInput = await sourceInputPrompt();
 
-  const sourceType = await sourceTypePrompt(sourceNameInput);
-
-  let sourceId = await fetchSourceIdIfExists(connection, sourceNameInput);
+  let [sourceId, sourceType] = await fetchSourceIdIfExists(connection, sourceNameInput);
 
   if (sourceId === -1) {
     console.log(`Source doesn't exist in database.  Creating a new source.`);
+    sourceType = await sourceTypePrompt(sourceNameInput);
     sourceId = await createSource(connection, sourceNameInput, sourceType);
+    executiveSummary.push(
+      `Created a new source record for: ${sourceNameInput} of type ${sourceType}`,
+    );
+  } else {
+    executiveSummary.push(`Found source record for: ${sourceNameInput}`);
   }
 
-  console.log({ sourceType });
-
+  // todo, accomodate 'received' disposition by prompt
   const checkId = await recordSourceCheck(connection, sourceId, sourceType);
+  executiveSummary.push(`Recorded source check as disposition: 'viewed'`);
 
   const computedHash = await computeHash(filePath);
 
@@ -97,14 +134,19 @@ async function runMain(connection, filePath) {
   const hashExists = await doesHashExist(connection, computedHash);
 
   if (hashExists) {
+    executiveSummary.push(`Hash for ${filePath} already exists.`);
     return doBasicCleanup([directories.rawDir]);
   }
 
   // get SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS
   const fipsDetails = await promptGeoIdentifiers();
+  executiveSummary.push(
+    `Identifier prompt;\n  SUMLEV: ${fipsDetails.SUMLEV}\n  STATEFIPS: ${fipsDetails.STATEFIPS}\n  COUNTYFIPS: ${fipsDetails.COUNTYFIPS}\n  PLACEFIPS: ${fipsDetails.PLACEFIPS}`,
+  );
 
   // get geoname corresponding to FIPS
   const { geoid, geoName } = await lookupCleanGeoName(connection, fipsDetails);
+  executiveSummary.push(`geoName:  ${geoName},  geoid: ${geoid}`);
 
   const downloadRef = generateRef(referenceIdLength);
 
@@ -121,8 +163,11 @@ async function runMain(connection, filePath) {
     downloadRef,
     filePath,
   );
+  executiveSummary.push(`created record in 'downloads' table.  ref: ${downloadRef}`);
 
   await uploadRawFileToS3(filePath, rawKey);
+  cleanupS3.push({ bucket: buckets.rawBucket, key: rawKey, type: s3deleteType.FILE });
+  executiveSummary.push(`uploaded raw file to S3.  key: ${rawKey}`);
 
   await extractZip(filePath);
 
@@ -150,6 +195,8 @@ async function runMain(connection, filePath) {
     downloadRef,
     downloadId,
     outputPath,
+    executiveSummary,
+    cleanupS3,
   );
 
   // construct tiles (states dont get tiles.  too big.)
@@ -168,11 +215,8 @@ async function runMain(connection, filePath) {
       rawKey,
       productKeys,
     };
-    await createTiles(connection, meta);
+    await createTiles(connection, meta, executiveSummary, cleanupS3);
+  } else {
+    executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
   }
-
-  // await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
-
-  currentlyProcessing = false;
-  console.log('\nawaiting a new file...\n');
 }
