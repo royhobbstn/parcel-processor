@@ -183,6 +183,7 @@ exports.releaseProducts = async function (
 exports.createTiles = async function (connection, meta, executiveSummary, cleanupS3) {
   const tilesDir = `${directories.processedDir}/${meta.downloadRef}-${meta.productRefTiles}`;
   const commandInput = await runTippecanoe(meta.outputPath, tilesDir);
+  await writeTileAttributes(meta.outputPath, tilesDir);
   const maxZoom = getMaxDirectoryLevel(tilesDir);
   const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
   // sync tiles

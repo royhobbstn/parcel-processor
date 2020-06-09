@@ -2,6 +2,8 @@ const fs = require('fs');
 const chalk = require('chalk');
 const exec = require('child_process').exec;
 const gdal = require('gdal-next');
+const ndjson = require('ndjson');
+var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
 const { directories } = require('./constants');
 
@@ -192,11 +194,7 @@ exports.convertToFormat = function (format, outputPath) {
 exports.runTippecanoe = function (outputPath, tilesDir) {
   return new Promise((resolve, reject) => {
     const layername = 'parcelslayer';
-    const attribution = 'parcel-outlet.com';
-    const description = 'This is sample description text.';
-    const name = 'unclear what this does';
-    // const command = `tippecanoe -f -l parcelslayer -o ${outputPath}.mbtiles -zg -pS -D10 -M 2500000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
-    const command = `tippecanoe -f -l parcelslayer -e ${tilesDir} --attribution="parcel-outlet.com" --description="test" --name="thisname" -zg -pS -D10 -M 2500000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
+    const command = `tippecanoe -f -l ${layername} -e ${tilesDir} --attribution="parcel-outlet.com" --description="test" --name="thisname" -zg -pS -D10 -M 2500000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
     console.log(`running: ${command}`);
     exec(command, function (error, stdout, stderr) {
       if (stdout) {
@@ -210,5 +208,45 @@ exports.runTippecanoe = function (outputPath, tilesDir) {
       console.log(`completed creating tiles.`);
       return resolve({ command, layername });
     });
+  });
+};
+
+exports.writeTileAttributes = function (outputPath, tilesDir) {
+  return new Promise((resolve, reject) => {
+    console.log('processing attributes...');
+
+    // make attributes directory
+    fs.mkdirSync(`${tilesDir}/attributes`);
+
+    let transformed = 0;
+
+    fs.createReadStream(`${outputPath}.ndgeojson`)
+      .pipe(ndjson.parse())
+      .on('data', function (obj) {
+        const bbox = turf.bbox(obj);
+
+        for (let lng = Math.floor(bbox[0] * 100); lng <= Math.floor(bbox[2] * 100); lng++) {
+          for (let lat = Math.floor(bbox[1] * 100); lat <= Math.floor(bbox[3] * 100); lat++) {
+            fs.appendFileSync(
+              `${tilesDir}/attributes/${lng}|${lat}.ndjson`,
+              JSON.stringify(obj.properties) + '\n',
+              'utf8',
+            );
+          }
+        }
+
+        transformed++;
+        if (transformed % 10000 === 0) {
+          console.log(transformed + ' records processed');
+        }
+      })
+      .on('error', err => {
+        console.error(err);
+        reject('error');
+      })
+      .on('end', end => {
+        console.log(transformed + ' records processed');
+        resolve('end');
+      });
   });
 };
