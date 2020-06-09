@@ -1,6 +1,7 @@
 const fs = require('fs');
 const chalk = require('chalk');
 const exec = require('child_process').exec;
+const spawn = require('child_process').spawn;
 const gdal = require('gdal-next');
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
@@ -83,6 +84,7 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
     var feat = null;
     let transformed = 0;
     let errored = 0;
+    let counter = 1; // assign as parcel-outlet unique id
 
     // transform features
     // this awkward loop is because reading individual features can error
@@ -96,6 +98,8 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
           writeStream.end();
         } else {
           const parsedFeature = getGeoJsonFromGdalFeature(feat, transform);
+          parsedFeature.properties.__po_id = counter;
+          counter++;
           statCounter.countStats(parsedFeature);
           writeStream.write(JSON.stringify(parsedFeature) + '\n', 'utf8');
           transformed++;
@@ -191,22 +195,45 @@ exports.convertToFormat = function (format, outputPath) {
   });
 };
 
-exports.runTippecanoe = function (outputPath, tilesDir) {
+exports.spawnTippecane = function (outputPath, tilesDir) {
   return new Promise((resolve, reject) => {
     const layername = 'parcelslayer';
-    const command = `tippecanoe -f -l ${layername} -e ${tilesDir} --attribution="parcel-outlet.com" --description="test" --name="thisname" -zg -pS -D10 -M 2500000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
+    const command = `tippecanoe -f -l ${layername} -e ${tilesDir} --include=__po_id -zg -pS -D10 -M 250000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
     console.log(`running: ${command}`);
-    exec(command, function (error, stdout, stderr) {
-      if (stdout) {
-        console.log(`stdout: ${stdout}`);
-      }
-      if (error) {
-        console.error(`error code: ${error.code}`);
-        console.error(`stderr: ${stderr}`);
-        return reject(`error: ${error.code} ${stderr}`);
-      }
-      console.log(`completed creating tiles.`);
-      return resolve({ command, layername });
+    const args = [
+      '-f',
+      '-l',
+      layername,
+      '-e',
+      tilesDir,
+      '--include=__po_id',
+      '-zg',
+      '-pS',
+      '-D10',
+      '-M',
+      '250000',
+      '--coalesce-densest-as-needed',
+      '--extend-zooms-if-still-dropping',
+      `${outputPath}.ndgeojson`,
+    ];
+    const proc = spawn('tippecanoe', args);
+
+    proc.stdout.on('data', data => {
+      console.log(`stdout: ${data}`);
+    });
+
+    proc.stderr.on('data', data => {
+      console.error(data);
+    });
+
+    proc.on('error', err => {
+      console.error(err);
+      reject(err);
+    });
+
+    proc.on('exit', code => {
+      console.log(`completed creating tiles. code ${code}`);
+      resolve();
     });
   });
 };

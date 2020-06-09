@@ -10,7 +10,7 @@ const {
 const { uploadProductFiles, createProductDownloadKey } = require('./wrappers/wrapS3');
 const { putFileToS3, putTextToS3, s3Sync } = require('./primitives/s3Operations');
 const { queryCreateProductRecord } = require('./primitives/queries');
-const { convertToFormat, runTippecanoe } = require('./processGeoFile');
+const { convertToFormat, spawnTippecane, writeTileAttributes } = require('./processGeoFile');
 const { generateRef } = require('./crypto');
 const { zipShapefile, getMaxDirectoryLevel } = require('./filesystemUtil');
 
@@ -182,7 +182,7 @@ exports.releaseProducts = async function (
 
 exports.createTiles = async function (connection, meta, executiveSummary, cleanupS3) {
   const tilesDir = `${directories.processedDir}/${meta.downloadRef}-${meta.productRefTiles}`;
-  const commandInput = await runTippecanoe(meta.outputPath, tilesDir);
+  const commandInput = await spawnTippecane(meta.outputPath, tilesDir);
   await writeTileAttributes(meta.outputPath, tilesDir);
   const maxZoom = getMaxDirectoryLevel(tilesDir);
   const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
