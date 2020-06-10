@@ -1,4 +1,4 @@
-// application constants
+// @ts-check
 
 exports.directories = {
   outputDir: './output',

@@ -1,3 +1,5 @@
+// @ts-check
+
 const path = require('path');
 const {
   queryWriteSourceCheck,
@@ -50,7 +52,7 @@ exports.createSource = async function (connection, sourceName, sourceType) {
   throw new Error(`unable to create page record for: ${sourceName}`);
 };
 
-exports.doesHashExist = async function (connection) {
+exports.doesHashExist = async function (connection, computedHash) {
   const [rows] = await queryHash(connection, computedHash);
   if (rows.length) {
     console.log('Hash exists in database.  File has already been processed.\n');

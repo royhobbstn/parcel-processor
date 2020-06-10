@@ -1,3 +1,5 @@
+// @ts-check
+
 const fs = require('fs');
 const unzipper = require('unzipper');
 var archiver = require('archiver');

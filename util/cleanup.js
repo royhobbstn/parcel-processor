@@ -1,3 +1,5 @@
+// @ts-check
+
 const fs = require('fs');
 const { directories } = require('./constants');
 const { moveFile } = require('./filesystemUtil');

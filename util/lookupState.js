@@ -1,3 +1,5 @@
+// @ts-check
+
 exports.lookupState = function (fips) {
   const codes = {
     '01': 'Alabama',

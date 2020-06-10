@@ -1,3 +1,5 @@
+// @ts-check
+
 const chokidar = require('chokidar');
 const { directories, referenceIdLength, buckets, s3deleteType } = require('./util/constants');
 const {

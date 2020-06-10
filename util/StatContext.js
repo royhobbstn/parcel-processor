@@ -1,3 +1,5 @@
+// @ts-check
+
 // gather field statistics for a dataset
 
 exports.StatContext = function () {

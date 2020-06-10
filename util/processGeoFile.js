@@ -1,3 +1,5 @@
+// @ts-check
+
 const fs = require('fs');
 const chalk = require('chalk');
 const exec = require('child_process').exec;
@@ -233,7 +235,7 @@ exports.spawnTippecane = function (outputPath, tilesDir) {
 
     proc.on('exit', code => {
       console.log(`completed creating tiles. code ${code}`);
-      resolve();
+      resolve({ command, layername });
     });
   });
 };

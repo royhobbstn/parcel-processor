@@ -1,3 +1,5 @@
+// @ts-check
+
 const AWS = require('aws-sdk');
 const fs = require('fs');
 const stream = require('stream');
@@ -99,7 +101,9 @@ exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder)
   });
 };
 
-exports.emptyS3Directory = async function (bucket, dir) {
+exports.emptyS3Directory = emptyDirectory;
+
+async function emptyDirectory(bucket, dir) {
   const s3 = new AWS.S3();
 
   const listParams = {
@@ -109,7 +113,9 @@ exports.emptyS3Directory = async function (bucket, dir) {
 
   const listedObjects = await s3.listObjectsV2(listParams).promise();
 
-  if (listedObjects.Contents.length === 0) return;
+  if (listedObjects.Contents.length === 0) {
+    return;
+  }
 
   const deleteParams = {
     Bucket: bucket,
@@ -122,5 +128,7 @@ exports.emptyS3Directory = async function (bucket, dir) {
 
   await s3.deleteObjects(deleteParams).promise();
 
-  if (listedObjects.IsTruncated) await emptyS3Directory(bucket, dir);
-};
+  if (listedObjects.IsTruncated) {
+    await emptyDirectory(bucket, dir);
+  }
+}

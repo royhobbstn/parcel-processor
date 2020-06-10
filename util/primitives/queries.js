@@ -1,8 +1,10 @@
+// @ts-check
+
 const mysql = require('mysql2/promise');
 
 exports.getConnection = async function () {
   // create the connection to database
-  connection = await mysql.createConnection({
+  const connection = await mysql.createConnection({
     host: 'localhost',
     user: 'root',
     database: 'main',

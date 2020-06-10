@@ -1,3 +1,5 @@
+// @ts-check
+
 const AWS = require('aws-sdk');
 const path = require('path');
 const { buckets, s3deleteType } = require('../constants');
