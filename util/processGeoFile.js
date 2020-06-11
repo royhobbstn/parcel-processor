@@ -2,13 +2,13 @@
 
 const fs = require('fs');
 const chalk = require('chalk');
-const exec = require('child_process').exec;
 const spawn = require('child_process').spawn;
 const gdal = require('gdal-next');
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
-const { directories } = require('./constants');
+const { directories, tileInfoPrefix, idPrefix, clusterPrefix } = require('./constants');
+const { clustersKmeans } = require('./modKmeans');
 
 exports.inspectFile = function (fileName, fileType) {
   console.log(`Found file: ${fileName}`);
@@ -65,28 +65,28 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
       return reject(e);
     }
 
-    const statCounter = new StatContext();
-
     console.log(`processing file: ${fileName}`);
 
+    const statCounter = new StatContext();
     let writeStream = fs.createWriteStream(`${outputPath}.ndgeojson`);
+    let counter = 0; // assign as parcel-outlet unique id
+    let errored = 0;
+    const points = []; // point centroid geojson features with parcel-outlet ids
+    let propertyCount = 1; // will be updated below.  count of property attributes per feature.  used for deciding attribute file size and number of clusters
 
     // the finish event is emitted when all data has been flushed from the stream
     writeStream.on('finish', async () => {
       fs.writeFileSync(`${outputPath}.json`, JSON.stringify(statCounter.export()), 'utf8');
       console.log(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson\n`);
 
-      console.log(`processed ${transformed} features`);
+      console.log(`processed ${counter} features`);
       console.log(`found ${errored} feature errors\n`);
-      return resolve();
+      return resolve([points, propertyCount]);
     });
 
     // load features
     var layerFeatures = layer.features;
     var feat = null;
-    let transformed = 0;
-    let errored = 0;
-    let counter = 1; // assign as parcel-outlet unique id
 
     // transform features
     // this awkward loop is because reading individual features can error
@@ -100,17 +100,18 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
           writeStream.end();
         } else {
           const parsedFeature = getGeoJsonFromGdalFeature(feat, transform);
-          parsedFeature.properties.__po_id = counter;
-          counter++;
-          statCounter.countStats(parsedFeature);
-          writeStream.write(JSON.stringify(parsedFeature) + '\n', 'utf8');
-          transformed++;
-          if (transformed % 10000 === 0) {
-            console.log(transformed + ' records processed');
+          if (counter % 10000 === 0) {
+            console.log(counter + ' records processed');
+            // my as well do this here (it will happen on feature 0 at the least)
+            propertyCount = parsedFeature.properties.length;
           }
+          counter++;
+          parsedFeature.properties[idPrefix] = counter;
+          statCounter.countStats(parsedFeature);
+          points.push(createPointFeature(parsedFeature));
+          writeStream.write(JSON.stringify(parsedFeature) + '\n', 'utf8');
         }
       } catch (e) {
-        writeStream.end();
         console.error(e);
         console.error(feat);
         console.error('Feature was ignored.');
@@ -119,6 +120,29 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
     } while (cont);
   });
 };
+
+exports.addClusterIdToGeoData = function (points, propertyCount) {
+  // write cluster-*(.ndgeojson) with a cluster id (to be used for making tiles)
+
+  const featureCount = points.length;
+  const numberOfClusters = Math.ceil((featureCount * propertyCount) / 30000);
+  const clustered = clustersKmeans(turf.featureCollection(points), { numberOfClusters });
+
+  // create a master lookup of __po_id to __po_cl  (idPrefix to clusterPrefix)
+  const lookup = {};
+
+  clustered.features.forEach((feature, idx) => {
+    lookup[feature.properties[idPrefix]] = feature.properties.cluster;
+  });
+
+  return lookup;
+};
+
+function createPointFeature(parsedFeature) {
+  const center = turf.center(parsedFeature);
+  center.properties[idPrefix] = parsedFeature.properties[idPrefix];
+  return center;
+}
 
 exports.parseOutputPath = function (fileName, fileType) {
   const SPLITTER = fileType === 'shapefile' ? '.shp' : '.gdb';
@@ -180,52 +204,24 @@ exports.convertToFormat = function (format, outputPath) {
   // convert from ndgeojson into geojson, gpkg, shp, etc
 
   return new Promise((resolve, reject) => {
-    const command = `ogr2ogr -f "${format.driver}" ${outputPath}.${format.extension} ${outputPath}.ndgeojson`;
-    console.log(`running: ${command}`);
-    exec(command, function (error, stdout, stderr) {
-      if (stdout) {
-        console.log(`stdout: ${stdout}`);
-      }
-      if (error) {
-        console.error(`error code: ${error.code}`);
-        console.error(`stderr: ${stderr}`);
-        return reject(`error: ${error.code} ${stderr}`);
-      }
-      console.log(`completed creating format: ${format.driver}.`);
-      return resolve(`completed creating format: ${format.driver}.`);
-    });
-  });
-};
-
-exports.spawnTippecane = function (outputPath, tilesDir) {
-  return new Promise((resolve, reject) => {
-    const layername = 'parcelslayer';
-    const command = `tippecanoe -f -l ${layername} -e ${tilesDir} --include=__po_id -zg -pS -D10 -M 250000 --coalesce-densest-as-needed --extend-zooms-if-still-dropping ${outputPath}.ndgeojson`;
-    console.log(`running: ${command}`);
+    const application = 'ogr2ogr';
     const args = [
       '-f',
-      '-l',
-      layername,
-      '-e',
-      tilesDir,
-      '--include=__po_id',
-      '-zg',
-      '-pS',
-      '-D10',
-      '-M',
-      '250000',
-      '--coalesce-densest-as-needed',
-      '--extend-zooms-if-still-dropping',
+      format.driver,
+      `${outputPath}.${format.extension}`,
       `${outputPath}.ndgeojson`,
     ];
-    const proc = spawn('tippecanoe', args);
+    const command = `${application} ${args.join(' ')}`;
+    console.log(`running: ${command}`);
+
+    const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      console.log(`stdout: ${data}`);
+      console.log(`stdout: ${data.toString()}`);
     });
 
     proc.stderr.on('data', data => {
-      console.error(data);
+      console.log(data.toString());
     });
 
     proc.on('error', err => {
@@ -233,14 +229,60 @@ exports.spawnTippecane = function (outputPath, tilesDir) {
       reject(err);
     });
 
-    proc.on('exit', code => {
+    proc.on('close', code => {
+      console.log(`completed creating format: ${format.driver}.`);
+      resolve({ command });
+    });
+  });
+};
+
+exports.spawnTippecane = function (tilesDir, derivativePath) {
+  return new Promise((resolve, reject) => {
+    const layername = 'parcelslayer';
+    const application = 'tippecanoe';
+    const args = [
+      '-f',
+      '-l',
+      layername,
+      '-e',
+      tilesDir,
+      `--include=${idPrefix}`,
+      `--include=${clusterPrefix}`,
+      '-zg',
+      '-pS',
+      '-D10',
+      '-M',
+      '250000',
+      '--coalesce-densest-as-needed',
+      '--extend-zooms-if-still-dropping',
+      `${derivativePath}.ndgeojson`,
+    ];
+    const command = `${application} ${args.join(' ')}`;
+    console.log(`running: ${command}`);
+
+    const proc = spawn(application, args);
+
+    proc.stdout.on('data', data => {
+      console.log(`stdout: ${data.toString()}`);
+    });
+
+    proc.stderr.on('data', data => {
+      console.log(data.toString());
+    });
+
+    proc.on('error', err => {
+      console.error(err);
+      reject(err);
+    });
+
+    proc.on('close', code => {
       console.log(`completed creating tiles. code ${code}`);
       resolve({ command, layername });
     });
   });
 };
 
-exports.writeTileAttributes = function (outputPath, tilesDir) {
+exports.writeTileAttributes = function (derivativePath, tilesDir) {
   return new Promise((resolve, reject) => {
     console.log('processing attributes...');
 
@@ -249,20 +291,15 @@ exports.writeTileAttributes = function (outputPath, tilesDir) {
 
     let transformed = 0;
 
-    fs.createReadStream(`${outputPath}.ndgeojson`)
+    fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', function (obj) {
-        const bbox = turf.bbox(obj);
-
-        for (let lng = Math.floor(bbox[0] * 100); lng <= Math.floor(bbox[2] * 100); lng++) {
-          for (let lat = Math.floor(bbox[1] * 100); lat <= Math.floor(bbox[3] * 100); lat++) {
-            fs.appendFileSync(
-              `${tilesDir}/attributes/${lng}|${lat}.ndjson`,
-              JSON.stringify(obj.properties) + '\n',
-              'utf8',
-            );
-          }
-        }
+        // todo filter out clusterID property in stringified JSON
+        fs.appendFileSync(
+          `${tilesDir}/attributes/${tileInfoPrefix}cl_${obj.properties[clusterPrefix]}.ndjson`,
+          JSON.stringify(obj.properties) + '\n',
+          'utf8',
+        );
 
         transformed++;
         if (transformed % 10000 === 0) {
@@ -276,6 +313,39 @@ exports.writeTileAttributes = function (outputPath, tilesDir) {
       .on('end', end => {
         console.log(transformed + ' records processed');
         resolve('end');
+      });
+  });
+};
+
+exports.createNdGeoJsonWithClusterId = async function (outputPath, lookup) {
+  return new Promise((resolve, reject) => {
+    console.log('creating derivative ndgeojson with clusterId...');
+
+    let transformed = 0;
+    console.log('createNdGeoJsonWithClusterId');
+    console.log({ outputPath });
+    const derivativePath = `${outputPath}-cluster`;
+
+    fs.createReadStream(`${outputPath}.ndgeojson`)
+      .pipe(ndjson.parse())
+      .on('data', function (obj) {
+        // add clusterId
+        obj.properties = { ...obj.properties, [clusterPrefix]: lookup[obj.properties[idPrefix]] };
+
+        fs.appendFileSync(`${derivativePath}.ndgeojson`, JSON.stringify(obj) + '\n', 'utf8');
+
+        transformed++;
+        if (transformed % 10000 === 0) {
+          console.log(transformed + ' records processed');
+        }
+      })
+      .on('error', err => {
+        console.error(err);
+        reject('error');
+      })
+      .on('end', end => {
+        console.log(transformed + ' records processed');
+        resolve(derivativePath);
       });
   });
 };

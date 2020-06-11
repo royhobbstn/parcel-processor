@@ -26,7 +26,12 @@ const {
 const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
-const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
+const {
+  inspectFile,
+  parseOutputPath,
+  parseFile,
+  addClusterIdToGeoData,
+} = require('./util/processGeoFile');
 const { releaseProducts, createTiles } = require('./util/releaseProducts');
 const {
   getConnection,
@@ -187,7 +192,7 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath) {
 
   // process all features and convert them to WGS84 ndgeojson
   // while gathering stats on the data.  Writes ndgeojson and stat files to output.
-  await parseFile(dataset, chosenLayer, fileName, outputPath);
+  const [points, propertyCount] = await parseFile(dataset, chosenLayer, fileName, outputPath);
 
   const productKeys = await releaseProducts(
     connection,
@@ -217,7 +222,7 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath) {
       rawKey,
       productKeys,
     };
-    await createTiles(connection, meta, executiveSummary, cleanupS3);
+    await createTiles(connection, meta, executiveSummary, cleanupS3, points, propertyCount);
   } else {
     executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
   }

@@ -13,7 +13,17 @@ exports.buckets = {
   tilesBucket: 'tile-server-po',
 };
 
+// length of refs for products / downloads table
 exports.referenceIdLength = 8;
+
+// prefix to flag that file needs to be gzipped in a separate process
+exports.tileInfoPrefix = '_po_';
+
+// parcel-outlet guaranteed unique feature id
+exports.idPrefix = '__po_id';
+
+// parcel-outlet feature cluster id (refers to file where tile attributes are stored)
+exports.clusterPrefix = '__po_cl';
 
 exports.sourceTypes = {
   WEBPAGE: 'webpage',

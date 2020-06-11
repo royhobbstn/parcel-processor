@@ -14,6 +14,7 @@
     "mysql2": "^2.1.0",
     "ndjson": "^1.5.0",
     "prompt": "^1.0.0",
+    "skmeans": "^0.11.3",
     "unzipper": "^0.10.11"
   },
   "scripts": {

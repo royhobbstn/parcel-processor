@@ -12,8 +12,14 @@ const {
 const { uploadProductFiles, createProductDownloadKey } = require('./wrappers/wrapS3');
 const { putFileToS3, putTextToS3, s3Sync } = require('./primitives/s3Operations');
 const { queryCreateProductRecord } = require('./primitives/queries');
-const { convertToFormat, spawnTippecane, writeTileAttributes } = require('./processGeoFile');
-const { generateRef } = require('./crypto');
+const {
+  convertToFormat,
+  spawnTippecane,
+  writeTileAttributes,
+  addClusterIdToGeoData,
+  createNdGeoJsonWithClusterId,
+} = require('./processGeoFile');
+const { generateRef, gzipTileAttributes } = require('./crypto');
 const { zipShapefile, getMaxDirectoryLevel } = require('./filesystemUtil');
 
 exports.releaseProducts = async function (
@@ -182,11 +188,27 @@ exports.releaseProducts = async function (
   return { productKey, productKeyGeoJSON, productKeyGPKG, productKeySHP };
 };
 
-exports.createTiles = async function (connection, meta, executiveSummary, cleanupS3) {
+exports.createTiles = async function (
+  connection,
+  meta,
+  executiveSummary,
+  cleanupS3,
+  points,
+  propertyCount,
+) {
+  // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
+  const lookup = addClusterIdToGeoData(points, propertyCount);
+
+  // create derivative ndgeojson with clusterId
+  const derivativePath = await createNdGeoJsonWithClusterId(meta.outputPath, lookup);
+
   const tilesDir = `${directories.processedDir}/${meta.downloadRef}-${meta.productRefTiles}`;
-  const commandInput = await spawnTippecane(meta.outputPath, tilesDir);
-  await writeTileAttributes(meta.outputPath, tilesDir);
+
+  // todo include cluster_id as property in tippecanoe
+  const commandInput = await spawnTippecane(tilesDir, derivativePath);
   const maxZoom = getMaxDirectoryLevel(tilesDir);
+  await writeTileAttributes(derivativePath, tilesDir);
+  await gzipTileAttributes(`${tilesDir}/attributes`);
   const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
   // sync tiles
   await s3Sync(tilesDir, buckets.tilesBucket, `${meta.downloadRef}-${meta.productRefTiles}`);

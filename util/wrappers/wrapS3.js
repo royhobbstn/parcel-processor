@@ -78,7 +78,7 @@ exports.createProductDownloadKey = function (fipsDetails, geoid, geoName, downlo
 exports.removeS3Files = function (cleanupS3) {
   const s3 = new AWS.S3();
 
-  return cleanupS3.map(item => {
+  const cleaned = cleanupS3.map(item => {
     if (item.type === s3deleteType.FILE) {
       return s3
         .deleteObject({
@@ -92,4 +92,6 @@ exports.removeS3Files = function (cleanupS3) {
       throw new Error(`unexpected type: ${item.type} in removeS3Files`);
     }
   });
+
+  return Promise.all(cleaned);
 };

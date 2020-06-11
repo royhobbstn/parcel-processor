@@ -4,7 +4,7 @@ const AWS = require('aws-sdk');
 const fs = require('fs');
 const stream = require('stream');
 const zlib = require('zlib');
-const exec = require('child_process').exec;
+const spawn = require('child_process').spawn;
 
 exports.putTextToS3 = function (bucketName, keyName, text, contentType) {
   return new Promise((resolve, reject) => {
@@ -84,19 +84,36 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
 
 exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder) {
   return new Promise((resolve, reject) => {
-    const command = `aws s3 sync ${currentTilesDir} s3://${bucketName}/${destinationFolder} --content-encoding gzip`;
+    const application = 'aws';
+    const args = [
+      's3',
+      `sync`,
+      currentTilesDir,
+      `s3://${bucketName}/${destinationFolder}`,
+      '--content-encoding',
+      'gzip',
+    ];
+    const command = `${application} ${args.join(' ')}`;
     console.log(`running: ${command}`);
-    exec(command, function (error, stdout, stderr) {
-      if (stdout) {
-        console.log(`stdout: ${stdout}`);
-      }
-      if (error) {
-        console.error(`error code: ${error.code}`);
-        console.error(`stderr: ${stderr}`);
-        return reject(`error: ${error.code} ${stderr}`);
-      }
-      console.log(`completed copying tiles to s3.`);
-      return resolve();
+
+    const proc = spawn(application, args);
+
+    proc.stdout.on('data', data => {
+      console.log(`stdout: ${data.toString()}`);
+    });
+
+    proc.stderr.on('data', data => {
+      console.log(data.toString());
+    });
+
+    proc.on('error', err => {
+      console.error(err);
+      reject(err);
+    });
+
+    proc.on('close', code => {
+      console.log(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
+      resolve({ command });
     });
   });
 };
@@ -126,7 +143,8 @@ async function emptyDirectory(bucket, dir) {
     deleteParams.Delete.Objects.push({ Key });
   });
 
-  await s3.deleteObjects(deleteParams).promise();
+  const result = await s3.deleteObjects(deleteParams).promise();
+  console.log(result);
 
   if (listedObjects.IsTruncated) {
     await emptyDirectory(bucket, dir);
