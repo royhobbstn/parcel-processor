@@ -53,3 +53,8 @@ exports.s3deleteType = {
   FILE: 'file',
   DIRECTORY: 'directory',
 };
+
+exports.modes = {
+  PRODUCTION: { input: 'prod', label: 'PRODUCTION' },
+  DRY_RUN: { input: 'dry-run', label: 'DRY RUN' },
+};

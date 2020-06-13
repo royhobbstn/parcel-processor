@@ -1,13 +1,20 @@
 // @ts-check
 
 const chokidar = require('chokidar');
-const { directories, referenceIdLength, buckets, s3deleteType } = require('./util/constants');
+const {
+  directories,
+  referenceIdLength,
+  buckets,
+  s3deleteType,
+  modes,
+} = require('./util/constants');
 const {
   sourceInputPrompt,
   promptGeoIdentifiers,
   chooseGeoLayer,
   sourceTypePrompt,
   execSummaryPrompt,
+  modePrompt,
 } = require('./util/prompts');
 const {
   fetchSourceIdIfExists,
@@ -26,12 +33,7 @@ const {
 const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
-const {
-  inspectFile,
-  parseOutputPath,
-  parseFile,
-  addClusterIdToGeoData,
-} = require('./util/processGeoFile');
+const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
 const { releaseProducts, createTiles } = require('./util/releaseProducts');
 const {
   getConnection,
@@ -67,21 +69,36 @@ async function init() {
 
       console.log(`\nFile found: ${filePath}`);
 
+      const mode = await modePrompt();
       const connection = await getConnection();
       await checkHealth(connection);
       await startTransaction(connection);
 
       await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
 
-      runMain(connection, executiveSummary, cleanupS3, filePath)
+      runMain(connection, executiveSummary, cleanupS3, filePath, mode)
         .then(async () => {
+          console.log(`\n\nExecutive Summary\n`);
           console.log(executiveSummary.join('\n') + '\n');
-          // prompt with summary - throw if they say no
-          await execSummaryPrompt();
 
-          await commitTransaction(connection);
-          console.log('All database and S3 transactions completed successfully.');
-          // await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
+          if (mode.label === modes.PRODUCTION.label) {
+            // prompt with summary - throw if they say no
+            await execSummaryPrompt();
+            await commitTransaction(connection);
+            await doBasicCleanup([
+              directories.rawDir,
+              directories.outputDir,
+              directories.unzippedDir,
+            ]);
+          } else {
+            await rollbackTransaction(connection);
+            console.log(
+              `\nBecause this was a ${mode.label} the database transactions have been rolled back.  \nYour file remains in the raw directory.\n`,
+            );
+            await doBasicCleanup([directories.outputDir, directories.unzippedDir]);
+          }
+
+          console.log('All transactions completed successfully.');
         })
         .catch(async err => {
           console.error(err);
@@ -94,12 +111,14 @@ async function init() {
             console.error('Unable to rollback database!  Uh oh.');
           }
 
-          try {
-            await removeS3Files(cleanupS3);
-            console.error('All created S3 assets have been deleted');
-          } catch (e) {
-            console.error(e);
-            console.error('Unable to delete S3 files.');
+          if (mode.label === modes.PRODUCTION.label) {
+            try {
+              await removeS3Files(cleanupS3);
+              console.error('All created S3 assets have been deleted');
+            } catch (e) {
+              console.error(e);
+              console.error('Unable to delete S3 files.');
+            }
           }
 
           await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
@@ -115,7 +134,7 @@ async function init() {
   console.log('\nlistening...\n');
 }
 
-async function runMain(connection, executiveSummary, cleanupS3, filePath) {
+async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) {
   const sourceNameInput = await sourceInputPrompt();
 
   let [sourceId, sourceType] = await fetchSourceIdIfExists(connection, sourceNameInput);
@@ -172,9 +191,11 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath) {
   );
   executiveSummary.push(`created record in 'downloads' table.  ref: ${downloadRef}`);
 
-  await uploadRawFileToS3(filePath, rawKey);
-  cleanupS3.push({ bucket: buckets.rawBucket, key: rawKey, type: s3deleteType.FILE });
-  executiveSummary.push(`uploaded raw file to S3.  key: ${rawKey}`);
+  if (mode.label === modes.PRODUCTION.label) {
+    await uploadRawFileToS3(filePath, rawKey);
+    cleanupS3.push({ bucket: buckets.rawBucket, key: rawKey, type: s3deleteType.FILE });
+    executiveSummary.push(`uploaded raw file to S3.  key: ${rawKey}`);
+  }
 
   await extractZip(filePath);
 
@@ -204,6 +225,7 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath) {
     outputPath,
     executiveSummary,
     cleanupS3,
+    mode,
   );
 
   // construct tiles (states dont get tiles.  too big.)
@@ -222,7 +244,7 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath) {
       rawKey,
       productKeys,
     };
-    await createTiles(connection, meta, executiveSummary, cleanupS3, points, propertyCount);
+    await createTiles(connection, meta, executiveSummary, cleanupS3, points, propertyCount, mode);
   } else {
     executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
   }

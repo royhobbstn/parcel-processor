@@ -103,7 +103,7 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
           if (counter % 10000 === 0) {
             console.log(counter + ' records processed');
             // my as well do this here (it will happen on feature 0 at the least)
-            propertyCount = parsedFeature.properties.length;
+            propertyCount = Object.keys(parsedFeature.properties).length;
           }
           counter++;
           parsedFeature.properties[idPrefix] = counter;
@@ -294,10 +294,11 @@ exports.writeTileAttributes = function (derivativePath, tilesDir) {
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', function (obj) {
-        // todo filter out clusterID property in stringified JSON
+        const copy = { ...obj.properties };
+        delete copy[clusterPrefix]; // filter out clusterID property in stringified JSON
         fs.appendFileSync(
           `${tilesDir}/attributes/${tileInfoPrefix}cl_${obj.properties[clusterPrefix]}.ndjson`,
-          JSON.stringify(obj.properties) + '\n',
+          JSON.stringify(copy) + '\n',
           'utf8',
         );
 

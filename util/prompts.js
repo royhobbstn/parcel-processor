@@ -1,7 +1,7 @@
 // @ts-check
 
 const prompt = require('prompt');
-const { sourceTypes } = require('./constants');
+const { sourceTypes, modes } = require('./constants');
 
 exports.sourceTypePrompt = function (sourceNameInput) {
   return new Promise((resolve, reject) => {
@@ -207,4 +207,24 @@ exports.chooseGeoLayer = async function (total_layers) {
   }
 
   return chosenLayer;
+};
+
+exports.modePrompt = function () {
+  return new Promise((resolve, reject) => {
+    prompt.start();
+
+    console.log(
+      `\nWhich mode? (prod = production)\nAnything else is a dry-run with no uploads to s3 and an auto rolled back database transaction.\n`,
+    );
+
+    prompt.get(['mode'], function (err, result) {
+      if (err) {
+        return reject(err);
+      }
+
+      const mode = result.mode === modes.PRODUCTION.input ? modes.PRODUCTION : modes.DRY_RUN;
+      console.log(`Running in ${mode.label} mode.`);
+      return resolve(mode);
+    });
+  });
 };
