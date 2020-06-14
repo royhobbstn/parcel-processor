@@ -21,8 +21,9 @@
     "start": "node index.js",
     "dangerous-clean-db": "node ./dangerous/clean-db.js",
     "dangerous-clean-s3": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive",
-    "start-db": "sudo /opt/lampp/lampp start",
-    "stop-db": "sudo /opt/lampp/lampp stop"
+    "setup": "sudo /opt/lampp/lampp start && git pull && npm run db-dump",
+    "stop-db": "sudo /opt/lampp/lampp stop",
+    "db-dump": "node ./util/dbdump.js"
   },
   "devDependencies": {
     "prettier": "2.0.5"

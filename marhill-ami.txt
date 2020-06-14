@@ -1,0 +1,71 @@
+Ubuntu 18.04
+
+
+Install Homebrew for Linux
+
+sudo apt-get update
+sudo apt-get install build-essential curl file git
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+test -d ~/.linuxbrew && eval $(~/.linuxbrew/bin/brew shellenv)
+test -d /home/linuxbrew/.linuxbrew && eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
+test -r ~/.bash_profile && echo "eval \$($(brew --prefix)/bin/brew shellenv)" >>~/.bash_profile
+echo "eval \$($(brew --prefix)/bin/brew shellenv)" >>~/.profile
+
+
+Install NVM, NodeJS, NPM
+
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.3/install.sh | bash
+export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
+nvm install 12
+
+Install Tippecanoe
+
+brew install tippecanoe
+
+Install GDAL
+
+brew install gdal
+sudo apt-install gdal-bin
+
+Install XAMPP
+
+wget https://www.apachefriends.org/xampp-files/7.4.6/xampp-linux-x64-7.4.6-0-installer.run
+chmod 755 xampp-linux-x64-7.4.6-0-installer.run
+sudo ./xampp-linux-x64-7.4.6-0-installer.run
+
+sudo /opt/lampp/lampp start
+# sudo /opt/lampp/lampp stop
+
+Add Github SSH key
+https://help.github.com/en/github/authenticating-to-github/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent
+https://help.github.com/en/github/authenticating-to-github/testing-your-ssh-connection
+
+Edit EC2 security group to allow access on TCP port 80
+
+To enable remote access to phpMyAdmin, follow these steps:
+
+Edit the etc/extra/httpd-xampp.conf file in your XAMPP installation directory.
+Within this file, find the lines below.
+
+Alias /phpmyadmin "/opt/lampp/phpmyadmin/"
+<Directory "/opt/lampp/phpmyadmin">
+AllowOverride AuthConfig
+Require local
+
+Then replace 'Require local' with 'Require all granted'.
+
+Alias /phpmyadmin "/opt/lampp/phpmyadmin/"
+<Directory "/opt/lampp/phpMyAdmin">
+AllowOverride AuthConfig
+Require all granted
+
+Restart the Apache server using the XAMPP control panel.
+
+Run through security settings at:
+sudo /opt/lampp/lampp security
+
+set up mysqldump:
+sudo apt install mysql-client-5.7
+sudo mkdir /var/run/mysqld
+sudo ln -s /opt/lampp/var/mysql/mysql.sock /var/run/mysqld/mysqld.sock

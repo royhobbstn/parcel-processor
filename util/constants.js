@@ -11,6 +11,7 @@ exports.buckets = {
   rawBucket: 'raw-data-po',
   productsBucket: 'data-products-po',
   tilesBucket: 'tile-server-po',
+  marhillMainDB: 'marhill-main-db',
 };
 
 // length of refs for products / downloads table

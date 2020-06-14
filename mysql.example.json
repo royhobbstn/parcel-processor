@@ -4,5 +4,6 @@
     "user": "root",
     "database": "main",
     "password": ""
-  }
+  },
+  "device": "device: laptop or server that you are using.  used in DB dump name"
 }

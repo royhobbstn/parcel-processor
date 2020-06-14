@@ -46,7 +46,7 @@ CREATE table products(
    product_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
    download_id INT,
    product_ref VARCHAR(16),
-   product_type ENUM('ndgeojson', 'shp', 'gdb', 'geojson', 'gpkg'),
+   product_type ENUM('ndgeojson', 'shp', 'gdb', 'geojson', 'gpkg', 'pbf'),
    product_origin ENUM('original', 'derived'),
    geoid VARCHAR(7),
    product_key VARCHAR(500),
