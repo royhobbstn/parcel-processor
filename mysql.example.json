@@ -1,0 +1,8 @@
+{
+  "connection": {
+    "host": "localhost",
+    "user": "root",
+    "database": "main",
+    "password": ""
+  }
+}

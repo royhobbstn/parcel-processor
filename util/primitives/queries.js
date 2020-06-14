@@ -1,16 +1,9 @@
 // @ts-check
-
 const mysql = require('mysql2/promise');
+const secret = require('../../mysql.json');
 
-exports.getConnection = async function () {
-  // create the connection to database
-  const connection = await mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    database: 'main',
-  });
-
-  return connection;
+exports.getConnection = function () {
+  return mysql.createConnection(secret.connection);
 };
 
 exports.queryHealth = function (connection) {

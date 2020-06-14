@@ -1,4 +1,6 @@
 const mysql = require('mysql2/promise');
+const secret = require('../mysql.json');
+
 let connection;
 
 init()
@@ -11,11 +13,7 @@ init()
   });
 
 async function init() {
-  connection = await mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    database: 'main',
-  });
+  connection = await mysql.createConnection(secret.connection);
 
   const [rows] = await connection.execute(`SELECT 1 + 1;`);
   console.log(rows[0]);

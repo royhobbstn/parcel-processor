@@ -24,4 +24,4 @@ yarn-error.log*
 
 usefullCLI.txt
 
-config/production.json
+mysql.json
