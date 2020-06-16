@@ -9,6 +9,7 @@ const {
   queryHash,
   queryCreateDownloadRecord,
   queryGeographicIdentifier,
+  queryAllOriginalRecentDownloads,
 } = require('../primitives/queries');
 const { sourceTypes, dispositions } = require('../constants');
 
@@ -121,4 +122,16 @@ exports.lookupCleanGeoName = async function (connection, fipsDetails) {
   const geoName = rawGeoName.replace(/[^a-z0-9]+/gi, '-');
 
   return { geoid, geoName };
+};
+
+exports.getSplittableDownloads = async function (connection, geoid) {
+  // todo use geoid
+
+  const [rows] = await queryAllOriginalRecentDownloads(connection);
+
+  if (!rows || !rows.length) {
+    throw new Error(`No matching records.`);
+  }
+
+  return { rows };
 };

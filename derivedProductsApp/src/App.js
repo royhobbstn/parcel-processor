@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Input, Label, Table, Card } from 'semantic-ui-react';
+import { Input, Label, Table } from 'semantic-ui-react';
+import StatsCard from './StatsCard';
 
 function App() {
   const [inputVal, updateInputVal] = useState('');
@@ -20,7 +21,7 @@ function App() {
               .fetch('http://localhost:4000/queryStatFiles?fips=' + inputVal)
               .then(res => res.json())
               .then(data => {
-                updateStatFiles(data);
+                updateStatFiles(data.rows);
               })
               .catch(err => {
                 console.error('err:', err);
@@ -47,7 +48,7 @@ function App() {
         <Table.Header>
           <Table.Row>
             <Table.HeaderCell>GeoName</Table.HeaderCell>
-            <Table.HeaderCell>FIPS</Table.HeaderCell>
+            <Table.HeaderCell>GeoID</Table.HeaderCell>
             <Table.HeaderCell>Source</Table.HeaderCell>
             <Table.HeaderCell>Timestamp</Table.HeaderCell>
           </Table.Row>
@@ -57,10 +58,9 @@ function App() {
             statFiles.map(d => {
               return (
                 <Table.Row
-                  key={d.downloadId}
+                  key={d.download_id}
                   onClick={() => {
-                    console.log({ dl1: d.downloadId, dl2: selectedDownload });
-                    if (d.downloadId === (selectedDownload && selectedDownload.downloadId)) {
+                    if (d.download_id === (selectedDownload && selectedDownload.download_id)) {
                       updateSelectedDownload(null);
                     } else {
                       updateSelectedDownload(d);
@@ -68,9 +68,9 @@ function App() {
                   }}
                 >
                   <Table.Cell>{d.geoname}</Table.Cell>
-                  <Table.Cell>{d.fips}</Table.Cell>
-                  <Table.Cell>{d.sourceName}</Table.Cell>
-                  <Table.Cell>{d.downloadDate}</Table.Cell>
+                  <Table.Cell>{d.geoid}</Table.Cell>
+                  <Table.Cell>{d.source_name}</Table.Cell>
+                  <Table.Cell>{d.last_checked}</Table.Cell>
                 </Table.Row>
               );
             })
@@ -82,21 +82,7 @@ function App() {
         </Table.Body>
       </Table>
       <br />
-      <span>{JSON.stringify(statFiles)}</span>
-      {selectedDownload ? (
-        <Card>
-          <Card.Content>
-            <Card.Header>Steve Sanders</Card.Header>
-            <Card.Meta>Friends of Elliot</Card.Meta>
-            <Card.Description>
-              Steve wants to add you to the group <strong>best friends</strong>
-            </Card.Description>
-          </Card.Content>
-          <Card.Content extra>{selectedDownload.downloadId}</Card.Content>
-        </Card>
-      ) : (
-        <span />
-      )}
+      {selectedDownload ? <StatsCard selectedDownload={selectedDownload} /> : <span />}
     </div>
   );
 }

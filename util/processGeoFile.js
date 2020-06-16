@@ -252,7 +252,7 @@ exports.spawnTippecane = function (tilesDir, derivativePath) {
       '-pS',
       '-D10',
       '-M',
-      '250000',
+      '500000',
       '--coalesce-densest-as-needed',
       '--extend-zooms-if-still-dropping',
       `${derivativePath}.ndgeojson`,

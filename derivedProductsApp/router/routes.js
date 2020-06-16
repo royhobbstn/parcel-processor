@@ -1,91 +1,36 @@
-exports.appRouter = app => {
+const { getConnection } = require('../../util/primitives/queries');
+const { getSplittableDownloads } = require('../../util/wrappers/wrapQuery');
+const { getObject } = require('../../util/primitives/s3Operations');
+const { buckets } = require('../../util/constants');
+
+exports.appRouter = async app => {
   //
-  let counter = 0;
-  app.get('/queryStatFiles', function (req, res) {
+
+  app.get('/queryStatFiles', async function (req, res) {
     console.log('fips: ', req.query.fips);
-    counter++;
-    iterator = counter % 5;
 
-    // query for ndgeojson files (as proxy for -stat files)
+    const connection = await getConnection();
 
-    if (iterator === 0) {
-      res.send([]);
-    }
+    const rows = await getSplittableDownloads(connection);
 
-    return res.send(
-      [
-        {
-          fips: '08031',
-          geoname: 'Colorado',
-          downloadRef: 'JK78KJHI',
-          downloadId: 123,
-          productRef: 'JKSDIN78',
-          productId: 234,
-          productKey: '/sfsdfsdf/asdfsdf/file.ndgeojson',
-          downloadDate: 'Timestamp1',
-          sourceName: 'http://www.denver.com',
-          sourceType: 'webpage',
-          rawKey: '/sdfas/sdfsd/ksdhfkj',
-          originalFilename: 'blahz.zip',
-        },
-        {
-          fips: '08031',
-          geoname: 'Colorado',
-          downloadRef: 'JK78KJHI',
-          downloadId: 124,
-          productRef: 'JKSDIN78',
-          productId: 234,
-          productKey: '/sfsdfsdf/asdfsdf/file.ndgeojson',
-          downloadDate: 'Timestamp1',
-          sourceName: 'http://www.denver.com',
-          sourceType: 'webpage',
-          rawKey: '/sdfas/sdfsd/ksdhfkj',
-          originalFilename: 'blahz.zip',
-        },
-        {
-          fips: '08031',
-          geoname: 'Colorado',
-          downloadRef: 'JK78KJHI',
-          downloadId: 125,
-          productRef: 'JKSDIN78',
-          productId: 234,
-          productKey: '/sfsdfsdf/asdfsdf/file.ndgeojson',
-          downloadDate: 'Timestamp1',
-          sourceName: 'http://www.denver.com',
-          sourceType: 'webpage',
-          rawKey: '/sdfas/sdfsd/ksdhfkj',
-          originalFilename: 'blahz.zip',
-        },
-        {
-          fips: '08031',
-          geoname: 'Colorado',
-          downloadRef: 'JK78KJHI',
-          downloadId: 126,
-          productRef: 'JKSDIN78',
-          productId: 234,
-          productKey: '/sfsdfsdf/asdfsdf/file.ndgeojson',
-          downloadDate: 'Timestamp1',
-          sourceName: 'http://www.denver.com',
-          sourceType: 'webpage',
-          rawKey: '/sdfas/sdfsd/ksdhfkj',
-          originalFilename: 'blahz.zip',
-        },
-        {
-          fips: '08031',
-          geoname: 'Colorado',
-          downloadRef: 'JK78KJHI',
-          downloadId: 127,
-          productRef: 'JKSDIN78',
-          productId: 234,
-          productKey: '/sfsdfsdf/asdfsdf/file.ndgeojson',
-          downloadDate: 'Timestamp1',
-          sourceName: 'http://www.denver.com',
-          sourceType: 'webpage',
-          rawKey: '/sdfas/sdfsd/ksdhfkj',
-          originalFilename: 'blahz.zip',
-        },
-      ].slice(iterator),
-    );
+    await connection.end();
+
+    return res.json(rows);
   });
+
+  app.get('/proxyStatFile', async function (req, res) {
+    //
+    const key = decodeURIComponent(req.query.key);
+
+    // modify key to point to -stat.json rather than .ndgeojson
+
+    const modKey = key.replace('.ndgeojson', '-stat.json');
+
+    const data = await getObject(buckets.productsBucket, modKey);
+
+    return res.json(data);
+    //
+  });
+
   //
 };

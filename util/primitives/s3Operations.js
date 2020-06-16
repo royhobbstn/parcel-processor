@@ -82,6 +82,35 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
   });
 };
 
+exports.getObject = function (bucket, key) {
+  return new Promise((resolve, reject) => {
+    const s3 = new AWS.S3();
+    s3.getObject(
+      {
+        Bucket: bucket,
+        Key: key,
+      },
+      function (err, data) {
+        if (err) {
+          reject(err);
+        }
+        const body = data.Body;
+        if (data.ContentEncoding === 'gzip') {
+          // @ts-ignore
+          zlib.gunzip(body, function (err, fileBuffer) {
+            if (err) {
+              return reject(err);
+            }
+            return resolve(JSON.parse(fileBuffer.toString('utf-8')));
+          });
+        } else {
+          return resolve(JSON.parse(data.Body.toString('utf-8')));
+        }
+      },
+    );
+  });
+};
+
 exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder) {
   return new Promise((resolve, reject) => {
     const application = 'aws';
