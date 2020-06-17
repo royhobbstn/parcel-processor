@@ -125,12 +125,10 @@ exports.lookupCleanGeoName = async function (connection, fipsDetails) {
 };
 
 exports.getSplittableDownloads = async function (connection, geoid) {
-  // todo use geoid
+  const [rows] = await queryAllOriginalRecentDownloads(connection, geoid);
 
-  const [rows] = await queryAllOriginalRecentDownloads(connection);
-
-  if (!rows || !rows.length) {
-    throw new Error(`No matching records.`);
+  if (!rows) {
+    throw new Error(`Problem running getSplittableDownlods Query`);
   }
 
   return { rows };

@@ -90,8 +90,11 @@ exports.queryGeographicIdentifier = function (connection, geoid) {
   return connection.query('SELECT * FROM geographic_identifiers WHERE geoid = ?;', [geoid]);
 };
 
-exports.queryAllOriginalRecentDownloads = function (connection) {
+exports.queryAllOriginalRecentDownloads = function (connection, geoid) {
+  const appendClause = geoid ? ` and geographic_identifiers.geoid="${geoid}"` : '';
   return connection.query(
-    'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original";',
+    'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original"' +
+      appendClause +
+      ';',
   );
 };
