@@ -10,6 +10,7 @@ const {
   queryCreateDownloadRecord,
   queryGeographicIdentifier,
   queryAllOriginalRecentDownloads,
+  queryAllCountiesFromState,
 } = require('../primitives/queries');
 const { sourceTypes, dispositions } = require('../constants');
 
@@ -132,4 +133,14 @@ exports.getSplittableDownloads = async function (connection, geoid) {
   }
 
   return { rows };
+};
+
+exports.getCountiesByState = async function (connection, geoid) {
+  const [rows] = await queryAllCountiesFromState(connection, geoid);
+
+  if (!rows) {
+    throw new Error(`Problem running queryAllCountiesFromState Query`);
+  }
+
+  return rows;
 };

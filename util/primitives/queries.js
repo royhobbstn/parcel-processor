@@ -90,6 +90,12 @@ exports.queryGeographicIdentifier = function (connection, geoid) {
   return connection.query('SELECT * FROM geographic_identifiers WHERE geoid = ?;', [geoid]);
 };
 
+exports.queryAllCountiesFromState = function (connection, geoid) {
+  return connection.query(
+    `SELECT geoid, geoname FROM geographic_identifiers WHERE geoid like '${geoid}%' and sumlev = '050' order by geoname asc;`,
+  );
+};
+
 exports.queryAllOriginalRecentDownloads = function (connection, geoid) {
   const appendClause = geoid ? ` and geographic_identifiers.geoid="${geoid}"` : '';
   return connection.query(

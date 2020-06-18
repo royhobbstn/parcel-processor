@@ -1,5 +1,5 @@
 const { getConnection } = require('../../util/primitives/queries');
-const { getSplittableDownloads } = require('../../util/wrappers/wrapQuery');
+const { getSplittableDownloads, getCountiesByState } = require('../../util/wrappers/wrapQuery');
 const { getObject } = require('../../util/primitives/s3Operations');
 const { buckets } = require('../../util/constants');
 
@@ -21,5 +21,12 @@ exports.appRouter = async app => {
     return res.json(data);
   });
 
+  app.get('/getSubGeographies', async function (req, res) {
+    const geoid = req.query.geoid;
+    const connection = await getConnection();
+    const rows = await getCountiesByState(connection, geoid);
+    await connection.end();
+    return res.json(rows);
+  });
   //
 };

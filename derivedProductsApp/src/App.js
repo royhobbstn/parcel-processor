@@ -63,7 +63,11 @@ function App() {
           )}
         </div>
       ) : (
-        <Mapper statsInfo={statsInfo} selectedFieldKey={selectedFieldKey} />
+        <Mapper
+          statsInfo={statsInfo}
+          selectedFieldKey={selectedFieldKey}
+          geoid={selectedDownload.geoid.slice(0, 2)}
+        />
       )}
     </div>
   );
