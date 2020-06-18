@@ -1,18 +1,24 @@
 import React from 'react';
 import { Table, Card, Button } from 'semantic-ui-react';
 
-function AttributesInfoCard({ statsInfo, selectedFieldKey }) {
+function AttributesInfoCard({ statsInfo, selectedFieldKey, updateAttributeChosen }) {
   return (
     <Card
       style={{
         height: '200px',
         overflowY: 'scroll',
-        border: '1px dotted grey',
         width: '100%',
       }}
     >
       <Card.Content>
-        <Button className="ui right floated" size="small" color="blue">
+        <Button
+          className="ui right floated"
+          size="small"
+          color="blue"
+          onClick={() => {
+            updateAttributeChosen(true);
+          }}
+        >
           Map Field
         </Button>
         <Card.Header>{selectedFieldKey}</Card.Header>{' '}

@@ -2,11 +2,15 @@ import React, { useState } from 'react';
 import { Input, Label } from 'semantic-ui-react';
 import StatsLayout from './StatsLayout';
 import DownloadsTable from './DownloadsTable';
+import Mapper from './Mapper';
 
 function App() {
   const [inputVal, updateInputVal] = useState('');
   const [statFiles, updateStatFiles] = useState([]);
   const [selectedDownload, updateSelectedDownload] = useState(null);
+  const [statsInfo, updateStatsInfo] = useState({});
+  const [selectedFieldKey, updateSelectedFieldKey] = useState(null);
+  const [attributeChosen, updateAttributeChosen] = useState(false);
 
   const handleClick = (evt, data) => {
     window
@@ -22,28 +26,45 @@ function App() {
 
   return (
     <div style={{ padding: '20px' }}>
-      <Label pointing="right">
-        Enter FIPS or leave blank for all downloads missing derived products
-      </Label>
-      <Input
-        style={{ padding: '10px' }}
-        action={{
-          icon: 'play',
-          onClick: handleClick,
-        }}
-        placeholder="Search..."
-        value={inputVal}
-        onChange={(evt, data) => {
-          updateInputVal(data.value);
-        }}
-      />
-      <DownloadsTable
-        statFiles={statFiles}
-        selectedDownload={selectedDownload}
-        updateSelectedDownload={updateSelectedDownload}
-      />
-      <br />
-      {selectedDownload ? <StatsLayout selectedDownload={selectedDownload} /> : <span />}
+      {attributeChosen === false ? (
+        <div>
+          <Label pointing="right">
+            Enter FIPS or leave blank for all downloads missing derived products
+          </Label>
+          <Input
+            style={{ padding: '10px' }}
+            action={{
+              icon: 'play',
+              onClick: handleClick,
+            }}
+            placeholder="Search..."
+            value={inputVal}
+            onChange={(evt, data) => {
+              updateInputVal(data.value);
+            }}
+          />
+          <DownloadsTable
+            statFiles={statFiles}
+            selectedDownload={selectedDownload}
+            updateSelectedDownload={updateSelectedDownload}
+          />
+          <br />
+          {selectedDownload ? (
+            <StatsLayout
+              selectedDownload={selectedDownload}
+              statsInfo={statsInfo}
+              updateStatsInfo={updateStatsInfo}
+              selectedFieldKey={selectedFieldKey}
+              updateSelectedFieldKey={updateSelectedFieldKey}
+              updateAttributeChosen={updateAttributeChosen}
+            />
+          ) : (
+            <span />
+          )}
+        </div>
+      ) : (
+        <Mapper statsInfo={statsInfo} selectedFieldKey={selectedFieldKey} />
+      )}
     </div>
   );
 }
