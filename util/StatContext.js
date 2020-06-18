@@ -40,47 +40,49 @@ exports.StatContext = function () {
         });
     }
 
-    Object.keys(row.properties).forEach(f => {
-      const value = row.properties[f];
-      const type = typeof value;
-      const types = this.fields[f].types;
+    Object.keys(row.properties)
+      .filter(d => d !== idPrefix)
+      .forEach(f => {
+        const value = row.properties[f];
+        const type = typeof value;
+        const types = this.fields[f].types;
 
-      if (type === 'string' || type === 'number') {
-        if (!types.includes(type)) {
-          this.fields[f].types.push(type);
+        if (type === 'string' || type === 'number') {
+          if (!types.includes(type)) {
+            this.fields[f].types.push(type);
+          }
         }
-      }
 
-      // both strings and numbers watch uniques
-      const uniques = Object.keys(this.fields[f].uniques);
+        // both strings and numbers watch uniques
+        const uniques = Object.keys(this.fields[f].uniques);
 
-      // caps uniques to 500.  Prevents things like ObjectIDs being catalogued extensively.
-      if (uniques.length < 500) {
-        if (!uniques.includes(String(value))) {
-          this.fields[f].uniques[String(value)] = 1;
+        // caps uniques to 500.  Prevents things like ObjectIDs being catalogued extensively.
+        if (uniques.length < 500) {
+          if (!uniques.includes(String(value))) {
+            this.fields[f].uniques[String(value)] = 1;
+          } else {
+            this.fields[f].uniques[String(value)]++;
+          }
+        }
+
+        if (type === 'string') {
+          this.fields[f].strCount++;
+        } else if (type === 'number') {
+          this.fields[f].numCount++;
+
+          if (value > this.fields[f].max) {
+            this.fields[f].max = value;
+          }
+          if (value < this.fields[f].min) {
+            this.fields[f].min = value;
+          }
+
+          // might cause overflow here
+          this.fields[f].mean =
+            (this.fields[f].mean * (this.fields[f].numCount - 1) + value) / this.fields[f].numCount;
         } else {
-          this.fields[f].uniques[String(value)]++;
+          // probably null.  skipping;
         }
-      }
-
-      if (type === 'string') {
-        this.fields[f].strCount++;
-      } else if (type === 'number') {
-        this.fields[f].numCount++;
-
-        if (value > this.fields[f].max) {
-          this.fields[f].max = value;
-        }
-        if (value < this.fields[f].min) {
-          this.fields[f].min = value;
-        }
-
-        // might cause overflow here
-        this.fields[f].mean =
-          (this.fields[f].mean * (this.fields[f].numCount - 1) + value) / this.fields[f].numCount;
-      } else {
-        // probably null.  skipping;
-      }
-    });
+      });
   };
 };

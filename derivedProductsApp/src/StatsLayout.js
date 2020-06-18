@@ -22,7 +22,6 @@ function StatsLayout({
     )
       .then(res => res.json())
       .then(res => {
-        console.log(res);
         updateStatsInfo(res);
       })
       .catch(err => {
