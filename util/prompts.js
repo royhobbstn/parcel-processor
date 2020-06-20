@@ -214,7 +214,7 @@ exports.modePrompt = function () {
     prompt.start();
 
     console.log(
-      `\nWhich mode? (prod = production)\nAnything else is a dry-run with no uploads to s3 and an auto rolled back database transaction.\n`,
+      `\nWhich mode? (prod = production, dev = development)\nAnything else is a dry-run with no uploads to s3 and no database activity.\n`,
     );
 
     prompt.get(['mode'], function (err, result) {
@@ -222,7 +222,15 @@ exports.modePrompt = function () {
         return reject(err);
       }
 
-      const mode = result.mode === modes.PRODUCTION.input ? modes.PRODUCTION : modes.DRY_RUN;
+      let mode;
+
+      if (result.mode === modes.PRODUCTION.input) {
+        mode = modes.PRODUCTION;
+      } else if (result.mode === modes.DEVELOPMENT.input) {
+        mode = modes.DEVELOPMENT;
+      } else {
+        mode = modes.DRY_RUN;
+      }
       console.log(`Running in ${mode.label} mode.`);
       return resolve(mode);
     });

@@ -1,0 +1,12 @@
+{
+  "SQS": {
+    "sortQueueUrl": "",
+    "productQueueUrl": ""
+  },
+  "RDS": {
+    "secretArn": "",
+    "resourceArn": "",
+    "database": "",
+    "region": ""
+  }
+}

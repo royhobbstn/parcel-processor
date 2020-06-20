@@ -70,7 +70,7 @@ async function init() {
       console.log(`\nFile found: ${filePath}`);
 
       const mode = await modePrompt();
-      const connection = await getConnection();
+      const connection = await getConnection(); // TODO left off here
       await checkHealth(connection);
       await startTransaction(connection);
 

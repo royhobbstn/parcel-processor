@@ -1,27 +1,108 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Grid, Button, Icon, Modal, Header } from 'semantic-ui-react';
 
-function Mapper({ statsInfo, selectedFieldKey, geoid }) {
+function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
+  const modal = {
+    missingAttributes: [],
+    missingGeoids: [],
+    countOfPossible: 0,
+    countOfUniqueGeoids: 0,
+    attributesUsingSameGeoid: [],
+    mapping: {},
+  };
+
   const [geographies, updateGeographies] = useState([]);
   const [rowMarker, updateRowMarker] = useState(0);
   const [fieldMap, updateFieldMap] = useState([]);
   const [disableCreate, updateDisableCreate] = useState(false);
   const [modalIsOpen, updateModalIsOpen] = useState(false);
+  const [modalStatsObj, updateModalStatsObj] = useState(modal);
 
   const handleClick = (evt, data, geoid) => {
     fieldMap[rowMarker] = geoid;
-    updateRowMarker(rowMarker + 1);
+    const numItems = Object.keys(statsInfo.fields[selectedFieldKey].uniques).length;
+    if (rowMarker === numItems - 1) {
+      updateRowMarker(0);
+    } else {
+      updateRowMarker(rowMarker + 1);
+    }
   };
 
   const sendMapping = (evt, data) => {
     updateDisableCreate(true);
     updateModalIsOpen(false);
-    console.log('sending...');
+
+    // create payload
+    const payload = {
+      selectedFieldKey,
+      selectedDownload,
+      modalStatsObj,
+    };
+
+    fetch(`http://localhost:4000/sendSortSQS`, {
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+      .then(response => response.json())
+      .then(() => {
+        alert('Successfully sent product data to SQS.');
+      })
+      .catch(err => {
+        console.log(err);
+        alert('Problem sending product data to SQS.');
+      });
   };
 
   const updateModalStats = () => {
-    console.log('building mapping data');
-    console.log('updating modal summary');
+    const keys = Object.keys(statsInfo.fields[selectedFieldKey].uniques).sort();
+
+    const mapping = {};
+    const missingAttributes = [];
+    const missingGeoids = [];
+    const uniqueGeoidsUsed = new Set();
+    const geoidsMap = {};
+    keys.forEach((key, index) => {
+      if (fieldMap[index]) {
+        mapping[key] = fieldMap[index];
+        uniqueGeoidsUsed.add(fieldMap[index]);
+        if (geoidsMap[fieldMap[index]]) {
+          geoidsMap[fieldMap[index]].push(key);
+        } else {
+          geoidsMap[fieldMap[index]] = [key];
+        }
+      } else {
+        missingAttributes.push(key);
+      }
+    });
+
+    const countOfPossible = geographies.length;
+    const countOfUniqueGeoids = uniqueGeoidsUsed.size;
+
+    geographies.forEach(geo => {
+      if (!uniqueGeoidsUsed.has(geo.geoid)) {
+        missingGeoids.push(geo.geoid);
+      }
+    });
+
+    const attributesUsingSameGeoid = [];
+    Object.keys(geoidsMap).forEach(key => {
+      if (geoidsMap[key].length > 1) {
+        attributesUsingSameGeoid.push({ geoid: key, attributes: geoidsMap[key] });
+      }
+    });
+
+    updateModalStatsObj({
+      missingAttributes,
+      missingGeoids,
+      countOfPossible,
+      countOfUniqueGeoids,
+      attributesUsingSameGeoid,
+      mapping,
+    });
   };
 
   useEffect(() => {
@@ -153,7 +234,45 @@ function Mapper({ statsInfo, selectedFieldKey, geoid }) {
         <Modal.Content>
           <Modal.Description>
             <Header>Product Creation Summary</Header>
-            <p>...</p>
+            <p>
+              Creating {modalStatsObj.countOfUniqueGeoids} unique subgeographies out of{' '}
+              {modalStatsObj.countOfPossible} possible
+            </p>
+            {modalStatsObj.missingAttributes.length > 0 ? (
+              <div>
+                <p>{modalStatsObj.missingAttributes.length} attribute(s) were ignored:</p>
+                <ul>
+                  {modalStatsObj.missingAttributes.map(d => {
+                    return <li key={d}>{d}</li>;
+                  })}
+                </ul>
+              </div>
+            ) : null}
+            {modalStatsObj.missingGeoids.length > 0 ? (
+              <div>
+                <p>{modalStatsObj.missingGeoids.length} geoid(s) were ignored:</p>
+                <ul>
+                  {modalStatsObj.missingGeoids.map(d => {
+                    return <li key={d}>{d}</li>;
+                  })}
+                </ul>
+              </div>
+            ) : null}
+
+            {modalStatsObj.attributesUsingSameGeoid.length > 0 ? (
+              <div>
+                <p>The same geoid was used on these multiple values:</p>
+                <ul>
+                  {modalStatsObj.attributesUsingSameGeoid.map(d => {
+                    return (
+                      <li key={d.geoid}>
+                        <b>{d.geoid}</b>, {d.attributes.join(', ')}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
             <div style={{ margin: 'auto', width: '220px', height: '40px' }}>
               <Button
                 style={{ width: '90px' }}

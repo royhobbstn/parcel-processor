@@ -57,5 +57,6 @@ exports.s3deleteType = {
 
 exports.modes = {
   PRODUCTION: { input: 'prod', label: 'PRODUCTION' },
+  DEVELOPMENT: { input: 'dev', label: 'DEVELOPMENT' },
   DRY_RUN: { input: 'dry-run', label: 'DRY RUN' },
 };
