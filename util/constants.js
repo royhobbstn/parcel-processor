@@ -7,13 +7,6 @@ exports.directories = {
   processedDir: './processed',
 };
 
-exports.buckets = {
-  rawBucket: 'raw-data-po',
-  productsBucket: 'data-products-po',
-  tilesBucket: 'tile-server-po',
-  marhillMainDB: 'marhill-main-db',
-};
-
 // length of refs for products / downloads table
 exports.referenceIdLength = 8;
 
@@ -56,7 +49,6 @@ exports.s3deleteType = {
 };
 
 exports.modes = {
-  PRODUCTION: { input: 'prod', label: 'PRODUCTION' },
-  DEVELOPMENT: { input: 'dev', label: 'DEVELOPMENT' },
-  DRY_RUN: { input: 'dry-run', label: 'DRY RUN' },
+  FULL_RUN: { input: 'full', label: 'FULL_RUN' },
+  DRY_RUN: { input: 'dry', label: 'DRY RUN' },
 };

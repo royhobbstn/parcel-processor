@@ -8,5 +8,10 @@
     "resourceArn": "",
     "database": "",
     "region": ""
+  },
+  "Buckets": {
+    "rawBucket": "",
+    "productsBucket": "",
+    "tilesBucket": ""
   }
 }

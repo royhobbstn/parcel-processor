@@ -1,13 +1,8 @@
 // @ts-check
 
+const config = require('config');
 const chokidar = require('chokidar');
-const {
-  directories,
-  referenceIdLength,
-  buckets,
-  s3deleteType,
-  modes,
-} = require('./util/constants');
+const { directories, referenceIdLength, s3deleteType, modes } = require('./util/constants');
 const {
   sourceInputPrompt,
   promptGeoIdentifiers,
@@ -36,7 +31,6 @@ const { extractZip, checkForFileType } = require('./util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
 const { releaseProducts, createTiles } = require('./util/releaseProducts');
 const {
-  getConnection,
   startTransaction,
   commitTransaction,
   rollbackTransaction,
@@ -70,28 +64,27 @@ async function init() {
       console.log(`\nFile found: ${filePath}`);
 
       const mode = await modePrompt();
-      const connection = await getConnection(); // TODO left off here
-      await checkHealth(connection);
-      await startTransaction(connection);
+      await checkHealth(); // TODO left off here
+      await startTransaction();
 
       await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
 
-      runMain(connection, executiveSummary, cleanupS3, filePath, mode)
+      runMain(executiveSummary, cleanupS3, filePath, mode)
         .then(async () => {
           console.log(`\n\nExecutive Summary\n`);
           console.log(executiveSummary.join('\n') + '\n');
 
-          if (mode.label === modes.PRODUCTION.label) {
+          if (mode.label === modes.FULL_RUN.label) {
             // prompt with summary - throw if they say no
             await execSummaryPrompt();
-            await commitTransaction(connection);
+            await commitTransaction();
             await doBasicCleanup([
               directories.rawDir,
               directories.outputDir,
               directories.unzippedDir,
             ]);
           } else {
-            await rollbackTransaction(connection);
+            await rollbackTransaction();
             console.log(
               `\nBecause this was a ${mode.label} the database transactions have been rolled back.  \nYour file remains in the raw directory.\n`,
             );
@@ -104,14 +97,14 @@ async function init() {
           console.error(err);
 
           try {
-            await rollbackTransaction(connection);
+            await rollbackTransaction();
             console.error('All database transactions have been rolled back.');
           } catch (e) {
             console.error(e);
             console.error('Unable to rollback database!  Uh oh.');
           }
 
-          if (mode.label === modes.PRODUCTION.label) {
+          if (mode.label === modes.FULL_RUN.label) {
             try {
               await removeS3Files(cleanupS3);
               console.error('All created S3 assets have been deleted');
@@ -125,7 +118,6 @@ async function init() {
           console.log('output and unzipped directories cleaned.  Original raw file left in place.');
         })
         .finally(async () => {
-          await connection.end();
           currentlyProcessing = false;
           console.log('\n\nawaiting a new file...\n');
         });
@@ -134,15 +126,15 @@ async function init() {
   console.log('\nlistening...\n');
 }
 
-async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) {
+async function runMain(executiveSummary, cleanupS3, filePath, mode) {
   const sourceNameInput = await sourceInputPrompt();
 
-  let [sourceId, sourceType] = await fetchSourceIdIfExists(connection, sourceNameInput);
+  let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
 
   if (sourceId === -1) {
     console.log(`Source doesn't exist in database.  Creating a new source.`);
     sourceType = await sourceTypePrompt(sourceNameInput);
-    sourceId = await createSource(connection, sourceNameInput, sourceType);
+    sourceId = await createSource(sourceNameInput, sourceType);
     executiveSummary.push(
       `Created a new source record for: ${sourceNameInput} of type ${sourceType}`,
     );
@@ -151,13 +143,13 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) 
   }
 
   // todo, accomodate 'received' disposition by prompt
-  const checkId = await recordSourceCheck(connection, sourceId, sourceType);
+  const checkId = await recordSourceCheck(sourceId, sourceType);
   executiveSummary.push(`Recorded source check as disposition: 'viewed'`);
 
   const computedHash = await computeHash(filePath);
 
   // call database and find out if hash is already in DB
-  const hashExists = await doesHashExist(connection, computedHash);
+  const hashExists = await doesHashExist(computedHash);
 
   if (hashExists) {
     executiveSummary.push(`Hash for ${filePath} already exists.`);
@@ -171,7 +163,7 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) 
   );
 
   // get geoname corresponding to FIPS
-  const { geoid, geoName } = await lookupCleanGeoName(connection, fipsDetails);
+  const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
   executiveSummary.push(`geoName:  ${geoName},  geoid: ${geoid}`);
 
   const downloadRef = generateRef(referenceIdLength);
@@ -181,7 +173,6 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) 
 
   // if not in database write a record in the download table
   const downloadId = await constructDownloadRecord(
-    connection,
     sourceId,
     checkId,
     computedHash,
@@ -191,9 +182,13 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) 
   );
   executiveSummary.push(`created record in 'downloads' table.  ref: ${downloadRef}`);
 
-  if (mode.label === modes.PRODUCTION.label) {
+  if (mode.label === modes.FULL_RUN.label) {
     await uploadRawFileToS3(filePath, rawKey);
-    cleanupS3.push({ bucket: buckets.rawBucket, key: rawKey, type: s3deleteType.FILE });
+    cleanupS3.push({
+      bucket: config.get('Buckets.rawBucket'),
+      key: rawKey,
+      type: s3deleteType.FILE,
+    });
     executiveSummary.push(`uploaded raw file to S3.  key: ${rawKey}`);
   }
 
@@ -216,7 +211,6 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) 
   const [points, propertyCount] = await parseFile(dataset, chosenLayer, fileName, outputPath);
 
   const productKeys = await releaseProducts(
-    connection,
     fipsDetails,
     geoid,
     geoName,
@@ -244,7 +238,7 @@ async function runMain(connection, executiveSummary, cleanupS3, filePath, mode) 
       rawKey,
       productKeys,
     };
-    await createTiles(connection, meta, executiveSummary, cleanupS3, points, propertyCount, mode);
+    await createTiles(meta, executiveSummary, cleanupS3, points, propertyCount, mode);
   } else {
     executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
   }

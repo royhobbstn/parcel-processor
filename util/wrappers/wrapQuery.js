@@ -11,6 +11,7 @@ const {
   queryGeographicIdentifier,
   queryAllOriginalRecentDownloads,
   queryAllCountiesFromState,
+  queryAllOriginalRecentDownloadsWithGeoid,
 } = require('../primitives/queries');
 const { sourceTypes, dispositions } = require('../constants');
 
@@ -51,7 +52,7 @@ exports.createSource = async function (sourceName, sourceType) {
   throw new Error(`unable to create page record for: ${sourceName}`);
 };
 
-exports.doesHashExist = async function () {
+exports.doesHashExist = async function (computedHash) {
   const query = await queryHash(computedHash);
   if (query.records.length) {
     console.log('Hash exists in database.  File has already been processed.\n');
@@ -61,22 +62,29 @@ exports.doesHashExist = async function () {
   return false;
 };
 
-exports.constructDownloadRecord = async function (pageId, checkId, computedHash) {
-  const query = await queryCreateDownloadRecord(pageId, checkId, computedHash);
-  console.log(query);
+exports.constructDownloadRecord = async function (
+  sourceId,
+  checkId,
+  computedHash,
+  rawKey,
+  downloadRef,
+  filePath,
+) {
+  const originalFilename = path.parse(filePath).base;
+
+  const query = await queryCreateDownloadRecord(
+    sourceId,
+    checkId,
+    computedHash,
+    rawKey,
+    downloadRef,
+    originalFilename,
+  );
+
   if (!query || !query.insertId) {
     throw new Error('unexpected result from create download request');
   }
   console.log('new download record created');
-  return query.insertId;
-};
-
-exports.createProductRecord = async function (geoid, downloadId) {
-  const productType = 1; // original product (not filtered from a different product)
-
-  const query = await queryCreateProductRecord(downloadId, productType, geoid);
-  console.log(query);
-
   return query.insertId;
 };
 
@@ -115,93 +123,28 @@ exports.lookupCleanGeoName = async function (fipsDetails) {
   return { geoid, geoName };
 };
 
-exports.doesHashExist = async function (connection, computedHash) {
-  const [rows] = await queryHash(connection, computedHash);
-  if (rows.length) {
-    console.log('Hash exists in database.  File has already been processed.\n');
-    return true;
-  }
-  console.log('Hash is unique.  Processing new download.');
-  return false;
-};
+exports.getSplittableDownloads = async function (geoid) {
+  let query;
 
-exports.constructDownloadRecord = async function (
-  connection,
-  sourceId,
-  checkId,
-  computedHash,
-  rawKey,
-  downloadRef,
-  filePath,
-) {
-  const originalFilename = path.parse(filePath).base;
-
-  const resultSet = await queryCreateDownloadRecord(
-    connection,
-    sourceId,
-    checkId,
-    computedHash,
-    rawKey,
-    downloadRef,
-    originalFilename,
-  );
-  if (!resultSet || !resultSet[0].insertId) {
-    throw new Error('unexpected result from create download request');
-  }
-  console.log('new download record created');
-  return resultSet[0].insertId;
-};
-
-exports.lookupCleanGeoName = async function (connection, fipsDetails) {
-  const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
-
-  let geoid;
-
-  if (SUMLEV === '040') {
-    geoid = STATEFIPS;
-  } else if (SUMLEV === '050') {
-    geoid = `${STATEFIPS}${COUNTYFIPS}`;
-  } else if (SUMLEV === '160') {
-    geoid = `${STATEFIPS}${PLACEFIPS}`;
+  if (geoid) {
+    query = await queryAllOriginalRecentDownloadsWithGeoid(geoid);
   } else {
-    console.error('SUMLEV out of range.  Exiting.');
-    process.exit();
+    query = await queryAllOriginalRecentDownloads();
   }
 
-  const [rows] = await queryGeographicIdentifier(connection, geoid);
-
-  if (!rows || !rows.length) {
-    throw new Error(
-      `No geographic match found.  SUMLEV:${SUMLEV} STATEFIPS:${STATEFIPS} COUNTYFIPS:${COUNTYFIPS} PLACEFIPS:${PLACEFIPS}`,
-    );
-  }
-
-  const rawGeoName = rows[0].geoname;
-
-  console.log(`Found corresponding geographic area: ${rawGeoName}`);
-
-  // Alter geo name to be s3 key friendly (all non alphanumeric become -)
-  const geoName = rawGeoName.replace(/[^a-z0-9]+/gi, '-');
-
-  return { geoid, geoName };
-};
-
-exports.getSplittableDownloads = async function (connection, geoid) {
-  const [rows] = await queryAllOriginalRecentDownloads(connection, geoid);
-
-  if (!rows) {
+  if (!query) {
     throw new Error(`Problem running getSplittableDownlods Query`);
   }
 
-  return { rows };
+  return { rows: query.records };
 };
 
-exports.getCountiesByState = async function (connection, geoid) {
-  const [rows] = await queryAllCountiesFromState(connection, geoid);
+exports.getCountiesByState = async function (geoid) {
+  const query = await queryAllCountiesFromState(geoid);
 
-  if (!rows) {
+  if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
   }
 
-  return rows;
+  return { rows: query.records };
 };

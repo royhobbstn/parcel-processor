@@ -214,7 +214,7 @@ exports.modePrompt = function () {
     prompt.start();
 
     console.log(
-      `\nWhich mode? (prod = production, dev = development)\nAnything else is a dry-run with no uploads to s3 and no database activity.\n`,
+      `\nType 'full' for a full run.  \nAny other response is a dry-run with no uploads to s3 and no database writes.\n`,
     );
 
     prompt.get(['mode'], function (err, result) {
@@ -224,14 +224,12 @@ exports.modePrompt = function () {
 
       let mode;
 
-      if (result.mode === modes.PRODUCTION.input) {
-        mode = modes.PRODUCTION;
-      } else if (result.mode === modes.DEVELOPMENT.input) {
-        mode = modes.DEVELOPMENT;
+      if (result.mode === modes.FULL_RUN.input) {
+        mode = modes.FULL_RUN;
       } else {
         mode = modes.DRY_RUN;
       }
-      console.log(`Running in ${mode.label} mode.`);
+      console.log(`Running in ${process.env.NODE_ENV} as ${mode.label} mode.`);
       return resolve(mode);
     });
   });

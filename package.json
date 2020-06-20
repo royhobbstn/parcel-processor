@@ -20,10 +20,8 @@
   "scripts": {
     "start": "node index.js",
     "dangerous-clean-db": "node ./dangerous/clean-db.js",
-    "dangerous-clean-s3": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive",
-    "setup": "sudo /opt/lampp/lampp start && git pull && npm run db-dump",
-    "stop-db": "sudo /opt/lampp/lampp stop",
-    "db-dump": "node ./util/dbdump.js"
+    "dangerous-clean-s3-dev": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive",
+    "dangerous-clean-s3-prod": "aws s3 rm s3://raw-data-po-dev --recursive && aws s3 rm s3://data-products-po-dev --recursive && aws s3 rm s3://tile-server-po-dev --recursive"
   },
   "devDependencies": {
     "prettier": "2.0.5"

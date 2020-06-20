@@ -2,9 +2,10 @@
 
 const AWS = require('aws-sdk');
 const path = require('path');
-const { buckets, s3deleteType } = require('../constants');
+const { s3deleteType } = require('../constants');
 const { putFileToS3, emptyS3Directory } = require('../primitives/s3Operations');
 const { lookupState } = require('../lookupState');
+const config = require('config');
 
 exports.uploadRawFileToS3 = async function (filePath, rawKey) {
   const extension = path.extname(rawKey);
@@ -14,19 +15,19 @@ exports.uploadRawFileToS3 = async function (filePath, rawKey) {
   }
 
   // save downloaded file to the raw bucket in s3 (don't gzip here)
-  await putFileToS3(buckets.rawBucket, rawKey, filePath, 'application/zip', false);
+  await putFileToS3(config.get('Buckets.rawBucket'), rawKey, filePath, 'application/zip', false);
 };
 
 exports.uploadProductFiles = async function (key, outputPath) {
   const statFile = putFileToS3(
-    buckets.productsBucket,
+    config.get('Buckets.productsBucket'),
     `${key}-stat.json`,
     `${outputPath}.json`,
     'application/json',
     true,
   );
   const ndgeojsonFile = putFileToS3(
-    buckets.productsBucket,
+    config.get('Buckets.productsBucket'),
     `${key}.ndgeojson`,
     `${outputPath}.ndgeojson`,
     'application/geo+json-seq',
