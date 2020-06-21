@@ -14,13 +14,14 @@ const {
   queryAllOriginalRecentDownloadsWithGeoid,
   queryCreateProductRecord,
   startTransaction,
+  commitTransaction,
+  rollbackTransaction,
 } = require('../primitives/queries');
 const { getSourceType } = require('../prompts');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('../constants');
 
 exports.DBWrites = async function (
   sourceNameInput,
-  executiveSummary,
   computedHash,
   rawKey,
   downloadRef,
@@ -32,49 +33,53 @@ exports.DBWrites = async function (
   // refresh connection just in case the upload /parse took a long time
   await acquireConnection();
 
+  let sourceLine;
   const transactionId = await startTransaction();
 
-  let sourceLine;
+  try {
+    let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
 
-  let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
+    if (sourceId === -1) {
+      console.log(`Source doesn't exist in database.  Creating a new source.`);
+      sourceType = getSourceType(sourceNameInput);
+      sourceId = await createSource(sourceNameInput, sourceType);
+      sourceLine = `Created a new source record for: ${sourceNameInput} of type ${sourceType}`;
+    } else {
+      sourceLine = `Found source record for: ${sourceNameInput}`;
+    }
 
-  if (sourceId === -1) {
-    console.log(`Source doesn't exist in database.  Creating a new source.`);
-    sourceType = getSourceType(sourceNameInput);
-    sourceId = await createSource(sourceNameInput, sourceType);
-    sourceLine = `Created a new source record for: ${sourceNameInput} of type ${sourceType}`;
-  } else {
-    sourceLine = `Found source record for: ${sourceNameInput}`;
+    // todo, accomodate 'received' disposition by prompt
+    const checkId = await recordSourceCheck(sourceId, sourceType);
+
+    // if not in database write a record in the download table
+    const downloadId = await constructDownloadRecord(
+      sourceId,
+      checkId,
+      computedHash,
+      rawKey,
+      downloadRef,
+      filePath,
+    );
+
+    await queryCreateProductRecord(
+      downloadId,
+      productRef,
+      fileFormats.NDGEOJSON.extension,
+      productOrigins.ORIGINAL,
+      geoid,
+      `${productKey}.ndgeojson`,
+    );
+
+    await commitTransaction(transactionId);
+    console.log(sourceLine);
+    console.log(`Recorded source check as disposition: 'viewed'`);
+    console.log(`created record in 'downloads' table.  ref: ${downloadRef}`);
+    console.log(`wrote NDgeoJSON product record.  ref: ${productRef}`);
+  } catch (e) {
+    console.error(e);
+    await rollbackTransaction(transactionId);
+    console.error('Database transaction has been rolled back.');
   }
-
-  // todo, accomodate 'received' disposition by prompt
-  const checkId = await recordSourceCheck(sourceId, sourceType);
-
-  // if not in database write a record in the download table
-  const downloadId = await constructDownloadRecord(
-    sourceId,
-    checkId,
-    computedHash,
-    rawKey,
-    downloadRef,
-    filePath,
-  );
-
-  await queryCreateProductRecord(
-    downloadId,
-    productRef,
-    fileFormats.NDGEOJSON.extension,
-    productOrigins.ORIGINAL,
-    geoid,
-    `${productKey}.ndgeojson`,
-  );
-
-  executiveSummary.push(sourceLine);
-  executiveSummary.push(`Recorded source check as disposition: 'viewed'`);
-  executiveSummary.push(`created record in 'downloads' table.  ref: ${downloadRef}`);
-  executiveSummary.push(`wrote NDgeoJSON product record.  ref: ${productRef}`);
-
-  return transactionId;
 };
 
 exports.acquireConnection = acquireConnection;

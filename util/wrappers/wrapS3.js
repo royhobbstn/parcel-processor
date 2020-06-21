@@ -7,21 +7,14 @@ const { putFileToS3, emptyS3Directory } = require('../primitives/s3Operations');
 const { lookupState } = require('../lookupState');
 const config = require('config');
 
-exports.S3Writes = async function (
-  cleanupS3,
-  filePath,
-  rawKey,
-  productKey,
-  outputPath,
-  executiveSummary,
-) {
+exports.S3Writes = async function (cleanupS3, filePath, rawKey, productKey, outputPath) {
   await uploadRawFileToS3(filePath, rawKey);
   cleanupS3.push({
     bucket: config.get('Buckets.rawBucket'),
     key: rawKey,
     type: s3deleteType.FILE,
   });
-  executiveSummary.push(`uploaded raw file to S3.  key: ${rawKey}`);
+  console.log(`uploaded raw file to S3.  key: ${rawKey}`);
   await uploadProductFiles(productKey, outputPath);
   cleanupS3.push({
     bucket: config.get('Buckets.productsBucket'),
@@ -33,7 +26,7 @@ exports.S3Writes = async function (
     key: `${productKey}.ndgeojson`,
     type: s3deleteType.FILE,
   });
-  executiveSummary.push(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
+  console.log(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
 };
 
 exports.uploadRawFileToS3 = uploadRawFileToS3;

@@ -37,24 +37,6 @@ exports.sourceInputPrompt = function () {
   });
 };
 
-exports.execSummaryPrompt = function () {
-  return new Promise((resolve, reject) => {
-    prompt.start();
-
-    console.log(`\nDoes this look correct? (y/n):`);
-
-    prompt.get(['OKAY'], function (err, result) {
-      if (err) {
-        return reject(err);
-      }
-      if (result.OKAY.toLowerCase() === 'y' || result.OKAY.toLowerCase() === 'yes') {
-        return resolve('confirmed');
-      }
-      return reject('CANCELLED by user!');
-    });
-  });
-};
-
 exports.promptGeoIdentifiers = async function () {
   let fipsDetails;
   do {

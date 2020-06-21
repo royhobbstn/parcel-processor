@@ -6,7 +6,6 @@ const {
   sourceInputPrompt,
   promptGeoIdentifiers,
   chooseGeoLayer,
-  execSummaryPrompt,
   modePrompt,
 } = require('./util/prompts');
 const {
@@ -25,7 +24,6 @@ const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
-const { rollbackTransaction, commitTransaction } = require('./util/primitives/queries');
 
 init().catch(err => {
   console.error('unexpected error');
@@ -50,7 +48,6 @@ async function init() {
 
       currentlyProcessing = true;
       const cleanupS3 = [];
-      const executiveSummary = [];
 
       console.log(`\nFile found: ${filePath}`);
 
@@ -58,21 +55,9 @@ async function init() {
 
       await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
 
-      let persistTransactionId = undefined;
-
-      runMain(executiveSummary, cleanupS3, filePath, mode)
-        .then(async transactionId => {
-          persistTransactionId = transactionId;
-
-          console.log(`\n\nExecutive Summary\n`);
-          console.log(executiveSummary.join('\n') + '\n');
-
+      runMain(cleanupS3, filePath, mode)
+        .then(async () => {
           if (mode.label === modes.FULL_RUN.label) {
-            // prompt with summary - throw if they say no
-            await execSummaryPrompt();
-            await acquireConnection();
-            await commitTransaction(persistTransactionId);
-            console.log('Database records have been committed.');
             await doBasicCleanup([
               directories.rawDir,
               directories.outputDir,
@@ -90,14 +75,7 @@ async function init() {
         .catch(async err => {
           console.error(err);
 
-          if (!persistTransactionId) {
-            console.log('It appears you rejected a DRY-RUN.  No need, nothing was written.');
-          }
-
           if (mode.label === modes.FULL_RUN.label) {
-            await acquireConnection();
-            await rollbackTransaction(persistTransactionId);
-            console.error('Database transaction has been rolled back');
             try {
               await removeS3Files(cleanupS3);
               console.error('All created S3 assets have been deleted');
@@ -120,7 +98,7 @@ async function init() {
   console.log('\nlistening...\n');
 }
 
-async function runMain(executiveSummary, cleanupS3, filePath, mode) {
+async function runMain(cleanupS3, filePath, mode) {
   const sourceNameInput = await sourceInputPrompt();
 
   const computedHash = await computeHash(filePath);
@@ -130,19 +108,19 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
   const hashExists = await doesHashExist(computedHash);
 
   if (hashExists) {
-    executiveSummary.push(`Hash for ${filePath} already exists.`);
+    console.log(`Hash for ${filePath} already exists.`);
     return doBasicCleanup([directories.rawDir]);
   }
 
   // get SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS
   const fipsDetails = await promptGeoIdentifiers();
-  executiveSummary.push(
+  console.log(
     `Identifier prompt;\n  SUMLEV: ${fipsDetails.SUMLEV}\n  STATEFIPS: ${fipsDetails.STATEFIPS}\n  COUNTYFIPS: ${fipsDetails.COUNTYFIPS}\n  PLACEFIPS: ${fipsDetails.PLACEFIPS}`,
   );
 
   // get geoname corresponding to FIPS
   const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
-  executiveSummary.push(`geoName:  ${geoName},  geoid: ${geoid}`);
+  console.log(`geoName:  ${geoName},  geoid: ${geoid}`);
 
   const downloadRef = generateRef(referenceIdLength);
 
@@ -173,11 +151,10 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
   const productKey = createProductDownloadKey(fipsDetails, geoid, geoName, downloadRef, productRef);
 
   if (mode.label === modes.FULL_RUN.label) {
-    await S3Writes(cleanupS3, filePath, rawKey, productKey, outputPath, executiveSummary);
+    await S3Writes(cleanupS3, filePath, rawKey, productKey, outputPath);
 
     const transactionId = await DBWrites(
       sourceNameInput,
-      executiveSummary,
       computedHash,
       rawKey,
       downloadRef,
@@ -215,13 +192,12 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
   //   };
   //   await createTiles(
   //     meta,
-  //     executiveSummary,
   //     cleanupS3,
   //     points,
   //     propertyCount,
   //     mode,
   //   );
   // } else {
-  //   executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
+  //   console.log(`TILES generation doesn't run on States, and was skipped`);
   // }
 }

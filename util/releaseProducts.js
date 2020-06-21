@@ -10,7 +10,7 @@ const {
   s3deleteType,
   modes,
 } = require('./constants');
-const { uploadProductFiles, createProductDownloadKey } = require('./wrappers/wrapS3');
+const { createProductDownloadKey } = require('./wrappers/wrapS3');
 const { putFileToS3, putTextToS3, s3Sync } = require('./primitives/s3Operations');
 const { queryCreateProductRecord } = require('./primitives/queries');
 const {
@@ -30,43 +30,9 @@ exports.releaseProducts = async function (
   downloadRef,
   downloadId,
   outputPath,
-  executiveSummary,
   cleanupS3,
   mode,
 ) {
-  const productRef = generateRef(referenceIdLength);
-
-  // contains no file extension.  Used as base key for -stat.json  and .ndgeojson
-  const productKey = createProductDownloadKey(fipsDetails, geoid, geoName, downloadRef, productRef);
-
-  await queryCreateProductRecord(
-    downloadId,
-    productRef,
-    fileFormats.NDGEOJSON.extension,
-    productOrigins.ORIGINAL,
-    geoid,
-    `${productKey}.ndgeojson`,
-  );
-  executiveSummary.push(`wrote NDgeoJSON product record.  ref: ${productRef}`);
-
-  // upload ndgeojson and stat files to S3 (concurrent)
-  if (mode.label === modes.FULL_RUN.label) {
-    await uploadProductFiles(productKey, outputPath);
-    cleanupS3.push({
-      bucket: config.get('Buckets.productsBucket'),
-      key: `${productKey}-stat.json`,
-      type: s3deleteType.FILE,
-    });
-    cleanupS3.push({
-      bucket: config.get('Buckets.productsBucket'),
-      key: `${productKey}.ndgeojson`,
-      type: s3deleteType.FILE,
-    });
-    executiveSummary.push(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
-  }
-
-  return;
-
   // ADDITIONAL FORMATS //
 
   await convertToFormat(fileFormats.GEOJSON, outputPath);
@@ -87,7 +53,7 @@ exports.releaseProducts = async function (
     geoid,
     `${productKeyGeoJSON}.geojson`,
   );
-  executiveSummary.push(`created geoJSON product record.  ref: ${productRefGeoJSON}`);
+  console.log(`created geoJSON product record.  ref: ${productRefGeoJSON}`);
 
   if (mode.label === modes.FULL_RUN.label) {
     await putFileToS3(
@@ -102,7 +68,7 @@ exports.releaseProducts = async function (
       key: `${productKeyGeoJSON}.geojson`,
       type: s3deleteType.FILE,
     });
-    executiveSummary.push(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
+    console.log(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
   }
 
   // file conversion is bound to be problematic for GPKG and SHP
@@ -129,7 +95,7 @@ exports.releaseProducts = async function (
       geoid,
       `${productKeyGPKG}.gpkg`,
     );
-    executiveSummary.push(`created GPKG product record.  ref: ${productRefGPKG}`);
+    console.log(`created GPKG product record.  ref: ${productRefGPKG}`);
 
     if (mode.label === modes.FULL_RUN.label) {
       await putFileToS3(
@@ -144,11 +110,11 @@ exports.releaseProducts = async function (
         key: `${productKeyGPKG}.gpkg`,
         type: s3deleteType.FILE,
       });
-      executiveSummary.push(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
+      console.log(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
     }
   } catch (e) {
     console.error(e);
-    executiveSummary.push(`ERROR:  !!! uploading or product record creation failed on GPKG.`);
+    console.log(`ERROR:  !!! uploading or product record creation failed on GPKG.`);
   }
 
   try {
@@ -170,7 +136,7 @@ exports.releaseProducts = async function (
       geoid,
       `${productKeySHP}-shp.zip`,
     );
-    executiveSummary.push(`created SHP product record.  ref: ${productRefSHP}`);
+    console.log(`created SHP product record.  ref: ${productRefSHP}`);
 
     if (mode.label === modes.FULL_RUN.label) {
       await putFileToS3(
@@ -185,22 +151,15 @@ exports.releaseProducts = async function (
         key: `${productKeySHP}-shp.zip`,
         type: s3deleteType.FILE,
       });
-      executiveSummary.push(`uploaded SHP file to S3  key: ${productKeySHP}`);
+      console.log(`uploaded SHP file to S3  key: ${productKeySHP}`);
     }
   } catch (e) {
     console.error(e);
-    executiveSummary.push(`ERROR:  !!! uploading or product record creation failed on SHP.`);
+    console.log(`ERROR:  !!! uploading or product record creation failed on SHP.`);
   }
 };
 
-exports.createTiles = async function (
-  meta,
-  executiveSummary,
-  cleanupS3,
-  points,
-  propertyCount,
-  mode,
-) {
+exports.createTiles = async function (meta, cleanupS3, points, propertyCount, mode) {
   // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
   const lookup = addClusterIdToGeoData(points, propertyCount);
 
@@ -222,7 +181,7 @@ exports.createTiles = async function (
       config.get('Buckets.tilesBucket'),
       `${meta.downloadRef}-${meta.productRefTiles}`,
     );
-    executiveSummary.push(
+    console.log(
       `uploaded TILES directory to S3.  Dir: ${meta.downloadRef}-${meta.productRefTiles}`,
     );
     cleanupS3.push({
@@ -239,7 +198,7 @@ exports.createTiles = async function (
       'application/json',
     );
 
-    executiveSummary.push(
+    console.log(
       `uploaded TILES meta file to S3.  Dir: ${meta.downloadRef}-${meta.productRefTiles}/info.json`,
     );
   }
@@ -251,5 +210,5 @@ exports.createTiles = async function (
     meta.geoid,
     `${meta.downloadRef}-${meta.productRefTiles}`,
   );
-  executiveSummary.push(`created TILES product record.  ref: ${meta.productRefTiles}`);
+  console.log(`created TILES product record.  ref: ${meta.productRefTiles}`);
 };
