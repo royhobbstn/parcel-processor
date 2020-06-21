@@ -91,9 +91,11 @@ exports.getObject = function (bucket, key) {
       },
       function (err, data) {
         if (err) {
-          reject(err);
+          return reject(err);
         }
+
         const body = data.Body;
+
         if (data.ContentEncoding === 'gzip') {
           // @ts-ignore
           zlib.gunzip(body, function (err, fileBuffer) {

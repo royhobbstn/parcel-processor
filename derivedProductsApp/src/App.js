@@ -73,6 +73,7 @@ function App() {
               selectedFieldKey={selectedFieldKey}
               updateSelectedFieldKey={updateSelectedFieldKey}
               updateAttributeChosen={updateAttributeChosen}
+              env={env}
             />
           ) : (
             <span />

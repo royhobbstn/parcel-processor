@@ -11,13 +11,15 @@ function StatsLayout({
   selectedFieldKey,
   updateSelectedFieldKey,
   updateAttributeChosen,
+  env,
 }) {
   useEffect(() => {
     // modify key to point to -stat.json rather than .ndgeojson
     const modKey = selectedDownload.product_key.replace('.ndgeojson', '-stat.json');
+    const bucket = env === 'production' ? 'data-products-po' : 'data-products-po-dev';
     fetch(
       `http://localhost:4000/proxyS3File?bucket=${encodeURIComponent(
-        'data-products-po',
+        bucket,
       )}&key=${encodeURIComponent(modKey)}`,
     )
       .then(res => res.json())
@@ -27,7 +29,7 @@ function StatsLayout({
       .catch(err => {
         console.error(err);
       });
-  }, [selectedDownload, updateStatsInfo]);
+  }, [selectedDownload, updateStatsInfo, env]);
 
   return (
     <div>

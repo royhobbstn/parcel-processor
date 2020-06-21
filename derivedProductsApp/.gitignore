@@ -24,3 +24,5 @@ yarn-error.log*
 
 config/development.json
 config/production.json
+
+logfile.log

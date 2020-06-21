@@ -43,14 +43,14 @@ exports.DBWrites = async function (
     if (sourceId === -1) {
       log.info(`Source doesn't exist in database.  Creating a new source.`);
       sourceType = getSourceType(sourceNameInput);
-      sourceId = await createSource(sourceNameInput, sourceType);
+      sourceId = await createSource(sourceNameInput, sourceType, transactionId);
       sourceLine = `Created a new source record for: ${sourceNameInput} of type ${sourceType}`;
     } else {
       sourceLine = `Found source record for: ${sourceNameInput}`;
     }
 
     // todo, accomodate 'received' disposition by prompt
-    const checkId = await recordSourceCheck(sourceId, sourceType);
+    const checkId = await recordSourceCheck(sourceId, sourceType, transactionId);
 
     // if not in database write a record in the download table
     const downloadId = await constructDownloadRecord(
@@ -60,6 +60,7 @@ exports.DBWrites = async function (
       rawKey,
       downloadRef,
       filePath,
+      transactionId,
     );
 
     await queryCreateProductRecord(
@@ -69,6 +70,7 @@ exports.DBWrites = async function (
       productOrigins.ORIGINAL,
       geoid,
       `${productKey}.ndgeojson`,
+      transactionId,
     );
 
     await commitTransaction(transactionId);
@@ -122,14 +124,14 @@ async function checkHealth() {
 
 exports.recordSourceCheck = recordSourceCheck;
 
-async function recordSourceCheck(sourceId, sourceType) {
+async function recordSourceCheck(sourceId, sourceType, transactionId) {
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
   }
 
   const disposition =
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
-  const query = await queryWriteSourceCheck(sourceId, disposition);
+  const query = await queryWriteSourceCheck(sourceId, disposition, transactionId);
 
   return query.insertId;
 }
@@ -146,8 +148,8 @@ async function fetchSourceIdIfExists(pageName) {
 
 exports.createSource = createSource;
 
-async function createSource(sourceName, sourceType) {
-  const query = await queryWriteSource(sourceName, sourceType);
+async function createSource(sourceName, sourceType, transactionId) {
+  const query = await queryWriteSource(sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
     return query.insertId;
   }
@@ -173,6 +175,7 @@ async function constructDownloadRecord(
   rawKey,
   downloadRef,
   filePath,
+  transactionId,
 ) {
   const originalFilename = path.parse(filePath).base;
 
@@ -183,6 +186,7 @@ async function constructDownloadRecord(
     rawKey,
     downloadRef,
     originalFilename,
+    transactionId,
   );
 
   if (!query || !query.insertId) {
@@ -245,10 +249,8 @@ exports.getSplittableDownloads = async function (geoid) {
 
 exports.getCountiesByState = async function (geoid) {
   const query = await queryAllCountiesFromState(geoid);
-
   if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
   }
-
-  return { rows: query.records };
+  return query.records;
 };

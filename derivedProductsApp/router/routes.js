@@ -4,21 +4,22 @@ const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
 const { v4: uuidv4 } = require('uuid');
 const config = require('config');
 
-const { getConnection } = require('../../util/primitives/queries');
+const { acquireConnection } = require('../../util/wrappers/wrapQuery');
 const { getSplittableDownloads, getCountiesByState } = require('../../util/wrappers/wrapQuery');
 const { getObject } = require('../../util/primitives/s3Operations');
 
 exports.appRouter = async app => {
   //
   app.get('/fetchEnv', async function (req, res) {
+    await acquireConnection();
     return res.json({ env: process.env.NODE_ENV });
   });
 
   app.get('/queryStatFiles', async function (req, res) {
     const geoid = req.query.geoid;
-    const connection = await getConnection();
-    const rows = await getSplittableDownloads(connection, geoid);
-    await connection.end();
+    console.log({ geoid });
+    await acquireConnection();
+    const rows = await getSplittableDownloads(geoid);
     return res.json(rows);
   });
 
@@ -31,9 +32,8 @@ exports.appRouter = async app => {
 
   app.get('/getSubGeographies', async function (req, res) {
     const geoid = req.query.geoid;
-    const connection = await getConnection();
-    const rows = await getCountiesByState(connection, geoid);
-    await connection.end();
+    await acquireConnection();
+    const rows = await getCountiesByState(geoid);
     return res.json(rows);
   });
 
