@@ -2,24 +2,23 @@
 
 const prompt = require('prompt');
 const { sourceTypes, modes } = require('./constants');
+const { log } = require('./logger');
 
 exports.getSourceType = function (sourceNameInput) {
-  return new Promise((resolve, reject) => {
-    if (
-      sourceNameInput.includes('http://') ||
-      sourceNameInput.includes('https://') ||
-      sourceNameInput.includes('ftp://')
-    ) {
-      console.log('\nDetermined to be a WEBPAGE source.\n');
-      return resolve(sourceTypes.WEBPAGE);
-    } else if (sourceNameInput.includes('@') && sourceNameInput.includes('.')) {
-      // can probably validate better than this
-      console.log('\nDetermined to be an EMAIL source.\n');
-      return resolve(sourceTypes.EMAIL);
-    } else {
-      return reject('Could not determine source type.');
-    }
-  });
+  if (
+    sourceNameInput.includes('http://') ||
+    sourceNameInput.includes('https://') ||
+    sourceNameInput.includes('ftp://')
+  ) {
+    log.info('\nDetermined to be a WEBPAGE source.\n');
+    return sourceTypes.WEBPAGE;
+  } else if (sourceNameInput.includes('@') && sourceNameInput.includes('.')) {
+    // can probably validate better than this
+    log.info('\nDetermined to be an EMAIL source.\n');
+    return sourceTypes.EMAIL;
+  } else {
+    throw new Error('Could not determine source type.');
+  }
 };
 
 exports.sourceInputPrompt = function () {
@@ -42,7 +41,7 @@ exports.promptGeoIdentifiers = async function () {
   do {
     fipsDetails = await getGeoIdentifiers();
   } while (fipsDetails.hasError);
-  console.log({ fipsDetails });
+  log.info({ fipsDetails });
   return fipsDetails;
 };
 
@@ -62,7 +61,7 @@ async function getGeoIdentifiers() {
   await new Promise((resolve, reject) => {
     prompt.get(['SUMLEV', 'STATEFIPS'], (err, result) => {
       if (err) {
-        console.error(err);
+        log.error(err);
         return reject(err);
       }
       id.SUMLEV = result.SUMLEV;
@@ -72,7 +71,7 @@ async function getGeoIdentifiers() {
   });
 
   if (!id.SUMLEV || !id.STATEFIPS) {
-    console.log('Forget to enter SUMLEV or STATEFIPS.  Try again.');
+    console.log('\nForgot to enter SUMLEV or STATEFIPS.  Try again.');
     id.hasError = true;
     return id;
   }
@@ -86,7 +85,7 @@ async function getGeoIdentifiers() {
       await new Promise((resolve, reject) => {
         prompt.get(['COUNTYFIPS'], (err, result) => {
           if (err) {
-            console.error(err);
+            log.error(err);
             return reject(err);
           }
           id.COUNTYFIPS = result.COUNTYFIPS;
@@ -102,8 +101,8 @@ async function getGeoIdentifiers() {
         id.COUNTYFIPS = id.COUNTYFIPS.slice(2);
       }
       if (!id.COUNTYFIPS || id.COUNTYFIPS.length !== 3) {
-        console.error(
-          'County fips codes are 3 digits.  (5 digits will be accepted if the first two digits === STATEFIPS.  Try again.',
+        console.log(
+          '\nCounty fips codes are 3 digits.  (5 digits will be accepted if the first two digits === STATEFIPS.  Try again.',
         );
         id.hasError = true;
         return id;
@@ -113,7 +112,7 @@ async function getGeoIdentifiers() {
       await new Promise((resolve, reject) => {
         prompt.get(['PLACEFIPS'], function (err, result) {
           if (err) {
-            console.error(err);
+            log.error(err);
             return reject(err);
           }
           id.PLACEFIPS = result.PLACEFIPS;
@@ -125,21 +124,21 @@ async function getGeoIdentifiers() {
         id.PLACEFIPS = id.PLACEFIPS.slice(2);
       }
       if (!id.PLACEFIPS || id.PLACEFIPS.length !== 5) {
-        console.error(
-          'Place fips codes are 5 digits.  (7 digits will be accepted if the first two digits === STATEFIPS.  Try again.',
+        console.log(
+          '\nPlace fips codes are 5 digits.  (7 digits will be accepted if the first two digits === STATEFIPS.  Try again.',
         );
         id.hasError = true;
         return id;
       }
       return id;
     } else {
-      console.error(`SUMLEV: Expected either '040' (state), '050' (county), or '160' (place)`);
+      console.log(`\nSUMLEV: Expected either '040' (state), '050' (county), or '160' (place)`);
       id.hasError = true;
       return id;
     }
   } else {
-    console.error(
-      "Invalid input for SUMLEV or STATEFIPS.  SUMLEV is 3 digits and must be either '040' (state), '050' (county), or '160' (place).  STATEFIPS must be 2 digits only.",
+    console.log(
+      "\nInvalid input for SUMLEV or STATEFIPS.  SUMLEV is 3 digits and must be either '040' (state), '050' (county), or '160' (place).  STATEFIPS must be 2 digits only.",
     );
     id.hasError = true;
     return id;
@@ -160,14 +159,14 @@ exports.chooseGeoLayer = async function (total_layers) {
         if (err) {
           return reject(err);
         }
-        console.log('Command-line input received:');
-        console.log('  layer: ' + result.layer);
+        log.info('Command-line input received:');
+        log.info('  layer: ' + result.layer);
         return resolve(result.layer);
       });
     });
     chosenLayer = parseInt(table_choice);
 
-    console.log({ chosenLayer });
+    log.info({ chosenLayer });
   }
 
   return chosenLayer;
@@ -193,7 +192,7 @@ exports.modePrompt = function () {
       } else {
         mode = modes.DRY_RUN;
       }
-      console.log(`Running in ${process.env.NODE_ENV} as ${mode.label} mode.`);
+      log.info(`Running in ${process.env.NODE_ENV} as ${mode.label} mode.`);
       return resolve(mode);
     });
   });

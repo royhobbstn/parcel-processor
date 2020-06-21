@@ -5,6 +5,7 @@ const fs = require('fs');
 const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
+const { log } = require('../logger');
 
 exports.putTextToS3 = function (bucketName, keyName, text, contentType) {
   return new Promise((resolve, reject) => {
@@ -19,12 +20,12 @@ exports.putTextToS3 = function (bucketName, keyName, text, contentType) {
       .promise();
     uploadPromise
       .then(data => {
-        console.log(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
-        console.log(data);
+        log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
+        log.info(data);
         return resolve();
       })
       .catch(err => {
-        console.error(err);
+        log.error(err);
         return reject(err);
       });
   });
@@ -32,9 +33,7 @@ exports.putTextToS3 = function (bucketName, keyName, text, contentType) {
 
 exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useGzip) {
   return new Promise((resolve, reject) => {
-    console.log(
-      `uploading file to s3 (${filePathToUpload} as s3://${bucket}/${key}), please wait...`,
-    );
+    log.info(`uploading file to s3 (${filePathToUpload} as s3://${bucket}/${key}), please wait...`);
 
     const uploadStream = () => {
       const s3 = new AWS.S3();
@@ -68,15 +67,15 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
 
     promise
       .then(result => {
-        console.log(
+        log.info(
           `uploading (${filePathToUpload} as s3://${bucket}/${key}) completed successfully.`,
         );
-        console.log(result);
+        log.info(result);
         return resolve();
       })
       .catch(err => {
-        console.error(`upload (${filePathToUpload} as s3://${bucket}/${key}) failed.`);
-        console.error(err);
+        log.error(`upload (${filePathToUpload} as s3://${bucket}/${key}) failed.`);
+        log.error(err);
         return reject(err);
       });
   });
@@ -123,25 +122,25 @@ exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder)
       'gzip',
     ];
     const command = `${application} ${args.join(' ')}`;
-    console.log(`running: ${command}`);
+    log.info(`running: ${command}`);
 
     const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      console.log(`stdout: ${data.toString()}`);
+      log.info(`stdout: ${data.toString()}`);
     });
 
     proc.stderr.on('data', data => {
-      console.log(data.toString());
+      log.info(data.toString());
     });
 
     proc.on('error', err => {
-      console.error(err);
+      log.error(err);
       reject(err);
     });
 
     proc.on('close', code => {
-      console.log(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
+      log.info(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
       resolve({ command });
     });
   });
@@ -173,7 +172,7 @@ async function emptyDirectory(bucket, dir) {
   });
 
   const result = await s3.deleteObjects(deleteParams).promise();
-  console.log(result);
+  log.info(result);
 
   if (listedObjects.IsTruncated) {
     await emptyDirectory(bucket, dir);

@@ -24,10 +24,11 @@ const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
+const { log } = require('./util/logger');
 
 init().catch(err => {
-  console.error('unexpected error');
-  console.error(err);
+  log.error('unexpected error');
+  log.error(err);
   process.exit();
 });
 
@@ -42,14 +43,14 @@ async function init() {
     })
     .on('add', async filePath => {
       if (currentlyProcessing) {
-        console.log(`currently processing an existing file. ${filePath} will be ignored.`);
+        log.warn(`currently processing an existing file. ${filePath} will be ignored.`);
         return;
       }
 
       currentlyProcessing = true;
       const cleanupS3 = [];
 
-      console.log(`\nFile found: ${filePath}`);
+      log.info(`\nFile found: ${filePath}`);
 
       const mode = await modePrompt();
 
@@ -64,38 +65,38 @@ async function init() {
               directories.unzippedDir,
             ]);
           } else {
-            console.log(
+            log.info(
               `\nBecause this was a ${mode.label} no database records or S3 files have been written.  \nYour file remains in the raw directory.\n`,
             );
             await doBasicCleanup([directories.outputDir, directories.unzippedDir]);
           }
 
-          console.log('Completed successfully.');
+          log.info('Completed successfully.');
         })
         .catch(async err => {
-          console.error(err);
+          log.error(err);
 
           if (mode.label === modes.FULL_RUN.label) {
             try {
               await removeS3Files(cleanupS3);
-              console.error('All created S3 assets have been deleted');
+              log.error('All created S3 assets have been deleted');
             } catch (e) {
-              console.error(e);
-              console.error('Unable to delete S3 files.');
+              log.error(e);
+              log.error('Unable to delete S3 files.');
             }
           }
 
           await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
-          console.log('output and unzipped directories cleaned.  Original raw file left in place.');
+          log.info('output and unzipped directories cleaned.  Original raw file left in place.');
         })
         .finally(async () => {
           currentlyProcessing = false;
-          console.log('\n\nDone.  Exiting.\n');
-          process.exit();
+          log.info('\n\nDone. Ctrl-C to exit.\n');
         });
     });
 
-  console.log('\nlistening...\n');
+  log.info('--------------------------------------------');
+  log.info('listening...');
 }
 
 async function runMain(cleanupS3, filePath, mode) {
@@ -108,19 +109,19 @@ async function runMain(cleanupS3, filePath, mode) {
   const hashExists = await doesHashExist(computedHash);
 
   if (hashExists) {
-    console.log(`Hash for ${filePath} already exists.`);
-    return doBasicCleanup([directories.rawDir]);
+    log.info(`Hash for ${filePath} already exists.`);
+    // todo uncomment // return doBasicCleanup([directories.rawDir]);
   }
 
   // get SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS
   const fipsDetails = await promptGeoIdentifiers();
-  console.log(
+  log.info(
     `Identifier prompt;\n  SUMLEV: ${fipsDetails.SUMLEV}\n  STATEFIPS: ${fipsDetails.STATEFIPS}\n  COUNTYFIPS: ${fipsDetails.COUNTYFIPS}\n  PLACEFIPS: ${fipsDetails.PLACEFIPS}`,
   );
 
   // get geoname corresponding to FIPS
   const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
-  console.log(`geoName:  ${geoName},  geoid: ${geoid}`);
+  log.info(`geoName:  ${geoName},  geoid: ${geoid}`);
 
   const downloadRef = generateRef(referenceIdLength);
 

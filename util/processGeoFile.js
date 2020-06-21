@@ -9,12 +9,13 @@ var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
 const { directories, tileInfoPrefix, idPrefix, clusterPrefix } = require('./constants');
 const { clustersKmeans } = require('./modKmeans');
+const { log } = require('./logger');
 
 exports.inspectFile = function (fileName, fileType) {
-  console.log(`Found file: ${fileName}`);
+  log.info(`Found file: ${fileName}`);
 
-  console.log({ fileName, fileType });
-  console.log(
+  log.info({ fileName, fileType });
+  log.info(
     'opening from ' +
       `${directories.unzippedDir}/${fileName + (fileType === 'shapefile' ? '.shp' : '')}`,
   );
@@ -27,11 +28,11 @@ exports.inspectFile = function (fileName, fileType) {
   const driver_metadata = driver.getMetadata();
 
   if (driver_metadata.DCAP_VECTOR !== 'YES') {
-    console.error('Source file is not a valid vector file.');
-    process.exit();
+    log.error('Source file is not a valid vector file.');
+    throw new Error('Source file is not a valid vector file');
   }
 
-  console.log(`Driver = ${driver.description}\n`);
+  log.info(`Driver = ${driver.description}\n`);
 
   let total_layers = 0; // iterator for layer labels
 
@@ -59,13 +60,13 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
       var transform = new gdal.CoordinateTransformation(inputSpatialRef, outputSpatialRef);
       var layer = dataset.layers.get(chosenLayer);
     } catch (e) {
-      console.error('Unknown problem reading table');
-      console.error(gdal.lastError);
-      console.error(e);
+      log.error('Unknown problem reading table');
+      log.error(gdal.lastError);
+      log.error(e);
       return reject(e);
     }
 
-    console.log(`processing file: ${fileName}`);
+    log.info(`processing file: ${fileName}`);
 
     const statCounter = new StatContext();
     let writeStream = fs.createWriteStream(`${outputPath}.ndgeojson`);
@@ -77,10 +78,10 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
     // the finish event is emitted when all data has been flushed from the stream
     writeStream.on('finish', async () => {
       fs.writeFileSync(`${outputPath}.json`, JSON.stringify(statCounter.export()), 'utf8');
-      console.log(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson\n`);
+      log.info(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson\n`);
 
-      console.log(`processed ${counter} features`);
-      console.log(`found ${errored} feature errors\n`);
+      log.info(`processed ${counter} features`);
+      log.info(`found ${errored} feature errors\n`);
       return resolve([points, propertyCount]);
     });
 
@@ -112,9 +113,9 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
           writeStream.write(JSON.stringify(parsedFeature) + '\n', 'utf8');
         }
       } catch (e) {
-        console.error(e);
-        console.error(feat);
-        console.error('Feature was ignored.');
+        log.error(e);
+        log.error(feat);
+        log.error('Feature was ignored.');
         errored++;
       }
     } while (cont);
@@ -161,8 +162,8 @@ function getGeoJsonFromGdalFeature(feature, coordTransform) {
   try {
     geometry = feature.getGeometry();
   } catch (e) {
-    console.error('Unable to .getGeometry() from feature');
-    console.error(e);
+    log.error('Unable to .getGeometry() from feature');
+    log.error(e);
   }
 
   var clone;
@@ -170,8 +171,8 @@ function getGeoJsonFromGdalFeature(feature, coordTransform) {
     try {
       clone = geometry.clone();
     } catch (e) {
-      console.error('Unable to .clone() geometry');
-      console.error(e);
+      log.error('Unable to .clone() geometry');
+      log.error(e);
     }
   }
 
@@ -179,8 +180,8 @@ function getGeoJsonFromGdalFeature(feature, coordTransform) {
     try {
       clone.transform(coordTransform);
     } catch (e) {
-      console.error('Unable to .transform() geometry');
-      console.error(e);
+      log.error('Unable to .transform() geometry');
+      log.error(e);
     }
   }
 
@@ -190,8 +191,8 @@ function getGeoJsonFromGdalFeature(feature, coordTransform) {
       clone.swapXY(); // ugh, you would think .toObject would take care of this
       obj = clone.toObject();
     } catch (e) {
-      console.error('Unable to convert geometry .toObject()');
-      console.error(e);
+      log.error('Unable to convert geometry .toObject()');
+      log.error(e);
     }
   }
 
@@ -212,25 +213,25 @@ exports.convertToFormat = function (format, outputPath) {
       `${outputPath}.ndgeojson`,
     ];
     const command = `${application} ${args.join(' ')}`;
-    console.log(`running: ${command}`);
+    log.info(`running: ${command}`);
 
     const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      console.log(`stdout: ${data.toString()}`);
+      log.info(`stdout: ${data.toString()}`);
     });
 
     proc.stderr.on('data', data => {
-      console.log(data.toString());
+      log.info(data.toString());
     });
 
     proc.on('error', err => {
-      console.error(err);
+      log.error(err);
       reject(err);
     });
 
     proc.on('close', code => {
-      console.log(`completed creating format: ${format.driver}.`);
+      log.info(`completed creating format: ${format.driver}.`);
       resolve({ command });
     });
   });
@@ -258,25 +259,25 @@ exports.spawnTippecane = function (tilesDir, derivativePath) {
       `${derivativePath}.ndgeojson`,
     ];
     const command = `${application} ${args.join(' ')}`;
-    console.log(`running: ${command}`);
+    log.info(`running: ${command}`);
 
     const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      console.log(`stdout: ${data.toString()}`);
+      log.info(`stdout: ${data.toString()}`);
     });
 
     proc.stderr.on('data', data => {
-      console.log(data.toString());
+      log.info(data.toString());
     });
 
     proc.on('error', err => {
-      console.error(err);
+      log.error(err);
       reject(err);
     });
 
     proc.on('close', code => {
-      console.log(`completed creating tiles. code ${code}`);
+      log.info(`completed creating tiles. code ${code}`);
       resolve({ command, layername });
     });
   });
@@ -284,7 +285,7 @@ exports.spawnTippecane = function (tilesDir, derivativePath) {
 
 exports.writeTileAttributes = function (derivativePath, tilesDir) {
   return new Promise((resolve, reject) => {
-    console.log('processing attributes...');
+    log.info('processing attributes...');
 
     // make attributes directory
     fs.mkdirSync(`${tilesDir}/attributes`);
@@ -304,15 +305,15 @@ exports.writeTileAttributes = function (derivativePath, tilesDir) {
 
         transformed++;
         if (transformed % 10000 === 0) {
-          console.log(transformed + ' records processed');
+          log.info(transformed + ' records processed');
         }
       })
       .on('error', err => {
-        console.error(err);
+        log.error(err);
         reject('error');
       })
       .on('end', end => {
-        console.log(transformed + ' records processed');
+        log.info(transformed + ' records processed');
         resolve('end');
       });
   });
@@ -320,11 +321,11 @@ exports.writeTileAttributes = function (derivativePath, tilesDir) {
 
 exports.createNdGeoJsonWithClusterId = async function (outputPath, lookup) {
   return new Promise((resolve, reject) => {
-    console.log('creating derivative ndgeojson with clusterId...');
+    log.info('creating derivative ndgeojson with clusterId...');
 
     let transformed = 0;
-    console.log('createNdGeoJsonWithClusterId');
-    console.log({ outputPath });
+    log.info('createNdGeoJsonWithClusterId');
+    log.info({ outputPath });
     const derivativePath = `${outputPath}-cluster`;
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
@@ -337,15 +338,15 @@ exports.createNdGeoJsonWithClusterId = async function (outputPath, lookup) {
 
         transformed++;
         if (transformed % 10000 === 0) {
-          console.log(transformed + ' records processed');
+          log.info(transformed + ' records processed');
         }
       })
       .on('error', err => {
-        console.error(err);
+        log.error(err);
         reject('error');
       })
       .on('end', end => {
-        console.log(transformed + ' records processed');
+        log.info(transformed + ' records processed');
         resolve(derivativePath);
       });
   });

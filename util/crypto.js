@@ -5,6 +5,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const zlib = require('zlib');
 const { tileInfoPrefix } = require('./constants');
+const { log } = require('./logger');
 
 exports.generateRef = function (digits) {
   const uuid = uuidv4();
@@ -15,7 +16,7 @@ exports.generateRef = function (digits) {
 
 exports.computeHash = function (filePath) {
   return new Promise((resolve, reject) => {
-    console.log('processing file...');
+    log.info('processing file...');
 
     const hash = crypto.createHash('md5');
     const stream = fs.createReadStream(filePath);
@@ -26,13 +27,13 @@ exports.computeHash = function (filePath) {
     });
 
     stream.on('error', err => {
-      console.error(err);
+      log.error(err);
       return reject(err);
     });
 
     stream.on('end', () => {
       const computedHash = hash.digest('hex');
-      console.log(`Computed Hash: ${computedHash}`);
+      log.info(`Computed Hash: ${computedHash}`);
       return resolve(computedHash);
     });
   });
@@ -54,7 +55,7 @@ exports.gzipTileAttributes = async function (directory) {
 
   await Promise.all(copiedFiles);
 
-  console.log('All tile information files have been gzipped');
+  log.info('All tile information files have been gzipped');
 };
 
 function convertToGzip(oldPath, newPath) {

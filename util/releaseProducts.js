@@ -22,6 +22,7 @@ const {
 } = require('./processGeoFile');
 const { generateRef, gzipTileAttributes } = require('./crypto');
 const { zipShapefile, getMaxDirectoryLevel } = require('./filesystemUtil');
+const { log } = require('./logger');
 
 exports.releaseProducts = async function (
   fipsDetails,
@@ -53,7 +54,7 @@ exports.releaseProducts = async function (
     geoid,
     `${productKeyGeoJSON}.geojson`,
   );
-  console.log(`created geoJSON product record.  ref: ${productRefGeoJSON}`);
+  log.info(`created geoJSON product record.  ref: ${productRefGeoJSON}`);
 
   if (mode.label === modes.FULL_RUN.label) {
     await putFileToS3(
@@ -68,7 +69,7 @@ exports.releaseProducts = async function (
       key: `${productKeyGeoJSON}.geojson`,
       type: s3deleteType.FILE,
     });
-    console.log(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
+    log.info(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
   }
 
   // file conversion is bound to be problematic for GPKG and SHP
@@ -95,7 +96,7 @@ exports.releaseProducts = async function (
       geoid,
       `${productKeyGPKG}.gpkg`,
     );
-    console.log(`created GPKG product record.  ref: ${productRefGPKG}`);
+    log.info(`created GPKG product record.  ref: ${productRefGPKG}`);
 
     if (mode.label === modes.FULL_RUN.label) {
       await putFileToS3(
@@ -110,11 +111,11 @@ exports.releaseProducts = async function (
         key: `${productKeyGPKG}.gpkg`,
         type: s3deleteType.FILE,
       });
-      console.log(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
+      log.info(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
     }
   } catch (e) {
-    console.error(e);
-    console.log(`ERROR:  !!! uploading or product record creation failed on GPKG.`);
+    log.error(e);
+    log.info(`ERROR:  !!! uploading or product record creation failed on GPKG.`);
   }
 
   try {
@@ -136,7 +137,7 @@ exports.releaseProducts = async function (
       geoid,
       `${productKeySHP}-shp.zip`,
     );
-    console.log(`created SHP product record.  ref: ${productRefSHP}`);
+    log.info(`created SHP product record.  ref: ${productRefSHP}`);
 
     if (mode.label === modes.FULL_RUN.label) {
       await putFileToS3(
@@ -151,11 +152,11 @@ exports.releaseProducts = async function (
         key: `${productKeySHP}-shp.zip`,
         type: s3deleteType.FILE,
       });
-      console.log(`uploaded SHP file to S3  key: ${productKeySHP}`);
+      log.info(`uploaded SHP file to S3  key: ${productKeySHP}`);
     }
   } catch (e) {
-    console.error(e);
-    console.log(`ERROR:  !!! uploading or product record creation failed on SHP.`);
+    log.error(e);
+    log.info(`ERROR:  !!! uploading or product record creation failed on SHP.`);
   }
 };
 
@@ -181,9 +182,7 @@ exports.createTiles = async function (meta, cleanupS3, points, propertyCount, mo
       config.get('Buckets.tilesBucket'),
       `${meta.downloadRef}-${meta.productRefTiles}`,
     );
-    console.log(
-      `uploaded TILES directory to S3.  Dir: ${meta.downloadRef}-${meta.productRefTiles}`,
-    );
+    log.info(`uploaded TILES directory to S3.  Dir: ${meta.downloadRef}-${meta.productRefTiles}`);
     cleanupS3.push({
       bucket: config.get('Buckets.tilesBucket'),
       key: `${meta.downloadRef}-${meta.productRefTiles}`,
@@ -198,7 +197,7 @@ exports.createTiles = async function (meta, cleanupS3, points, propertyCount, mo
       'application/json',
     );
 
-    console.log(
+    log.info(
       `uploaded TILES meta file to S3.  Dir: ${meta.downloadRef}-${meta.productRefTiles}/info.json`,
     );
   }
@@ -210,5 +209,5 @@ exports.createTiles = async function (meta, cleanupS3, points, propertyCount, mo
     meta.geoid,
     `${meta.downloadRef}-${meta.productRefTiles}`,
   );
-  console.log(`created TILES product record.  ref: ${meta.productRefTiles}`);
+  log.info(`created TILES product record.  ref: ${meta.productRefTiles}`);
 };

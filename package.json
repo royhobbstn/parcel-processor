@@ -14,7 +14,8 @@
     "ndjson": "^1.5.0",
     "prompt": "^1.0.0",
     "skmeans": "^0.11.3",
-    "unzipper": "^0.10.11"
+    "unzipper": "^0.10.11",
+    "winston": "^3.3.0"
   },
   "scripts": {
     "start-dev": "NODE_ENV=development node index_run_through_npm_scripts.js",

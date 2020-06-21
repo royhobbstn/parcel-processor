@@ -19,6 +19,7 @@ const {
 } = require('../primitives/queries');
 const { getSourceType } = require('../prompts');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('../constants');
+const { log } = require('../logger');
 
 exports.DBWrites = async function (
   sourceNameInput,
@@ -40,7 +41,7 @@ exports.DBWrites = async function (
     let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
 
     if (sourceId === -1) {
-      console.log(`Source doesn't exist in database.  Creating a new source.`);
+      log.info(`Source doesn't exist in database.  Creating a new source.`);
       sourceType = getSourceType(sourceNameInput);
       sourceId = await createSource(sourceNameInput, sourceType);
       sourceLine = `Created a new source record for: ${sourceNameInput} of type ${sourceType}`;
@@ -71,14 +72,15 @@ exports.DBWrites = async function (
     );
 
     await commitTransaction(transactionId);
-    console.log(sourceLine);
-    console.log(`Recorded source check as disposition: 'viewed'`);
-    console.log(`created record in 'downloads' table.  ref: ${downloadRef}`);
-    console.log(`wrote NDgeoJSON product record.  ref: ${productRef}`);
+    log.info(sourceLine);
+    log.info(`Recorded source check as disposition: 'viewed'`);
+    log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
+    log.info(`wrote NDgeoJSON product record.  ref: ${productRef}`);
   } catch (e) {
-    console.error(e);
+    log.error(e);
     await rollbackTransaction(transactionId);
-    console.error('Database transaction has been rolled back.');
+    log.error('Database transaction has been rolled back.');
+    throw new Error('database transaction failed.  re-throwing to roll back S3 saves.');
   }
 };
 
@@ -90,15 +92,15 @@ async function acquireConnection() {
   const seconds = 10;
   let connected = false;
   do {
-    console.log('attempting to connect to database');
+    log.info('attempting to connect to database');
     connected = await checkHealth();
     if (!connected) {
-      console.log(`attempt failed.  trying again in ${seconds} seconds...`);
+      log.info(`attempt failed.  trying again in ${seconds} seconds...`);
       await setPause(seconds * 1000);
     }
   } while (!connected);
 
-  console.log('connected');
+  log.info('connected');
 }
 
 function setPause(timer) {
@@ -155,10 +157,10 @@ async function createSource(sourceName, sourceType) {
 exports.doesHashExist = async function (computedHash) {
   const query = await queryHash(computedHash);
   if (query.records.length) {
-    console.log('Hash exists in database.  File has already been processed.\n');
+    log.info('Hash exists in database.  File has already been processed.\n');
     return true;
   }
-  console.log('Hash is unique.  Processing new download.');
+  log.info('Hash is unique.  Processing new download.');
   return false;
 };
 
@@ -186,7 +188,7 @@ async function constructDownloadRecord(
   if (!query || !query.insertId) {
     throw new Error('unexpected result from create download request');
   }
-  console.log('new download record created');
+  log.info('new download record created');
   return query.insertId;
 }
 
@@ -202,12 +204,12 @@ exports.lookupCleanGeoName = async function (fipsDetails) {
   } else if (SUMLEV === '160') {
     geoid = `${STATEFIPS}${PLACEFIPS}`;
   } else {
-    console.error('SUMLEV out of range.  Exiting.');
-    process.exit();
+    log.error('SUMLEV out of range.  Exiting.');
+    throw new Error('SUMLEV out of range');
   }
 
   const query = await queryGeographicIdentifier(geoid);
-  console.log(query);
+  log.info(query);
 
   if (!query || !query.records || !query.records.length) {
     throw new Error(
@@ -217,7 +219,7 @@ exports.lookupCleanGeoName = async function (fipsDetails) {
 
   const rawGeoName = query.records[0].geoname;
 
-  console.log(`Found corresponding geographic area: ${rawGeoName}`);
+  log.info(`Found corresponding geographic area: ${rawGeoName}`);
 
   // Alter geo name to be s3 key friendly (all non alphanumeric become -)
   const geoName = rawGeoName.replace(/[^a-z0-9]+/gi, '-');

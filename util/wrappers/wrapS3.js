@@ -6,6 +6,7 @@ const { s3deleteType } = require('../constants');
 const { putFileToS3, emptyS3Directory } = require('../primitives/s3Operations');
 const { lookupState } = require('../lookupState');
 const config = require('config');
+const { log } = require('../logger');
 
 exports.S3Writes = async function (cleanupS3, filePath, rawKey, productKey, outputPath) {
   await uploadRawFileToS3(filePath, rawKey);
@@ -14,7 +15,7 @@ exports.S3Writes = async function (cleanupS3, filePath, rawKey, productKey, outp
     key: rawKey,
     type: s3deleteType.FILE,
   });
-  console.log(`uploaded raw file to S3.  key: ${rawKey}`);
+  log.info(`uploaded raw file to S3.  key: ${rawKey}`);
   await uploadProductFiles(productKey, outputPath);
   cleanupS3.push({
     bucket: config.get('Buckets.productsBucket'),
@@ -26,7 +27,7 @@ exports.S3Writes = async function (cleanupS3, filePath, rawKey, productKey, outp
     key: `${productKey}.ndgeojson`,
     type: s3deleteType.FILE,
   });
-  console.log(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
+  log.info(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
 };
 
 exports.uploadRawFileToS3 = uploadRawFileToS3;
@@ -61,7 +62,7 @@ async function uploadProductFiles(key, outputPath) {
   );
 
   await Promise.all([statFile, ndgeojsonFile]);
-  console.log('Output files were successfully loaded to S3');
+  log.info('Output files were successfully loaded to S3');
 
   return;
 }
