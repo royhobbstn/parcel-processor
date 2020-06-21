@@ -1,40 +1,31 @@
 // @ts-check
 
-const config = require('config');
 const chokidar = require('chokidar');
-const { directories, referenceIdLength, s3deleteType, modes } = require('./util/constants');
+const { directories, referenceIdLength, modes } = require('./util/constants');
 const {
   sourceInputPrompt,
   promptGeoIdentifiers,
   chooseGeoLayer,
-  sourceTypePrompt,
   execSummaryPrompt,
   modePrompt,
 } = require('./util/prompts');
 const {
-  fetchSourceIdIfExists,
-  createSource,
-  recordSourceCheck,
   doesHashExist,
-  constructDownloadRecord,
   lookupCleanGeoName,
   acquireConnection,
+  DBWrites,
 } = require('./util/wrappers/wrapQuery');
 const {
-  uploadRawFileToS3,
   createRawDownloadKey,
   removeS3Files,
+  createProductDownloadKey,
+  S3Writes,
 } = require('./util/wrappers/wrapS3');
 const { computeHash, generateRef } = require('./util/crypto');
 const { doBasicCleanup } = require('./util/cleanup');
 const { extractZip, checkForFileType } = require('./util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('./util/processGeoFile');
-const { releaseProducts, createTiles } = require('./util/releaseProducts');
-const {
-  startTransaction,
-  commitTransaction,
-  rollbackTransaction,
-} = require('./util/primitives/queries');
+const { rollbackTransaction, commitTransaction } = require('./util/primitives/queries');
 
 init().catch(err => {
   console.error('unexpected error');
@@ -64,47 +55,49 @@ async function init() {
       console.log(`\nFile found: ${filePath}`);
 
       const mode = await modePrompt();
-      await acquireConnection();
-      const transactionId = await startTransaction();
 
       await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
 
-      runMain(executiveSummary, cleanupS3, filePath, mode, transactionId)
-        .then(async () => {
+      let persistTransactionId = undefined;
+
+      runMain(executiveSummary, cleanupS3, filePath, mode)
+        .then(async transactionId => {
+          persistTransactionId = transactionId;
+
           console.log(`\n\nExecutive Summary\n`);
           console.log(executiveSummary.join('\n') + '\n');
 
           if (mode.label === modes.FULL_RUN.label) {
             // prompt with summary - throw if they say no
             await execSummaryPrompt();
-            await commitTransaction(transactionId);
+            await acquireConnection();
+            await commitTransaction(persistTransactionId);
+            console.log('Database records have been committed.');
             await doBasicCleanup([
               directories.rawDir,
               directories.outputDir,
               directories.unzippedDir,
             ]);
           } else {
-            await rollbackTransaction(transactionId);
             console.log(
-              `\nBecause this was a ${mode.label} the database transactions have been rolled back.  \nYour file remains in the raw directory.\n`,
+              `\nBecause this was a ${mode.label} no database records or S3 files have been written.  \nYour file remains in the raw directory.\n`,
             );
             await doBasicCleanup([directories.outputDir, directories.unzippedDir]);
           }
 
-          console.log('All transactions completed successfully.');
+          console.log('Completed successfully.');
         })
         .catch(async err => {
           console.error(err);
 
-          try {
-            await rollbackTransaction(transactionId);
-            console.error('All database transactions have been rolled back.');
-          } catch (e) {
-            console.error(e);
-            console.error('Unable to rollback database!  Uh oh.');
+          if (!persistTransactionId) {
+            console.log('It appears you rejected a DRY-RUN.  No need, nothing was written.');
           }
 
           if (mode.label === modes.FULL_RUN.label) {
+            await acquireConnection();
+            await rollbackTransaction(persistTransactionId);
+            console.error('Database transaction has been rolled back');
             try {
               await removeS3Files(cleanupS3);
               console.error('All created S3 assets have been deleted');
@@ -119,36 +112,21 @@ async function init() {
         })
         .finally(async () => {
           currentlyProcessing = false;
-          console.log('\n\nawaiting a new file...\n');
+          console.log('\n\nDone.  Exiting.\n');
+          process.exit();
         });
     });
 
   console.log('\nlistening...\n');
 }
 
-async function runMain(executiveSummary, cleanupS3, filePath, mode, transactionId) {
+async function runMain(executiveSummary, cleanupS3, filePath, mode) {
   const sourceNameInput = await sourceInputPrompt();
-
-  let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
-
-  if (sourceId === -1) {
-    console.log(`Source doesn't exist in database.  Creating a new source.`);
-    sourceType = await sourceTypePrompt(sourceNameInput);
-    sourceId = await createSource(sourceNameInput, sourceType, transactionId);
-    executiveSummary.push(
-      `Created a new source record for: ${sourceNameInput} of type ${sourceType}`,
-    );
-  } else {
-    executiveSummary.push(`Found source record for: ${sourceNameInput}`);
-  }
-
-  // todo, accomodate 'received' disposition by prompt
-  const checkId = await recordSourceCheck(sourceId, sourceType, transactionId);
-  executiveSummary.push(`Recorded source check as disposition: 'viewed'`);
 
   const computedHash = await computeHash(filePath);
 
   // call database and find out if hash is already in DB
+  await acquireConnection();
   const hashExists = await doesHashExist(computedHash);
 
   if (hashExists) {
@@ -171,28 +149,6 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode, transactionI
   // Contains ZIP extension.  create the key (path) to be used to store the zipfile in S3
   const rawKey = createRawDownloadKey(fipsDetails, geoid, geoName, downloadRef);
 
-  // if not in database write a record in the download table
-  const downloadId = await constructDownloadRecord(
-    sourceId,
-    checkId,
-    computedHash,
-    rawKey,
-    downloadRef,
-    filePath,
-    transactionId,
-  );
-  executiveSummary.push(`created record in 'downloads' table.  ref: ${downloadRef}`);
-
-  if (mode.label === modes.FULL_RUN.label) {
-    await uploadRawFileToS3(filePath, rawKey);
-    cleanupS3.push({
-      bucket: config.get('Buckets.rawBucket'),
-      key: rawKey,
-      type: s3deleteType.FILE,
-    });
-    executiveSummary.push(`uploaded raw file to S3.  key: ${rawKey}`);
-  }
-
   await extractZip(filePath);
 
   // determines if file(s) are of type shapefile or geodatabase
@@ -209,47 +165,63 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode, transactionI
 
   // process all features and convert them to WGS84 ndgeojson
   // while gathering stats on the data.  Writes ndgeojson and stat files to output.
-  const [points, propertyCount] = await parseFile(dataset, chosenLayer, fileName, outputPath);
+  await parseFile(dataset, chosenLayer, fileName, outputPath);
 
-  const productKeys = await releaseProducts(
-    fipsDetails,
-    geoid,
-    geoName,
-    downloadRef,
-    downloadId,
-    outputPath,
-    executiveSummary,
-    cleanupS3,
-    mode,
-    transactionId,
-  );
+  const productRef = generateRef(referenceIdLength);
 
-  // construct tiles (states dont get tiles.  too big.)
-  if (fipsDetails.SUMLEV !== '040') {
-    const productRefTiles = generateRef(referenceIdLength);
-    const meta = {
-      filePath,
-      sourceId,
-      geoid,
-      geoName,
-      fipsDetails,
-      downloadId,
-      downloadRef,
-      outputPath,
-      productRefTiles,
-      rawKey,
-      productKeys,
-    };
-    await createTiles(
-      meta,
+  // contains no file extension.  Used as base key for -stat.json  and .ndgeojson
+  const productKey = createProductDownloadKey(fipsDetails, geoid, geoName, downloadRef, productRef);
+
+  if (mode.label === modes.FULL_RUN.label) {
+    await S3Writes(cleanupS3, filePath, rawKey, productKey, outputPath, executiveSummary);
+
+    const transactionId = await DBWrites(
+      sourceNameInput,
       executiveSummary,
-      cleanupS3,
-      points,
-      propertyCount,
-      mode,
-      transactionId,
+      computedHash,
+      rawKey,
+      downloadRef,
+      filePath,
+      productRef,
+      geoid,
+      productKey,
     );
-  } else {
-    executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
+
+    return transactionId;
   }
+
+  return;
+
+  // TODO points, propertyCount should be somewhere else
+
+  // TODO split saving NDGeoJSON record back out here to main.
+
+  // ------- end.  everything below is separate lambda
+
+  // // construct tiles (states dont get tiles.  too big.)
+  // if (fipsDetails.SUMLEV !== '040') {
+  //   const productRefTiles = generateRef(referenceIdLength);
+  //   const meta = {
+  //     filePath,
+  //     sourceId,
+  //     geoid,
+  //     geoName,
+  //     fipsDetails,
+  //     downloadId,
+  //     downloadRef,
+  //     outputPath,
+  //     productRefTiles,
+  //     rawKey,
+  //   };
+  //   await createTiles(
+  //     meta,
+  //     executiveSummary,
+  //     cleanupS3,
+  //     points,
+  //     propertyCount,
+  //     mode,
+  //   );
+  // } else {
+  //   executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
+  // }
 }

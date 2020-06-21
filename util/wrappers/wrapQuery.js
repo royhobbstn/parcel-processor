@@ -12,10 +12,74 @@ const {
   queryAllOriginalRecentDownloads,
   queryAllCountiesFromState,
   queryAllOriginalRecentDownloadsWithGeoid,
+  queryCreateProductRecord,
+  startTransaction,
 } = require('../primitives/queries');
-const { sourceTypes, dispositions } = require('../constants');
+const { getSourceType } = require('../prompts');
+const { sourceTypes, dispositions, fileFormats, productOrigins } = require('../constants');
 
-exports.acquireConnection = async function () {
+exports.DBWrites = async function (
+  sourceNameInput,
+  executiveSummary,
+  computedHash,
+  rawKey,
+  downloadRef,
+  filePath,
+  productRef,
+  geoid,
+  productKey,
+) {
+  // refresh connection just in case the upload /parse took a long time
+  await acquireConnection();
+
+  const transactionId = await startTransaction();
+
+  let sourceLine;
+
+  let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
+
+  if (sourceId === -1) {
+    console.log(`Source doesn't exist in database.  Creating a new source.`);
+    sourceType = getSourceType(sourceNameInput);
+    sourceId = await createSource(sourceNameInput, sourceType);
+    sourceLine = `Created a new source record for: ${sourceNameInput} of type ${sourceType}`;
+  } else {
+    sourceLine = `Found source record for: ${sourceNameInput}`;
+  }
+
+  // todo, accomodate 'received' disposition by prompt
+  const checkId = await recordSourceCheck(sourceId, sourceType);
+
+  // if not in database write a record in the download table
+  const downloadId = await constructDownloadRecord(
+    sourceId,
+    checkId,
+    computedHash,
+    rawKey,
+    downloadRef,
+    filePath,
+  );
+
+  await queryCreateProductRecord(
+    downloadId,
+    productRef,
+    fileFormats.NDGEOJSON.extension,
+    productOrigins.ORIGINAL,
+    geoid,
+    `${productKey}.ndgeojson`,
+  );
+
+  executiveSummary.push(sourceLine);
+  executiveSummary.push(`Recorded source check as disposition: 'viewed'`);
+  executiveSummary.push(`created record in 'downloads' table.  ref: ${downloadRef}`);
+  executiveSummary.push(`wrote NDgeoJSON product record.  ref: ${productRef}`);
+
+  return transactionId;
+};
+
+exports.acquireConnection = acquireConnection;
+
+async function acquireConnection() {
   // ping the database to make sure its up / get it ready
   // after that, keep-alives from data-api-client should do the rest
   const seconds = 10;
@@ -30,7 +94,7 @@ exports.acquireConnection = async function () {
   } while (!connected);
 
   console.log('connected');
-};
+}
 
 function setPause(timer) {
   return new Promise(resolve => {
@@ -49,33 +113,39 @@ async function checkHealth() {
   }
 }
 
-exports.recordSourceCheck = async function (sourceId, sourceType, transactionId) {
+exports.recordSourceCheck = recordSourceCheck;
+
+async function recordSourceCheck(sourceId, sourceType) {
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
   }
 
   const disposition =
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
-  const query = await queryWriteSourceCheck(sourceId, disposition, transactionId);
+  const query = await queryWriteSourceCheck(sourceId, disposition);
 
   return query.insertId;
-};
+}
 
-exports.fetchSourceIdIfExists = async function (pageName) {
+exports.fetchSourceIdIfExists = fetchSourceIdIfExists;
+
+async function fetchSourceIdIfExists(pageName) {
   const query = await querySource(pageName);
   if (query.records.length) {
     return [query.records[0].source_id, query.records[0].source_type];
   }
   return [-1, -1];
-};
+}
 
-exports.createSource = async function (sourceName, sourceType, transactionId) {
-  const query = await queryWriteSource(sourceName, sourceType, transactionId);
+exports.createSource = createSource;
+
+async function createSource(sourceName, sourceType) {
+  const query = await queryWriteSource(sourceName, sourceType);
   if (query.numberOfRecordsUpdated === 1) {
     return query.insertId;
   }
   throw new Error(`unable to create page record for: ${sourceName}`);
-};
+}
 
 exports.doesHashExist = async function (computedHash) {
   const query = await queryHash(computedHash);
@@ -87,14 +157,15 @@ exports.doesHashExist = async function (computedHash) {
   return false;
 };
 
-exports.constructDownloadRecord = async function (
+exports.constructDownloadRecord = constructDownloadRecord;
+
+async function constructDownloadRecord(
   sourceId,
   checkId,
   computedHash,
   rawKey,
   downloadRef,
   filePath,
-  transactionId,
 ) {
   const originalFilename = path.parse(filePath).base;
 
@@ -105,7 +176,6 @@ exports.constructDownloadRecord = async function (
     rawKey,
     downloadRef,
     originalFilename,
-    transactionId,
   );
 
   if (!query || !query.insertId) {
@@ -113,7 +183,7 @@ exports.constructDownloadRecord = async function (
   }
   console.log('new download record created');
   return query.insertId;
-};
+}
 
 exports.lookupCleanGeoName = async function (fipsDetails) {
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;

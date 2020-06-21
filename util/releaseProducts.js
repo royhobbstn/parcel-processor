@@ -33,7 +33,6 @@ exports.releaseProducts = async function (
   executiveSummary,
   cleanupS3,
   mode,
-  transactionId,
 ) {
   const productRef = generateRef(referenceIdLength);
 
@@ -47,7 +46,6 @@ exports.releaseProducts = async function (
     productOrigins.ORIGINAL,
     geoid,
     `${productKey}.ndgeojson`,
-    transactionId,
   );
   executiveSummary.push(`wrote NDgeoJSON product record.  ref: ${productRef}`);
 
@@ -66,6 +64,8 @@ exports.releaseProducts = async function (
     });
     executiveSummary.push(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
   }
+
+  return;
 
   // ADDITIONAL FORMATS //
 
@@ -86,7 +86,6 @@ exports.releaseProducts = async function (
     productOrigins.ORIGINAL,
     geoid,
     `${productKeyGeoJSON}.geojson`,
-    transactionId,
   );
   executiveSummary.push(`created geoJSON product record.  ref: ${productRefGeoJSON}`);
 
@@ -129,7 +128,6 @@ exports.releaseProducts = async function (
       productOrigins.ORIGINAL,
       geoid,
       `${productKeyGPKG}.gpkg`,
-      transactionId,
     );
     executiveSummary.push(`created GPKG product record.  ref: ${productRefGPKG}`);
 
@@ -171,7 +169,6 @@ exports.releaseProducts = async function (
       productOrigins.ORIGINAL,
       geoid,
       `${productKeySHP}-shp.zip`,
-      transactionId,
     );
     executiveSummary.push(`created SHP product record.  ref: ${productRefSHP}`);
 
@@ -194,8 +191,6 @@ exports.releaseProducts = async function (
     console.error(e);
     executiveSummary.push(`ERROR:  !!! uploading or product record creation failed on SHP.`);
   }
-
-  return { productKey, productKeyGeoJSON, productKeyGPKG, productKeySHP };
 };
 
 exports.createTiles = async function (
@@ -205,7 +200,6 @@ exports.createTiles = async function (
   points,
   propertyCount,
   mode,
-  transactionId,
 ) {
   // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
   const lookup = addClusterIdToGeoData(points, propertyCount);
@@ -256,7 +250,6 @@ exports.createTiles = async function (
     productOrigins.ORIGINAL,
     meta.geoid,
     `${meta.downloadRef}-${meta.productRefTiles}`,
-    transactionId,
   );
   executiveSummary.push(`created TILES product record.  ref: ${meta.productRefTiles}`);
 };

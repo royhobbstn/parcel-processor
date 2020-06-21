@@ -3,7 +3,7 @@
 const prompt = require('prompt');
 const { sourceTypes, modes } = require('./constants');
 
-exports.sourceTypePrompt = function (sourceNameInput) {
+exports.getSourceType = function (sourceNameInput) {
   return new Promise((resolve, reject) => {
     if (
       sourceNameInput.includes('http://') ||
@@ -17,26 +17,8 @@ exports.sourceTypePrompt = function (sourceNameInput) {
       console.log('\nDetermined to be an EMAIL source.\n');
       return resolve(sourceTypes.EMAIL);
     } else {
-      console.log('\nCould not determine source type.  Prompting...\n');
+      return reject('Could not determine source type.');
     }
-
-    prompt.start();
-
-    console.log(`\nPlease enter a number:\n 1: webpage\n 2: email address`);
-
-    prompt.get(['sourceType'], function (err, result) {
-      if (err) {
-        return reject(err);
-      }
-
-      if (result.sourceType !== '1' && result.sourceType !== '2') {
-        throw new Error('unexpected sourceType input in prompt');
-      }
-
-      const sourceType = result.sourceType === '1' ? sourceTypes.WEBPAGE : sourceTypes.EMAIL;
-
-      return resolve(sourceType);
-    });
   });
 };
 

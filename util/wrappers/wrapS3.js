@@ -7,7 +7,38 @@ const { putFileToS3, emptyS3Directory } = require('../primitives/s3Operations');
 const { lookupState } = require('../lookupState');
 const config = require('config');
 
-exports.uploadRawFileToS3 = async function (filePath, rawKey) {
+exports.S3Writes = async function (
+  cleanupS3,
+  filePath,
+  rawKey,
+  productKey,
+  outputPath,
+  executiveSummary,
+) {
+  await uploadRawFileToS3(filePath, rawKey);
+  cleanupS3.push({
+    bucket: config.get('Buckets.rawBucket'),
+    key: rawKey,
+    type: s3deleteType.FILE,
+  });
+  executiveSummary.push(`uploaded raw file to S3.  key: ${rawKey}`);
+  await uploadProductFiles(productKey, outputPath);
+  cleanupS3.push({
+    bucket: config.get('Buckets.productsBucket'),
+    key: `${productKey}-stat.json`,
+    type: s3deleteType.FILE,
+  });
+  cleanupS3.push({
+    bucket: config.get('Buckets.productsBucket'),
+    key: `${productKey}.ndgeojson`,
+    type: s3deleteType.FILE,
+  });
+  executiveSummary.push(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
+};
+
+exports.uploadRawFileToS3 = uploadRawFileToS3;
+
+async function uploadRawFileToS3(filePath, rawKey) {
   const extension = path.extname(rawKey);
 
   if (extension !== '.zip') {
@@ -16,9 +47,11 @@ exports.uploadRawFileToS3 = async function (filePath, rawKey) {
 
   // save downloaded file to the raw bucket in s3 (don't gzip here)
   await putFileToS3(config.get('Buckets.rawBucket'), rawKey, filePath, 'application/zip', false);
-};
+}
 
-exports.uploadProductFiles = async function (key, outputPath) {
+exports.uploadProductFiles = uploadProductFiles;
+
+async function uploadProductFiles(key, outputPath) {
   const statFile = putFileToS3(
     config.get('Buckets.productsBucket'),
     `${key}-stat.json`,
@@ -38,7 +71,7 @@ exports.uploadProductFiles = async function (key, outputPath) {
   console.log('Output files were successfully loaded to S3');
 
   return;
-};
+}
 
 exports.createRawDownloadKey = function (fipsDetails, geoid, geoName, downloadRef) {
   const stateName = lookupState(fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');

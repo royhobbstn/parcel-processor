@@ -11,7 +11,6 @@
     "config": "^3.3.1",
     "data-api-client": "^1.0.1",
     "gdal-next": "^1.0.3",
-    "mysql2": "^2.1.0",
     "ndjson": "^1.5.0",
     "prompt": "^1.0.0",
     "skmeans": "^0.11.3",

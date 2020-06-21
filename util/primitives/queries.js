@@ -27,7 +27,7 @@ exports.querySource = function (sourceName) {
   });
 };
 
-exports.queryWriteSource = function (sourceName, sourceType, transactionId) {
+exports.queryWriteSource = function (sourceName, sourceType) {
   // writes a new source record in the source table
   return slsAuroraClient.query({
     sql: 'INSERT INTO sources(source_name, source_type) VALUES (:sourceName, :sourceType);',
@@ -35,11 +35,10 @@ exports.queryWriteSource = function (sourceName, sourceType, transactionId) {
       sourceName,
       sourceType,
     },
-    transactionId,
   });
 };
 
-exports.queryWriteSourceCheck = function (sourceId, disposition, transactionId) {
+exports.queryWriteSourceCheck = function (sourceId, disposition) {
   // write a 'sourceCheck' record to the database
   // it's a record that a source was checked for a more recent download version
   // it is written whether or not a more recent version was found
@@ -48,7 +47,6 @@ exports.queryWriteSourceCheck = function (sourceId, disposition, transactionId) 
   return slsAuroraClient.query({
     sql: 'INSERT INTO source_checks(source_id, disposition) VALUES (:sourceId, :disposition);',
     parameters: { sourceId, disposition },
-    transactionId,
   });
 };
 
@@ -59,14 +57,12 @@ exports.queryCreateDownloadRecord = function (
   rawKey,
   downloadRef,
   originalFilename,
-  transactionId,
 ) {
   // write a download record to unique identify a downloaded file.
   return slsAuroraClient.query({
     sql:
       'INSERT INTO downloads(source_id, check_id, checksum, raw_key, download_ref, original_filename) VALUES (:sourceId, :checkId, :checksum, :rawKey, :downloadRef, :originalFilename);',
     parameters: { sourceId, checkId, checksum, rawKey, downloadRef, originalFilename },
-    transactionId,
   });
 };
 
@@ -77,14 +73,12 @@ exports.queryCreateProductRecord = function (
   productOrigin,
   geoid,
   productKey,
-  transactionId,
 ) {
   // create product record
   return slsAuroraClient.query({
     sql:
       'INSERT INTO products(download_id, product_ref, product_type, product_origin, geoid, product_key) VALUES (:downloadId, :productRef, :productType, :productOrigin, :geoid, :productKey);',
     parameters: { downloadId, productRef, productType, productOrigin, geoid, productKey },
-    transactionId,
   });
 };
 
