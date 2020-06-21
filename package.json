@@ -18,8 +18,8 @@
     "unzipper": "^0.10.11"
   },
   "scripts": {
-    "start": "node index.js",
-    "dangerous-clean-db": "node ./dangerous/clean-db.js",
+    "start-dev": "NODE_ENV=development node index_run_through_npm_scripts.js",
+    "start-prod": "NODE_ENV=production node index_run_through_npm_scripts.js",
     "dangerous-clean-s3-dev": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive",
     "dangerous-clean-s3-prod": "aws s3 rm s3://raw-data-po-dev --recursive && aws s3 rm s3://data-products-po-dev --recursive && aws s3 rm s3://tile-server-po-dev --recursive"
   },

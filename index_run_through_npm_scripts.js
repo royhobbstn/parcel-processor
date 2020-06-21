@@ -18,7 +18,7 @@ const {
   doesHashExist,
   constructDownloadRecord,
   lookupCleanGeoName,
-  checkHealth,
+  acquireConnection,
 } = require('./util/wrappers/wrapQuery');
 const {
   uploadRawFileToS3,
@@ -64,12 +64,12 @@ async function init() {
       console.log(`\nFile found: ${filePath}`);
 
       const mode = await modePrompt();
-      await checkHealth(); // TODO left off here
-      await startTransaction();
+      await acquireConnection();
+      const transactionId = await startTransaction();
 
       await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
 
-      runMain(executiveSummary, cleanupS3, filePath, mode)
+      runMain(executiveSummary, cleanupS3, filePath, mode, transactionId)
         .then(async () => {
           console.log(`\n\nExecutive Summary\n`);
           console.log(executiveSummary.join('\n') + '\n');
@@ -77,14 +77,14 @@ async function init() {
           if (mode.label === modes.FULL_RUN.label) {
             // prompt with summary - throw if they say no
             await execSummaryPrompt();
-            await commitTransaction();
+            await commitTransaction(transactionId);
             await doBasicCleanup([
               directories.rawDir,
               directories.outputDir,
               directories.unzippedDir,
             ]);
           } else {
-            await rollbackTransaction();
+            await rollbackTransaction(transactionId);
             console.log(
               `\nBecause this was a ${mode.label} the database transactions have been rolled back.  \nYour file remains in the raw directory.\n`,
             );
@@ -97,7 +97,7 @@ async function init() {
           console.error(err);
 
           try {
-            await rollbackTransaction();
+            await rollbackTransaction(transactionId);
             console.error('All database transactions have been rolled back.');
           } catch (e) {
             console.error(e);
@@ -126,7 +126,7 @@ async function init() {
   console.log('\nlistening...\n');
 }
 
-async function runMain(executiveSummary, cleanupS3, filePath, mode) {
+async function runMain(executiveSummary, cleanupS3, filePath, mode, transactionId) {
   const sourceNameInput = await sourceInputPrompt();
 
   let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
@@ -134,7 +134,7 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
   if (sourceId === -1) {
     console.log(`Source doesn't exist in database.  Creating a new source.`);
     sourceType = await sourceTypePrompt(sourceNameInput);
-    sourceId = await createSource(sourceNameInput, sourceType);
+    sourceId = await createSource(sourceNameInput, sourceType, transactionId);
     executiveSummary.push(
       `Created a new source record for: ${sourceNameInput} of type ${sourceType}`,
     );
@@ -143,7 +143,7 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
   }
 
   // todo, accomodate 'received' disposition by prompt
-  const checkId = await recordSourceCheck(sourceId, sourceType);
+  const checkId = await recordSourceCheck(sourceId, sourceType, transactionId);
   executiveSummary.push(`Recorded source check as disposition: 'viewed'`);
 
   const computedHash = await computeHash(filePath);
@@ -179,6 +179,7 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
     rawKey,
     downloadRef,
     filePath,
+    transactionId,
   );
   executiveSummary.push(`created record in 'downloads' table.  ref: ${downloadRef}`);
 
@@ -220,6 +221,7 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
     executiveSummary,
     cleanupS3,
     mode,
+    transactionId,
   );
 
   // construct tiles (states dont get tiles.  too big.)
@@ -238,7 +240,15 @@ async function runMain(executiveSummary, cleanupS3, filePath, mode) {
       rawKey,
       productKeys,
     };
-    await createTiles(meta, executiveSummary, cleanupS3, points, propertyCount, mode);
+    await createTiles(
+      meta,
+      executiveSummary,
+      cleanupS3,
+      points,
+      propertyCount,
+      mode,
+      transactionId,
+    );
   } else {
     executiveSummary.push(`TILES generation doesn't run on States, and was skipped`);
   }

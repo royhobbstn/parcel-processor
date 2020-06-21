@@ -15,23 +15,48 @@ const {
 } = require('../primitives/queries');
 const { sourceTypes, dispositions } = require('../constants');
 
-exports.checkHealth = async function () {
+exports.acquireConnection = async function () {
+  // ping the database to make sure its up / get it ready
+  // after that, keep-alives from data-api-client should do the rest
+  const seconds = 10;
+  let connected = false;
+  do {
+    console.log('attempting to connect to database');
+    connected = await checkHealth();
+    if (!connected) {
+      console.log(`attempt failed.  trying again in ${seconds} seconds...`);
+      await setPause(seconds * 1000);
+    }
+  } while (!connected);
+
+  console.log('connected');
+};
+
+function setPause(timer) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve();
+    }, timer);
+  });
+}
+
+async function checkHealth() {
   try {
     await queryHealth();
     return true;
   } catch (e) {
     return false;
   }
-};
+}
 
-exports.recordSourceCheck = async function (sourceId, sourceType) {
+exports.recordSourceCheck = async function (sourceId, sourceType, transactionId) {
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
   }
 
   const disposition =
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
-  const query = await queryWriteSourceCheck(sourceId, disposition);
+  const query = await queryWriteSourceCheck(sourceId, disposition, transactionId);
 
   return query.insertId;
 };
@@ -44,8 +69,8 @@ exports.fetchSourceIdIfExists = async function (pageName) {
   return [-1, -1];
 };
 
-exports.createSource = async function (sourceName, sourceType) {
-  const query = await queryWriteSource(sourceName, sourceType);
+exports.createSource = async function (sourceName, sourceType, transactionId) {
+  const query = await queryWriteSource(sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
     return query.insertId;
   }
@@ -69,6 +94,7 @@ exports.constructDownloadRecord = async function (
   rawKey,
   downloadRef,
   filePath,
+  transactionId,
 ) {
   const originalFilename = path.parse(filePath).base;
 
@@ -79,6 +105,7 @@ exports.constructDownloadRecord = async function (
     rawKey,
     downloadRef,
     originalFilename,
+    transactionId,
   );
 
   if (!query || !query.insertId) {
