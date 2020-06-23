@@ -146,7 +146,7 @@ function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
         </Grid.Row>
         <Grid.Row>
           <Grid.Column width={9}>
-            <div style={{ height: '450px', overflowY: 'scroll', border: '1px dotted grey' }}>
+            <div style={{ height: '420px', overflowY: 'scroll', border: '1px dotted grey' }}>
               <Table selectable celled size="small">
                 <Table.Body>
                   {Object.keys(statsInfo.fields[selectedFieldKey].uniques)
@@ -194,7 +194,7 @@ function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
             </div>
           </Grid.Column>
           <Grid.Column width={7}>
-            <div style={{ height: '450px', overflowY: 'scroll', border: '1px dotted grey' }}>
+            <div style={{ height: '420px', overflowY: 'scroll', border: '1px dotted grey' }}>
               <Table selectable celled size="small">
                 <Table.Body>
                   {geographies.map(geog => {

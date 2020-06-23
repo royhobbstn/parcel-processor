@@ -1,6 +1,7 @@
 // @ts-check
 
 const path = require('path');
+const url = require('url');
 const {
   queryWriteSourceCheck,
   queryHealth,
@@ -13,6 +14,7 @@ const {
   queryAllCountiesFromState,
   queryAllOriginalRecentDownloadsWithGeoid,
   queryCreateProductRecord,
+  querySourceNamesLike,
   startTransaction,
   commitTransaction,
   rollbackTransaction,
@@ -251,6 +253,34 @@ exports.getCountiesByState = async function (geoid) {
   const query = await queryAllCountiesFromState(geoid);
   if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
+  }
+  return query.records;
+};
+
+exports.querySourceNames = async function (sourceName) {
+  // take root of http source, or domain of email sources
+
+  // figure if email or webpage
+  let query;
+
+  if (sourceName.includes('@')) {
+    const domain = sourceName.split('@');
+    query = await querySourceNamesLike(domain[1]);
+  } else if (
+    sourceName.includes('http://') ||
+    sourceName.includes('https://') ||
+    sourceName.includes('ftp://') ||
+    sourceName.includes('ftps://')
+  ) {
+    const root = url.parse(sourceName).hostname;
+    query = await querySourceNamesLike(root);
+  } else {
+    console.error('invalid sourceName input in querySourceNames');
+    return [];
+  }
+
+  if (!query) {
+    throw new Error(`Problem running querySourceNames Query`);
   }
   return query.records;
 };

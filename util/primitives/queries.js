@@ -116,6 +116,13 @@ exports.queryAllOriginalRecentDownloadsWithGeoid = function (geoid) {
   });
 };
 
+exports.querySourceNamesLike = function (sourceName) {
+  return slsAuroraClient.query({
+    sql: 'SELECT * from sources WHERE source_name LIKE :sourceName',
+    parameters: { sourceName: `%${sourceName}%` },
+  });
+};
+
 exports.startTransaction = async function () {
   const query = await slsAuroraClient.beginTransaction();
   return query.transactionId;

@@ -3,9 +3,12 @@ AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
 const { v4: uuidv4 } = require('uuid');
 const config = require('config');
-
-const { acquireConnection } = require('../../util/wrappers/wrapQuery');
-const { getSplittableDownloads, getCountiesByState } = require('../../util/wrappers/wrapQuery');
+const {
+  acquireConnection,
+  getSplittableDownloads,
+  getCountiesByState,
+  querySourceNames,
+} = require('../../util/wrappers/wrapQuery');
 const { getObject } = require('../../util/primitives/s3Operations');
 
 exports.appRouter = async app => {
@@ -34,6 +37,13 @@ exports.appRouter = async app => {
     const geoid = req.query.geoid;
     await acquireConnection();
     const rows = await getCountiesByState(geoid);
+    return res.json(rows);
+  });
+
+  app.get('/querySources', async function (req, res) {
+    const sourceName = decodeURIComponent(req.query.name);
+    await acquireConnection();
+    const rows = await querySourceNames(sourceName);
     return res.json(rows);
   });
 
