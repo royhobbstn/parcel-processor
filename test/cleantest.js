@@ -1,5 +1,5 @@
-const { doBasicCleanup } = require('./util/cleanup');
-const { directories } = require('./util/constants');
+const { doBasicCleanup } = require('../util/cleanup');
+const { directories } = require('../util/constants');
 
 main();
 

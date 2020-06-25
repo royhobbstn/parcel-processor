@@ -37,18 +37,39 @@ exports.inspectFile = function (fileName, fileType) {
   let total_layers = 0; // iterator for layer labels
 
   // print out info for each layer in file
-  dataset.layers.forEach(layer => {
-    console.log(chalk.bold.cyan(`#${total_layers++}: ${layer.name}`));
-    console.log(`  Geometry Type = ${gdal.Geometry.getName(layer.geomType)}`);
-    console.log(chalk.dim(`  Spatial Reference = ${layer.srs ? layer.srs.toWKT() : 'null'}`));
-    console.log('  Fields: ');
-    layer.fields.forEach(field => {
-      console.log(`    -${field.name} (${field.type})`);
+  const layerSelection = dataset.layers
+    .map((layer, index) => {
+      console.log(chalk.bold.cyan(`#${total_layers++}: ${layer.name}`));
+      console.log(`  Geometry Type = ${gdal.Geometry.getName(layer.geomType)}`);
+      console.log(chalk.dim(`  Spatial Reference = ${layer.srs ? layer.srs.toWKT() : 'null'}`));
+      console.log('  Fields: ');
+      layer.fields.forEach(field => {
+        console.log(`    -${field.name} (${field.type})`);
+      });
+      console.log(chalk.blue(`  Feature Count = ${layer.features.count()}\n`));
+      return {
+        index,
+        type: gdal.Geometry.getName(layer.geomType),
+        name: layer.name,
+        count: layer.features.count(),
+      };
+    })
+    .filter(d => {
+      return d.type === 'Multi Polygon' || d.type === 'Polygon';
+    })
+    .sort((a, b) => {
+      return b.count - a.count;
     });
-    console.log(chalk.blue(`  Feature Count = ${layer.features.count()}\n`));
-  });
 
-  return [dataset, total_layers];
+  if (layerSelection.length === 0) {
+    throw new Error('Could not find a suitable layer');
+  }
+
+  log.info('chosen layer: ', layerSelection[0]);
+
+  const chosenLayer = layerSelection[0].index;
+
+  return [dataset, chosenLayer];
 };
 
 exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {

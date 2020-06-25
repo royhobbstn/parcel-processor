@@ -11,9 +11,9 @@ const {
   getSplittableDownloads,
   getCountiesByState,
   querySourceNames,
-} = require('../../util/wrappers/wrapQuery');
-const { getObject } = require('../../util/primitives/s3Operations');
-const { queryHealth } = require('../../util/primitives/queries');
+} = require('../util/wrappers/wrapQuery');
+const { getObject } = require('../util/primitives/s3Operations');
+const { queryHealth } = require('../util/primitives/queries');
 const { processInbox } = require('../processors/processInbox');
 
 exports.appRouter = async app => {

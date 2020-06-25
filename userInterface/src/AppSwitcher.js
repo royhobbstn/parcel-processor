@@ -11,10 +11,19 @@ function AppSwitcher() {
   const [app, updateApp] = useState('');
 
   useEffect(() => {
-    window.setInterval(() => {
-      console.log('down');
+    let time;
+    window.onload = resetTimer;
+    document.onmousemove = resetTimer;
+    document.onclick = resetTimer;
+
+    function logout() {
       updateEnv('down');
-    }, 1000 * 60 * 5);
+    }
+
+    function resetTimer() {
+      clearTimeout(time);
+      time = setTimeout(logout, 1000 * 60 * 5);
+    }
 
     // load possible sub-geographies from a given parent geography
     fetch(`http://localhost:4000/fetchEnv`)

@@ -1,25 +1,24 @@
 // @ts-check
 const fs = require('fs');
 const axios = require('axios').default;
-const { log } = require('../../util/logger');
-const { directories, modes, referenceIdLength } = require('../../util/constants');
-const { doBasicCleanup } = require('../../util/cleanup');
-const { chooseGeoLayer } = require('../../util/prompts');
+const { log } = require('../util/logger');
+const { directories, modes, referenceIdLength } = require('../util/constants');
+const { doBasicCleanup } = require('../util/cleanup');
 const {
   removeS3Files,
   createRawDownloadKey,
   createProductDownloadKey,
   S3Writes,
-} = require('../../util/wrappers/wrapS3');
-const { computeHash, generateRef } = require('../../util/crypto');
-const { extractZip, checkForFileType } = require('../../util/filesystemUtil');
-const { inspectFile, parseOutputPath, parseFile } = require('../../util/processGeoFile');
+} = require('../util/wrappers/wrapS3');
+const { computeHash, generateRef } = require('../util/crypto');
+const { extractZip, checkForFileType } = require('../util/filesystemUtil');
+const { inspectFile, parseOutputPath, parseFile } = require('../util/processGeoFile');
 const {
   acquireConnection,
   doesHashExist,
   lookupCleanGeoName,
   DBWrites,
-} = require('../../util/wrappers/wrapQuery');
+} = require('../util/wrappers/wrapQuery');
 
 exports.processInbox = processInbox;
 
@@ -52,7 +51,7 @@ async function processInbox(data) {
 
   const mode = messagePayload.dryRun ? modes.DRY_RUN : modes.FULL_RUN;
 
-  await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
+  await doBasicCleanup([directories.outputDir, directories.unzippedDir], true, true);
 
   try {
     await runMain(cleanupS3, filePath, mode, messagePayload);
@@ -121,11 +120,8 @@ async function runMain(cleanupS3, filePath, mode, messagePayload) {
   // determines if file(s) are of type shapefile or geodatabase
   const [fileName, fileType] = await checkForFileType();
 
-  // open file with OGR/GDAL
-  const [dataset, total_layers] = inspectFile(fileName, fileType);
-
-  // choose layer to operate on (mostly for geodatabase)
-  const chosenLayer = await chooseGeoLayer(total_layers);
+  // open file && choose layer with OGR/GDAL
+  const [dataset, chosenLayer] = inspectFile(fileName, fileType);
 
   // determine where on the local disk the output geo products will be written
   const outputPath = parseOutputPath(fileName, fileType);

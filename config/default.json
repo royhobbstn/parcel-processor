@@ -1,7 +1,8 @@
 {
   "SQS": {
     "sortQueueUrl": "",
-    "productQueueUrl": ""
+    "productQueueUrl": "",
+    "inboxQueueUrl": ""
   },
   "RDS": {
     "secretArn": "",

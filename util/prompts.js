@@ -145,33 +145,6 @@ async function getGeoIdentifiers() {
   }
 }
 
-exports.chooseGeoLayer = async function (total_layers) {
-  let chosenLayer = 0;
-
-  if (total_layers !== 1) {
-    // if just one layer, use it
-    // otherwise, prompt for layer number
-
-    const table_choice = await new Promise((resolve, reject) => {
-      prompt.start();
-
-      prompt.get(['layer'], function (err, result) {
-        if (err) {
-          return reject(err);
-        }
-        log.info('Command-line input received:');
-        log.info('  layer: ' + result.layer);
-        return resolve(result.layer);
-      });
-    });
-    chosenLayer = parseInt(table_choice);
-
-    log.info({ chosenLayer });
-  }
-
-  return chosenLayer;
-};
-
 exports.modePrompt = function () {
   return new Promise((resolve, reject) => {
     prompt.start();

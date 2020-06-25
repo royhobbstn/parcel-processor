@@ -10,7 +10,6 @@ const log = createLogger({
     new transports.Console({
       format: combine(format.colorize(), format.simple()),
     }),
-    new transports.File({ filename: 'logfile.log' }),
   ],
 });
 

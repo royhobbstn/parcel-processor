@@ -2,12 +2,7 @@
 
 const chokidar = require('chokidar');
 const { directories, referenceIdLength, modes } = require('./util/constants');
-const {
-  sourceInputPrompt,
-  promptGeoIdentifiers,
-  chooseGeoLayer,
-  modePrompt,
-} = require('./util/prompts');
+const { sourceInputPrompt, promptGeoIdentifiers, modePrompt } = require('./util/prompts');
 const {
   doesHashExist,
   lookupCleanGeoName,
@@ -54,7 +49,7 @@ async function init() {
 
       const mode = await modePrompt();
 
-      await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
+      await doBasicCleanup([directories.outputDir, directories.unzippedDir], true, true);
 
       runMain(cleanupS3, filePath, mode)
         .then(async () => {
@@ -134,10 +129,7 @@ async function runMain(cleanupS3, filePath, mode) {
   const [fileName, fileType] = await checkForFileType();
 
   // open file with OGR/GDAL
-  const [dataset, total_layers] = inspectFile(fileName, fileType);
-
-  // choose layer to operate on (mostly for geodatabase)
-  const chosenLayer = await chooseGeoLayer(total_layers);
+  const [dataset, chosenLayer] = inspectFile(fileName, fileType);
 
   // determine where on the local disk the output geo products will be written
   const outputPath = parseOutputPath(fileName, fileType);
