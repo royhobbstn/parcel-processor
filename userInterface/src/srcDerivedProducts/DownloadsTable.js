@@ -1,7 +1,14 @@
+// @ts-check
+
 import React from 'react';
 import { Table } from 'semantic-ui-react';
 
-function DownloadsTable({ statFiles, selectedDownload, updateSelectedDownload }) {
+function DownloadsTable({
+  statFiles,
+  selectedDownload,
+  updateSelectedDownload,
+  updateSelectedFieldKey,
+}) {
   return (
     <Table
       selectable
@@ -30,8 +37,10 @@ function DownloadsTable({ statFiles, selectedDownload, updateSelectedDownload })
                 key={d.download_id}
                 onClick={() => {
                   if (d.download_id === (selectedDownload && selectedDownload.download_id)) {
+                    updateSelectedFieldKey(null);
                     updateSelectedDownload(null);
                   } else {
+                    updateSelectedFieldKey(null);
                     updateSelectedDownload(d);
                   }
                 }}

@@ -1,3 +1,5 @@
+// @ts-check
+
 import React, { useState } from 'react';
 import { Input, Label } from 'semantic-ui-react';
 import StatsLayout from './StatsLayout';
@@ -47,6 +49,7 @@ function App({ env }) {
             statFiles={statFiles}
             selectedDownload={selectedDownload}
             updateSelectedDownload={updateSelectedDownload}
+            updateSelectedFieldKey={updateSelectedFieldKey}
           />
           <br />
           {selectedDownload ? (

@@ -4,13 +4,29 @@ const { idPrefix } = require('./constants');
 
 // gather field statistics for a dataset
 
-exports.StatContext = function () {
+exports.StatContext = function (uniquesMax = 500) {
   this.rowCount = 0;
   this.fields = null;
 
   this.export = () => {
-    // TODO you can do a cleanup by determining ObjectID type fields here and just
+    // cleanup by determining ObjectID type fields here and just
     // squashing the data down to nothing.
+
+    Object.keys(this.fields).forEach(field => {
+      let isUnique = true;
+      for (let unique of Object.keys(this.fields[field].uniques)) {
+        if (this.fields[field].uniques[unique] > 1) {
+          isUnique = false;
+          break;
+        }
+      }
+
+      if (isUnique) {
+        this.fields[field].IDSample = Object.keys(this.fields[field].uniques).slice(0, 10);
+        this.fields[field].uniques = {};
+        this.fields[field].IDField = true;
+      }
+    });
 
     return {
       rowCount: this.rowCount,
@@ -36,6 +52,8 @@ exports.StatContext = function () {
             min: Infinity,
             numCount: 0,
             strCount: 0,
+            IDField: false,
+            IDSample: [],
           };
         });
     }
@@ -56,8 +74,8 @@ exports.StatContext = function () {
         // both strings and numbers watch uniques
         const uniques = Object.keys(this.fields[f].uniques);
 
-        // caps uniques to 500.  Prevents things like ObjectIDs being catalogued extensively.
-        if (uniques.length < 500) {
+        // caps uniques to uniquesMax.  Prevents things like ObjectIDs being catalogued extensively.
+        if (uniques.length < uniquesMax) {
           if (!uniques.includes(String(value))) {
             this.fields[f].uniques[String(value)] = 1;
           } else {

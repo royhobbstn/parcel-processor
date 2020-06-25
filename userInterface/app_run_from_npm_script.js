@@ -1,3 +1,5 @@
+// @ts-check
+
 const express = require('express');
 const { appRouter } = require('./router/routes.js');
 const bodyParser = require('body-parser');

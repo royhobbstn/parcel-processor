@@ -1,3 +1,5 @@
+// @ts-check
+
 export const summaryLevels = [
   {
     key: '040',

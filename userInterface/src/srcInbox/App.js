@@ -1,3 +1,5 @@
+// @ts-check
+
 import React, { useState } from 'react';
 import { Dropdown, Input, Checkbox, Button, Table } from 'semantic-ui-react';
 import { summaryLevels } from './dropdownValues.js';
@@ -6,25 +8,79 @@ function App({ env }) {
   const [urlKeyVal, updateUrlKeyVal] = useState('');
   const [urlKeyStatus, updateUrlKeyStatus] = useState(false);
   const [sumlevStatus, updateSumlevStatus] = useState(false);
-  const [sumlevVal, updateSumlevVal] = useState(false);
+  const [sumlevVal, updateSumlevVal] = useState('');
   const [geoidVal, updateGeoidVal] = useState('');
-  const [geoidStatus, updateGeoidStatus] = useState('');
+  const [geoidStatus, updateGeoidStatus] = useState(false);
   const [dryRun, updateDryRun] = useState(true);
   const [sourceVal, updateSourceVal] = useState('');
   const [sourceStatus, updateSourceStatus] = useState(false);
   const [sourceList, updateSourceList] = useState(null);
 
   const handleSubmit = (evt, data) => {
-    console.log('click');
+    // sendInboxSQS
+
+    const isWebpage =
+      sourceVal.includes('http://') ||
+      sourceVal.includes('https://') ||
+      sourceVal.includes('ftp://') ||
+      sourceVal.includes('ftps://');
+
+    const isEmail = sourceVal.includes('@');
+
+    if (!isWebpage && !isEmail) {
+      alert('unable to determine sourceType (webpage|email).  SQS Message not sent.');
+      return;
+    }
+
+    const sourceType = isWebpage ? 'webpage' : isEmail ? 'email' : 'unknown';
+
+    const STATEFIPS = geoidVal.slice(0, 2);
+
+    const COUNTYFIPS = sumlevVal === '050' ? geoidVal.slice(2) : sumlevVal === '040' ? '000' : '';
+
+    const PLACEFIPS = sumlevVal === '160' ? geoidVal.slice(2) : '';
+
+    const payload = {
+      sourceType,
+      urlKeyVal,
+      sumlevVal,
+      geoidVal,
+      sourceVal,
+      dryRun,
+      STATEFIPS,
+      COUNTYFIPS,
+      PLACEFIPS,
+    };
+
+    fetch(`http://localhost:4000/sendInboxSQS`, {
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+      .then(response => response.json())
+      .then(() => {
+        alert('Successfully sent inbox data to SQS.');
+      })
+      .catch(err => {
+        console.log(err);
+        alert('Problem sending inbox data to SQS.');
+      });
   };
 
   const handleUrlKeyClick = (evt, data) => {
     window
-      .fetch(urlKeyVal, { method: 'HEAD', mode: 'cors' })
-      .then(() => {
-        updateUrlKeyStatus(true);
+      .fetch(`http://localhost:4000/proxyHeadRequest?url=${window.encodeURIComponent(urlKeyVal)}`)
+      .then(res => res.json())
+      .then(data => {
+        console.log(data);
+        console.log(data.status);
+        updateUrlKeyStatus(data.status);
       })
       .catch(() => {
+        alert('error making request');
         updateUrlKeyStatus(false);
       });
   };
@@ -53,6 +109,7 @@ function App({ env }) {
         selection
         options={summaryLevels}
         onChange={(evt, data) => {
+          console.log(data);
           updateSumlevVal(data.value);
           updateSumlevStatus(true);
           updateGeoidVal('');
@@ -66,6 +123,7 @@ function App({ env }) {
         placeholder="Enter a Geoid"
         value={geoidVal}
         onChange={(evt, data) => {
+          console.log(data);
           updateGeoidVal(data.value);
 
           // status
@@ -99,7 +157,7 @@ function App({ env }) {
           onClick: handleUrlKeyClick,
         }}
         label="Url or Key"
-        placeholder="Enter an http(s) endpoint or S3 Key"
+        placeholder="Enter the file Download URL"
         value={urlKeyVal}
         onChange={(evt, data) => {
           updateUrlKeyVal(data.value);

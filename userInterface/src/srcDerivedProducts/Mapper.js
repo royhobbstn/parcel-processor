@@ -1,3 +1,5 @@
+// @ts-check
+
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Grid, Button, Icon, Modal, Header } from 'semantic-ui-react';
 

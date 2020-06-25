@@ -1,3 +1,5 @@
+// @ts-check
+
 import React, { useState, useEffect } from 'react';
 import DPApp from './srcDerivedProducts/App';
 import EnvBar from './EnvBar';
@@ -9,6 +11,11 @@ function AppSwitcher() {
   const [app, updateApp] = useState('');
 
   useEffect(() => {
+    window.setInterval(() => {
+      console.log('down');
+      updateEnv('down');
+    }, 1000 * 60 * 5);
+
     // load possible sub-geographies from a given parent geography
     fetch(`http://localhost:4000/fetchEnv`)
       .then(res => res.json())

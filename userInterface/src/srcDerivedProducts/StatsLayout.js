@@ -1,3 +1,5 @@
+// @ts-check
+
 import React, { useEffect } from 'react';
 import { Grid } from 'semantic-ui-react';
 import AttributesTable from './AttributesTable';
