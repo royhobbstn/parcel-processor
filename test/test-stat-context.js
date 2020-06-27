@@ -5,7 +5,7 @@ const statCounter = new StatContext();
 
 let transformed = 0;
 
-fs.createReadStream(`userInterface/processed/cb_2018_us_county_20m.ndgeojson`)
+fs.createReadStream(`./5fe3a581-65aa145b-15-Hawaii.ndgeojson`)
   .pipe(ndjson.parse())
   .on('data', function (obj) {
     statCounter.countStats(obj);

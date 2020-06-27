@@ -15,6 +15,7 @@ const {
 const { getObject } = require('../util/primitives/s3Operations');
 const { queryHealth } = require('../util/primitives/queries');
 const { processInbox } = require('../processors/processInbox');
+const { processSort } = require('../processors/processSort');
 
 exports.appRouter = async app => {
   //
@@ -163,13 +164,15 @@ exports.appRouter = async app => {
   });
 
   app.get('/processSort', async function (req, res) {
+    await processSort();
+
+    return res.json({ ok: 'ok' });
+
+    // todo open up below
+
     const sortQueueUrl = config.get('SQS.sortQueueUrl');
 
-    const processMessage = data => {
-      console.log('processing sort todo');
-    };
-
-    readMessage(sortQueueUrl, processMessage)
+    readMessage(sortQueueUrl, processSort)
       .then(response => {
         return res.json(response);
       })

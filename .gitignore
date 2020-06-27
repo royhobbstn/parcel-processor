@@ -26,3 +26,6 @@ config/development.json
 config/production.json
 
 logfile.log
+
+test/*.ndgeojson
+test/*.json

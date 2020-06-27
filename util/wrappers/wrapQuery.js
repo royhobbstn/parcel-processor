@@ -198,6 +198,12 @@ async function constructDownloadRecord(
   return query.insertId;
 }
 
+exports.makeS3Key = makeS3Key;
+
+function makeS3Key(str) {
+  return str.replace(/[^a-z0-9]+/gi, '-');
+}
+
 exports.lookupCleanGeoName = async function (fipsDetails) {
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 
@@ -228,7 +234,7 @@ exports.lookupCleanGeoName = async function (fipsDetails) {
   log.info(`Found corresponding geographic area: ${rawGeoName}`);
 
   // Alter geo name to be s3 key friendly (all non alphanumeric become -)
-  const geoName = rawGeoName.replace(/[^a-z0-9]+/gi, '-');
+  const geoName = makeS3Key(rawGeoName);
 
   return { geoid, geoName };
 };

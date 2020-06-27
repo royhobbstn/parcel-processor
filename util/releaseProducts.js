@@ -195,6 +195,7 @@ exports.createTiles = async function (meta, cleanupS3, points, propertyCount, mo
       `${meta.downloadRef}-${meta.productRefTiles}/info.json`,
       JSON.stringify(metadata),
       'application/json',
+      false,
     );
 
     log.info(

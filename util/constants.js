@@ -5,6 +5,7 @@ exports.directories = {
   rawDir: './raw',
   unzippedDir: './unzipped',
   processedDir: './processed',
+  subGeographiesDir: './processors/subGeographies',
 };
 
 // length of refs for products / downloads table

@@ -39,6 +39,7 @@ function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
       selectedFieldKey,
       selectedDownload,
       modalStatsObj,
+      geographies,
     };
 
     fetch(`http://localhost:4000/sendSortSQS`, {

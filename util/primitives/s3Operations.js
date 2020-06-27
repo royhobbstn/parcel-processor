@@ -7,7 +7,7 @@ const zlib = require('zlib');
 const spawn = require('child_process').spawn;
 const { log } = require('../logger');
 
-exports.putTextToS3 = function (bucketName, keyName, text, contentType) {
+exports.putTextToS3 = function (bucketName, keyName, text, contentType, useGzip) {
   return new Promise((resolve, reject) => {
     const objectParams = {
       Bucket: bucketName,
@@ -15,6 +15,18 @@ exports.putTextToS3 = function (bucketName, keyName, text, contentType) {
       Body: text,
       ContentType: contentType,
     };
+
+    if (useGzip) {
+      zlib.gzip(text, function (error, result) {
+        if (error) {
+          return reject(error);
+        }
+        objectParams.Body = result;
+      });
+
+      objectParams.ContentEncoding = 'gzip';
+    }
+
     const uploadPromise = new AWS.S3({ apiVersion: '2006-03-01' })
       .putObject(objectParams)
       .promise();
@@ -70,7 +82,7 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
         log.info(
           `uploading (${filePathToUpload} as s3://${bucket}/${key}) completed successfully.`,
         );
-        log.info(result);
+        log.info('result', result);
         return resolve();
       })
       .catch(err => {
