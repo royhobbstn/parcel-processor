@@ -93,8 +93,6 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
     let writeStream = fs.createWriteStream(`${outputPath}.ndgeojson`);
     let counter = 0; // assign as parcel-outlet unique id
     let errored = 0;
-    const points = []; // point centroid geojson features with parcel-outlet ids
-    let propertyCount = 1; // will be updated below.  count of property attributes per feature.  used for deciding attribute file size and number of clusters
 
     // the finish event is emitted when all data has been flushed from the stream
     writeStream.on('finish', async () => {
@@ -103,7 +101,7 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
 
       log.info(`processed ${counter} features`);
       log.info(`found ${errored} feature errors\n`);
-      return resolve([points, propertyCount]);
+      return resolve();
     });
 
     // load features
@@ -124,13 +122,10 @@ exports.parseFile = function (dataset, chosenLayer, fileName, outputPath) {
           const parsedFeature = getGeoJsonFromGdalFeature(feat, transform);
           if (counter % 10000 === 0) {
             console.log(counter + ' records processed');
-            // my as well do this here (it will happen on feature 0 at the least)
-            propertyCount = Object.keys(parsedFeature.properties).length;
           }
           counter++;
           parsedFeature.properties[idPrefix] = counter;
           statCounter.countStats(parsedFeature);
-          points.push(createPointFeature(parsedFeature));
           writeStream.write(JSON.stringify(parsedFeature) + '\n', 'utf8');
         }
       } catch (e) {
@@ -285,11 +280,11 @@ exports.spawnTippecane = function (tilesDir, derivativePath) {
     const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      log.info(`stdout: ${data.toString()}`);
+      log.info(data.toString());
     });
 
     proc.stderr.on('data', data => {
-      log.info(data.toString());
+      console.log(data.toString());
     });
 
     proc.on('error', err => {
@@ -336,6 +331,40 @@ exports.writeTileAttributes = function (derivativePath, tilesDir) {
       .on('end', end => {
         log.info(transformed + ' records processed');
         resolve('end');
+      });
+  });
+};
+
+exports.extractPointsFromNdGeoJson = async function (outputPath) {
+  return new Promise((resolve, reject) => {
+    log.info('creating derivative ndgeojson with clusterId...');
+
+    let transformed = 0;
+    log.info('extractPointsFromNdGeoJson');
+    log.info({ outputPath });
+    const points = []; // point centroid geojson features with parcel-outlet ids
+    let propertyCount = 1; // will be updated below.  count of property attributes per feature.  used for deciding attribute file size and number of clusters
+
+    fs.createReadStream(`${outputPath}.ndgeojson`)
+      .pipe(ndjson.parse())
+      .on('data', function (obj) {
+        // create a point feature
+        points.push(createPointFeature(obj));
+
+        transformed++;
+        if (transformed % 10000 === 0) {
+          // may as well do this here (it will happen on feature 0 at the least)
+          propertyCount = Object.keys(obj.properties).length;
+          log.info(transformed + ' records processed');
+        }
+      })
+      .on('error', err => {
+        log.error(err);
+        return reject(err);
+      })
+      .on('end', end => {
+        log.info(transformed + ' records processed');
+        return resolve([points, propertyCount]);
       });
   });
 };

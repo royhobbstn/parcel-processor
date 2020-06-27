@@ -10,12 +10,24 @@ const {
 } = require('../util/constants');
 const { acquireConnection } = require('../util/wrappers/wrapQuery');
 const { createProductDownloadKey } = require('../util/wrappers/wrapS3');
-const { putFileToS3, streamS3toFileSystem } = require('../util/primitives/s3Operations');
+const {
+  putFileToS3,
+  streamS3toFileSystem,
+  putTextToS3,
+  s3Sync,
+} = require('../util/primitives/s3Operations');
 const { queryCreateProductRecord } = require('../util/primitives/queries');
-const { convertToFormat } = require('../util/processGeoFile');
-const { generateRef } = require('../util/crypto');
+const {
+  convertToFormat,
+  spawnTippecane,
+  writeTileAttributes,
+  addClusterIdToGeoData,
+  createNdGeoJsonWithClusterId,
+  extractPointsFromNdGeoJson,
+} = require('../util/processGeoFile');
+const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { doBasicCleanup } = require('../util/cleanup');
-const { zipShapefile } = require('../util/filesystemUtil');
+const { zipShapefile, getMaxDirectoryLevel } = require('../util/filesystemUtil');
 const { log } = require('../util/logger');
 
 exports.processProducts = async function () {
@@ -25,11 +37,11 @@ exports.processProducts = async function () {
   await doBasicCleanup([directories.productTemp], true, true);
 
   const messagePayload = {
-    dryRun: true,
+    dryRun: false,
     products: [
-      fileFormats.GEOJSON.label,
-      fileFormats.GPKG.label,
-      fileFormats.SHP.label,
+      //   fileFormats.GEOJSON.label,
+      //   fileFormats.GPKG.label,
+      //   fileFormats.SHP.label,
       fileFormats.TILES.label,
     ],
     productRef: '6f612f99',
@@ -54,6 +66,11 @@ exports.processProducts = async function () {
   const productRef = messagePayload.productRef;
   const productKey = messagePayload.productKey;
   const downloadId = messagePayload.downloadId;
+  const geoid = messagePayload.geoid;
+  const geoName = messagePayload.geoName;
+  const downloadRef = messagePayload.downloadRef;
+  const productOrigin = messagePayload.productOrigin;
+  const fipsDetails = messagePayload.fipsDetails;
 
   const fileNameBase = productKey.split('/').slice(-1)[0];
   const fileNameNoExtension = fileNameBase.split('.').slice(0, -1)[0];
@@ -70,16 +87,17 @@ exports.processProducts = async function () {
     destUnzipped,
   );
 
+  // GEOJSON
   if (messagePayload.products.includes(fileFormats.GEOJSON.label)) {
     await convertToFormat(fileFormats.GEOJSON, convertToFormatBase);
 
     const individualRefGeoJson = generateRef(referenceIdLength);
 
     const productKeyGeoJSON = createProductDownloadKey(
-      messagePayload.fipsDetails,
-      messagePayload.geoid,
-      messagePayload.geoName,
-      messagePayload.downloadRef,
+      fipsDetails,
+      geoid,
+      geoName,
+      downloadRef,
       productRef,
       individualRefGeoJson,
     );
@@ -95,12 +113,12 @@ exports.processProducts = async function () {
       log.info(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
 
       await queryCreateProductRecord(
-        messagePayload.downloadId,
+        downloadId,
         productRef,
         individualRefGeoJson,
         fileFormats.GEOJSON.extension,
-        messagePayload.productOrigin,
-        messagePayload.geoid,
+        productOrigin,
+        geoid,
         `${productKeyGeoJSON}.geojson`,
       );
       log.info(`created geoJSON product record.  ref: ${individualRefGeoJson}`);
@@ -110,15 +128,16 @@ exports.processProducts = async function () {
   // file conversion is bound to be problematic for GPKG and SHP
   // dont crash program on account of failures here
 
+  // GPKG
   if (messagePayload.products.includes(fileFormats.GPKG.label)) {
     try {
       await convertToFormat(fileFormats.GPKG, convertToFormatBase);
       const individualRefGPKG = generateRef(referenceIdLength);
       const productKeyGPKG = createProductDownloadKey(
-        messagePayload.fipsDetails,
-        messagePayload.geoid,
-        messagePayload.geoName,
-        messagePayload.downloadRef,
+        fipsDetails,
+        geoid,
+        geoName,
+        downloadRef,
         productRef,
         individualRefGPKG,
       );
@@ -138,8 +157,8 @@ exports.processProducts = async function () {
           productRef,
           individualRefGPKG,
           fileFormats.GPKG.extension,
-          messagePayload.productOrigin,
-          messagePayload.geoid,
+          productOrigin,
+          geoid,
           `${productKeyGPKG}.gpkg`,
         );
         log.info(`created GPKG product record.  ref: ${individualRefGPKG}`);
@@ -150,15 +169,16 @@ exports.processProducts = async function () {
     }
   }
 
+  // SHP
   if (messagePayload.products.includes(fileFormats.SHP.label)) {
     try {
       await convertToFormat(fileFormats.SHP, convertToFormatBase);
       const individualRefSHP = generateRef(referenceIdLength);
       const productKeySHP = createProductDownloadKey(
-        messagePayload.fipsDetails,
-        messagePayload.geoid,
-        messagePayload.geoName,
-        messagePayload.downloadRef,
+        fipsDetails,
+        geoid,
+        geoName,
+        downloadRef,
         productRef,
         individualRefSHP,
       );
@@ -179,8 +199,8 @@ exports.processProducts = async function () {
           productRef,
           individualRefSHP,
           fileFormats.SHP.extension,
-          messagePayload.productOrigin,
-          messagePayload.geoid,
+          productOrigin,
+          geoid,
           `${productKeySHP}-shp.zip`,
         );
         log.info(`created SHP product record.  ref: ${individualRefSHP}`);
@@ -191,7 +211,66 @@ exports.processProducts = async function () {
     }
   }
 
-  // todo TILES
+  // TILES
+  // but not on State Data
+  if (messagePayload.products.includes(fileFormats.TILES.label) && fipsDetails.SUMLEV !== '040') {
+    const productRefTiles = generateRef(referenceIdLength);
+
+    const meta = {
+      geoid,
+      geoName,
+      fipsDetails,
+      downloadId,
+      downloadRef,
+      productRef,
+      productRefTiles,
+    };
+
+    const [points, propertyCount] = await extractPointsFromNdGeoJson(convertToFormatBase);
+
+    // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
+    const lookup = addClusterIdToGeoData(points, propertyCount);
+
+    // create derivative ndgeojson with clusterId
+    const derivativePath = await createNdGeoJsonWithClusterId(convertToFormatBase, lookup);
+
+    const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
+    const tilesDir = `${directories.processedDir}/${dirName}`;
+
+    // todo include cluster_id as property in tippecanoe
+    const commandInput = await spawnTippecane(tilesDir, derivativePath);
+    const maxZoom = getMaxDirectoryLevel(tilesDir);
+    await writeTileAttributes(derivativePath, tilesDir);
+    await gzipTileAttributes(`${tilesDir}/attributes`);
+    const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
+
+    // sync tiles
+    if (!isDryRun) {
+      await s3Sync(tilesDir, config.get('Buckets.tilesBucket'), dirName);
+      log.info(`uploaded TILES directory to S3.  Dir: ${dirName}`);
+
+      // write metadata
+      await putTextToS3(
+        config.get('Buckets.tilesBucket'),
+        `${dirName}/info.json`,
+        JSON.stringify(metadata),
+        'application/json',
+        false,
+      );
+      log.info(`uploaded TILES meta file to S3.  Dir: ${dirName}/info.json`);
+
+      await queryCreateProductRecord(
+        downloadId,
+        productRef,
+        productRefTiles,
+        fileFormats.TILES.extension,
+        productOrigins.ORIGINAL,
+        geoid,
+        dirName,
+      );
+      log.info(`created TILES product record.  ref: ${productRefTiles}`);
+    }
+  }
 
   // todo cleanup
 

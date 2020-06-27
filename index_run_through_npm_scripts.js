@@ -169,36 +169,4 @@ async function runMain(cleanupS3, filePath, mode) {
   }
 
   return;
-
-  // TODO points, propertyCount should be somewhere else
-
-  // TODO split saving NDGeoJSON record back out here to main.
-
-  // ------- end.  everything below is separate lambda
-
-  // // construct tiles (states dont get tiles.  too big.)
-  // if (fipsDetails.SUMLEV !== '040') {
-  //   const productRefTiles = generateRef(referenceIdLength);
-  //   const meta = {
-  //     filePath,
-  //     sourceId,
-  //     geoid,
-  //     geoName,
-  //     fipsDetails,
-  //     downloadId,
-  //     downloadRef,
-  //     outputPath,
-  //     productRefTiles,
-  //     rawKey,
-  //   };
-  //   await createTiles(
-  //     meta,
-  //     cleanupS3,
-  //     points,
-  //     propertyCount,
-  //     mode,
-  //   );
-  // } else {
-  //   console.log(`TILES generation doesn't run on States, and was skipped`);
-  // }
 }
