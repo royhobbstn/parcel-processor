@@ -22,23 +22,28 @@ exports.doBasicCleanup = async function (dirs, silent, cleanProcessedBool) {
     fs.writeFileSync(`${directories.processedDir}/.gitignore`, '*\n!.gitignore\n');
   }
 
-  const movedFiles = [];
+  await new Promise((resolve, reject) => {
+    dirs.forEach(dir => {
+      fs.readdir(dir, async (err, files) => {
+        if (err) {
+          return reject(err);
+        }
 
-  dirs.forEach(dir => {
-    fs.readdir(dir, (err, files) => {
-      if (err) throw err;
+        const filteredFiles = files.filter(file => {
+          return !file.includes('gitignore');
+        });
 
-      const filteredFiles = files.filter(file => {
-        return !file.includes('gitignore');
-      });
+        const movedFiles = [];
 
-      filteredFiles.forEach(file => {
-        movedFiles.push(moveFile(`${dir}/${file}`, `${directories.processedDir}/${file}`));
+        filteredFiles.forEach(file => {
+          movedFiles.push(moveFile(`${dir}/${file}`, `${directories.processedDir}/${file}`));
+        });
+
+        await Promise.all(movedFiles);
+        resolve();
       });
     });
   });
-
-  await Promise.all(movedFiles);
 
   if (!silent) {
     dirs.forEach(dir => {

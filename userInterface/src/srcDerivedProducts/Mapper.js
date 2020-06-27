@@ -30,8 +30,10 @@ function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
     }
   };
 
-  const sendMapping = (evt, data) => {
-    updateDisableCreate(true);
+  const sendMapping = dryRun => {
+    if (!dryRun) {
+      updateDisableCreate(true);
+    }
     updateModalIsOpen(false);
 
     // create payload
@@ -40,6 +42,7 @@ function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
       selectedDownload,
       modalStatsObj,
       geographies,
+      dryRun,
     };
 
     fetch(`http://localhost:4000/sendSortSQS`, {
@@ -276,15 +279,28 @@ function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
                 </ul>
               </div>
             ) : null}
-            <div style={{ margin: 'auto', width: '220px', height: '40px' }}>
+            <div style={{ margin: 'auto', width: '350px', height: '40px' }}>
               <Button
                 style={{ width: '90px' }}
                 floated="left"
                 size="small"
                 color="blue"
-                onClick={sendMapping}
+                onClick={() => {
+                  sendMapping(false);
+                }}
               >
                 OK
+              </Button>
+              <Button
+                style={{ width: '90px', marginLeft: '40px' }}
+                size="small"
+                basic
+                color="blue"
+                onClick={() => {
+                  sendMapping(true);
+                }}
+              >
+                Dry Run
               </Button>
               <Button
                 style={{ width: '90px' }}

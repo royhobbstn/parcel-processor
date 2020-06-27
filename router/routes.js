@@ -16,6 +16,7 @@ const { getObject } = require('../util/primitives/s3Operations');
 const { queryHealth } = require('../util/primitives/queries');
 const { processInbox } = require('../processors/processInbox');
 const { processSort } = require('../processors/processSort');
+const { processProducts } = require('../processors/processProducts');
 
 exports.appRouter = async app => {
   //
@@ -164,7 +165,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/processSort', async function (req, res) {
-    await processSort();
+    await processSort(); // todo streamline logic here to make this await properly
 
     return res.json({ ok: 'ok' });
 
@@ -181,7 +182,13 @@ exports.appRouter = async app => {
       });
   });
 
-  app.get('/processProduct', async function (req, res) {
+  app.get('/processProducts', async function (req, res) {
+    await processProducts(); // todo streamline logic here to make this await properly
+
+    return res.json({ ok: 'ok' });
+
+    // todo open up below
+
     const productQueueUrl = config.get('SQS.productQueueUrl');
 
     const processMessage = data => {

@@ -85,17 +85,24 @@ exports.createRawDownloadKey = function (fipsDetails, geoid, geoName, downloadRe
   return `${key}.zip`;
 };
 
-exports.createProductDownloadKey = function (fipsDetails, geoid, geoName, downloadRef, productRef) {
+exports.createProductDownloadKey = function (
+  fipsDetails,
+  geoid,
+  geoName,
+  downloadRef,
+  productRef,
+  individualRef,
+) {
   const stateName = lookupState(fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
 
   let key;
 
   if (fipsDetails.SUMLEV === '040') {
-    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${productRef}-${geoid}-${geoName}`;
+    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${productRef}-${individualRef}-${geoid}-${geoName}`;
   } else if (fipsDetails.SUMLEV === '050') {
-    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${productRef}-${geoid}-${geoName}-${stateName}`;
+    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${productRef}-${individualRef}-${geoid}-${geoName}-${stateName}`;
   } else if (fipsDetails.SUMLEV === '160') {
-    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.PLACEFIPS}-${geoName}/${downloadRef}-${productRef}-${geoid}-${geoName}-${stateName}`;
+    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.PLACEFIPS}-${geoName}/${downloadRef}-${productRef}-${individualRef}-${geoid}-${geoName}-${stateName}`;
   } else {
     throw new Error('unexpected sumlev.');
   }

@@ -6,6 +6,7 @@ const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
 const { log } = require('../logger');
+const S3 = new AWS.S3({ apiVersion: '2006-03-01' });
 
 exports.putTextToS3 = function (bucketName, keyName, text, contentType, useGzip) {
   return new Promise((resolve, reject) => {
@@ -27,9 +28,7 @@ exports.putTextToS3 = function (bucketName, keyName, text, contentType, useGzip)
       objectParams.ContentEncoding = 'gzip';
     }
 
-    const uploadPromise = new AWS.S3({ apiVersion: '2006-03-01' })
-      .putObject(objectParams)
-      .promise();
+    const uploadPromise = S3.putObject(objectParams).promise();
     uploadPromise
       .then(data => {
         log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
@@ -48,7 +47,6 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
     log.info(`uploading file to s3 (${filePathToUpload} as s3://${bucket}/${key}), please wait...`);
 
     const uploadStream = () => {
-      const s3 = new AWS.S3();
       const pass = new stream.PassThrough();
 
       let params = {
@@ -64,7 +62,7 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
 
       return {
         writeStream: pass,
-        promise: s3.upload(params).promise(),
+        promise: S3.upload(params).promise(),
       };
     };
     const { writeStream, promise } = uploadStream();
@@ -95,8 +93,7 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
 
 exports.getObject = function (bucket, key) {
   return new Promise((resolve, reject) => {
-    const s3 = new AWS.S3();
-    s3.getObject(
+    S3.getObject(
       {
         Bucket: bucket,
         Key: key,
@@ -163,14 +160,12 @@ exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder)
 exports.emptyS3Directory = emptyDirectory;
 
 async function emptyDirectory(bucket, dir) {
-  const s3 = new AWS.S3();
-
   const listParams = {
     Bucket: bucket,
     Prefix: dir,
   };
 
-  const listedObjects = await s3.listObjectsV2(listParams).promise();
+  const listedObjects = await S3.listObjectsV2(listParams).promise();
 
   if (listedObjects.Contents.length === 0) {
     return;
@@ -185,10 +180,50 @@ async function emptyDirectory(bucket, dir) {
     deleteParams.Delete.Objects.push({ Key });
   });
 
-  const result = await s3.deleteObjects(deleteParams).promise();
+  const result = await S3.deleteObjects(deleteParams).promise();
   log.info(result);
 
   if (listedObjects.IsTruncated) {
     await emptyDirectory(bucket, dir);
   }
 }
+
+// streams a download to the filesystem.
+// optionally un-gzips the file to a new location
+exports.streamS3toFileSystem = function (bucket, key, s3DestFile, s3UnzippedFile = null) {
+  // const s3DestFile = './archive.gz';
+  // const s3UnzippedFile = './deflated.csv';
+
+  return new Promise((resolve, reject) => {
+    const gunzip = zlib.createGunzip();
+    const file = fs.createWriteStream(s3DestFile);
+
+    S3.getObject({ Bucket: bucket, Key: key })
+      .on('error', function (err) {
+        log.error(err);
+        return reject(err);
+      })
+      .on('httpData', function (chunk) {
+        file.write(chunk);
+      })
+      .on('httpDone', function () {
+        file.end();
+        console.log('downloaded file to' + s3DestFile);
+
+        if (s3UnzippedFile) {
+          fs.createReadStream(s3DestFile)
+            .on('error', err => {
+              log.error(err);
+              return reject(err);
+            })
+            .on('end', () => {
+              console.log('deflated to ' + s3UnzippedFile);
+              return resolve();
+            })
+            .pipe(gunzip)
+            .pipe(fs.createWriteStream(s3UnzippedFile));
+        }
+      })
+      .send();
+  });
+};

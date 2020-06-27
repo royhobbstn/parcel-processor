@@ -32,6 +32,7 @@ exports.DBWrites = async function (
   productRef,
   geoid,
   productKey,
+  individualRef,
 ) {
   // refresh connection just in case the upload /parse took a long time
   await acquireConnection();
@@ -68,11 +69,11 @@ exports.DBWrites = async function (
     await queryCreateProductRecord(
       downloadId,
       productRef,
+      individualRef,
       fileFormats.NDGEOJSON.extension,
       productOrigins.ORIGINAL,
       geoid,
       `${productKey}.ndgeojson`,
-      transactionId,
     );
 
     await commitTransaction(transactionId);

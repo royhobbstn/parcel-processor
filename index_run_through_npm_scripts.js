@@ -139,9 +139,17 @@ async function runMain(cleanupS3, filePath, mode) {
   await parseFile(dataset, chosenLayer, fileName, outputPath);
 
   const productRef = generateRef(referenceIdLength);
+  const individualRef = generateRef(referenceIdLength);
 
   // contains no file extension.  Used as base key for -stat.json  and .ndgeojson
-  const productKey = createProductDownloadKey(fipsDetails, geoid, geoName, downloadRef, productRef);
+  const productKey = createProductDownloadKey(
+    fipsDetails,
+    geoid,
+    geoName,
+    downloadRef,
+    productRef,
+    individualRef,
+  );
 
   if (mode.label === modes.FULL_RUN.label) {
     await S3Writes(cleanupS3, filePath, rawKey, productKey, outputPath);

@@ -6,6 +6,7 @@ exports.directories = {
   unzippedDir: './unzipped',
   processedDir: './processed',
   subGeographiesDir: './processors/subGeographies',
+  productTemp: './processors/productTemp',
 };
 
 // length of refs for products / downloads table
@@ -32,11 +33,11 @@ exports.dispositions = {
 };
 
 exports.fileFormats = {
-  NDGEOJSON: { driver: 'GeoJSONSeq', extension: 'ndgeojson' },
-  GEOJSON: { driver: 'GeoJSON', extension: 'geojson' },
-  GPKG: { driver: 'GPKG', extension: 'gpkg' },
-  SHP: { driver: 'ESRI Shapefile', extension: 'shp' },
-  TILES: { driver: '', extension: 'pbf' },
+  NDGEOJSON: { driver: 'GeoJSONSeq', extension: 'ndgeojson', label: 'NDGEOJSON' },
+  GEOJSON: { driver: 'GeoJSON', extension: 'geojson', label: 'GEOJSON' },
+  GPKG: { driver: 'GPKG', extension: 'gpkg', label: 'GPKG' },
+  SHP: { driver: 'ESRI Shapefile', extension: 'shp', label: 'SHP' },
+  TILES: { driver: '', extension: 'pbf', label: 'TILES' },
 };
 
 exports.productOrigins = {

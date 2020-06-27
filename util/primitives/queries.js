@@ -1,5 +1,7 @@
 // @ts-check
 const config = require('config');
+const { generateRef } = require('../crypto');
+const { referenceIdLength } = require('../constants');
 
 const slsAuroraClient = require('data-api-client')({
   secretArn: config.get('RDS.secretArn'),
@@ -73,6 +75,7 @@ exports.queryCreateDownloadRecord = function (
 exports.queryCreateProductRecord = function (
   downloadId,
   productRef,
+  individualRef,
   productType,
   productOrigin,
   geoid,
@@ -81,8 +84,16 @@ exports.queryCreateProductRecord = function (
 ) {
   return slsAuroraClient.query({
     sql:
-      'INSERT INTO products(download_id, product_ref, product_type, product_origin, geoid, product_key) VALUES (:downloadId, :productRef, :productType, :productOrigin, :geoid, :productKey);',
-    parameters: { downloadId, productRef, productType, productOrigin, geoid, productKey },
+      'INSERT INTO products(download_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key) VALUES (:downloadId, :productRef, :individualRef, :productType, :productOrigin, :geoid, :productKey);',
+    parameters: {
+      downloadId,
+      productRef,
+      individualRef,
+      productType,
+      productOrigin,
+      geoid,
+      productKey,
+    },
     transactionId,
   });
 };

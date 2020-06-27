@@ -28,6 +28,7 @@ async function processSort(data) {
   await doBasicCleanup([directories.subGeographiesDir], false, true);
 
   const messagePayload = {
+    dryRun: true,
     selectedFieldKey: 'county',
     selectedDownload: {
       geoid: '15',
@@ -67,6 +68,7 @@ async function processSort(data) {
   // const messagePayload = JSON.parse(data.Messages[0].Body);
   console.log(messagePayload);
 
+  const isDryRun = messagePayload.dryRun;
   const bucket = config.get('Buckets.productsBucket');
   const selectedFieldKey = messagePayload.selectedFieldKey;
   const remoteFile = `https://${bucket}.s3.us-east-2.amazonaws.com/${messagePayload.selectedDownload.product_key}`;
@@ -169,6 +171,7 @@ async function processSort(data) {
 
           // create product ref
           const productRef = generateRef(referenceIdLength);
+          const individualRef = generateRef(referenceIdLength);
 
           const productKey = createProductDownloadKey(
             createFipsDetailsForCounty(file),
@@ -176,46 +179,49 @@ async function processSort(data) {
             geonameLookup[file],
             downloadRef,
             productRef,
+            individualRef,
           );
 
-          // async operations done in parallel
-          const operations = [];
+          if (!isDryRun) {
+            // async operations done in parallel
+            const operations = [];
 
-          // upload stat file
-          operations.push(
-            putTextToS3(
-              config.get('Buckets.productsBucket'),
-              `${productKey}-stat.json`,
-              JSON.stringify(statCounter.export()),
-              'application/json',
-              true,
-            ),
-          );
+            // upload stat file
+            operations.push(
+              putTextToS3(
+                config.get('Buckets.productsBucket'),
+                `${productKey}-stat.json`,
+                JSON.stringify(statCounter.export()),
+                'application/json',
+                true,
+              ),
+            );
 
-          // upload ndgeojson file
-          operations.push(
-            putFileToS3(
-              config.get('Buckets.productsBucket'),
-              `${productKey}.ndgeojson`,
-              path,
-              'application/geo+json-seq',
-              true,
-            ),
-          );
+            // upload ndgeojson file
+            operations.push(
+              putFileToS3(
+                config.get('Buckets.productsBucket'),
+                `${productKey}.ndgeojson`,
+                path,
+                'application/geo+json-seq',
+                true,
+              ),
+            );
 
-          // write product record
-          operations.push(
-            queryCreateProductRecord(
-              downloadId,
-              productRef,
-              fileFormats.NDGEOJSON.extension,
-              productOrigins.DERIVED,
-              file,
-              `${productKey}.ndgeojson`,
-            ),
-          );
+            // write product record
+            operations.push(
+              queryCreateProductRecord(
+                downloadId,
+                productRef,
+                fileFormats.NDGEOJSON.extension,
+                productOrigins.DERIVED,
+                file,
+                `${productKey}.ndgeojson`,
+              ),
+            );
 
-          await Promise.all(operations);
+            await Promise.all(operations);
+          }
 
           return resolve();
         });
