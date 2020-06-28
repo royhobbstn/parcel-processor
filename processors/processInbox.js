@@ -1,9 +1,16 @@
 // @ts-check
 const fs = require('fs');
 const axios = require('axios').default;
+const config = require('config');
 const { log } = require('../util/logger');
-const { directories, modes, referenceIdLength } = require('../util/constants');
+const {
+  directories,
+  referenceIdLength,
+  productOrigins,
+  fileFormats,
+} = require('../util/constants');
 const { doBasicCleanup } = require('../util/cleanup');
+const { sendQueueMessage } = require('../util/sqsOperations');
 const {
   removeS3Files,
   createRawDownloadKey,
@@ -49,18 +56,22 @@ async function processInbox(data) {
 
   const cleanupS3 = [];
 
-  const mode = messagePayload.dryRun ? modes.DRY_RUN : modes.FULL_RUN;
+  const isDryRun = messagePayload.dryRun;
 
   await doBasicCleanup([directories.outputDir, directories.unzippedDir], true, true);
 
   try {
-    await runMain(cleanupS3, filePath, mode, messagePayload);
+    const payload = await runMain(cleanupS3, filePath, isDryRun, messagePayload);
 
-    if (mode.label === modes.FULL_RUN.label) {
+    if (!isDryRun) {
       await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
+
+      // Send SQS message to create products
+      const productsQueueUrl = config.get('SQS.sortQueueUrl');
+      await sendQueueMessage(productsQueueUrl, payload);
     } else {
       log.info(
-        `\nBecause this was a ${mode.label} no database records or S3 files have been written.  \nYour file remains in the raw directory.\n`,
+        `\nBecause this was a dryRun no database records or S3 files have been written.  \nYour file remains in the raw directory.\n`,
       );
       await doBasicCleanup([directories.outputDir, directories.unzippedDir]);
     }
@@ -69,7 +80,7 @@ async function processInbox(data) {
   } catch (err) {
     log.error(err);
 
-    if (mode.label === modes.FULL_RUN.label) {
+    if (!isDryRun) {
       try {
         await removeS3Files(cleanupS3);
         log.error('All created S3 assets have been deleted');
@@ -84,7 +95,7 @@ async function processInbox(data) {
   }
 }
 
-async function runMain(cleanupS3, filePath, mode, messagePayload) {
+async function runMain(cleanupS3, filePath, isDryRun, messagePayload) {
   const sourceNameInput = messagePayload.sourceVal;
 
   const computedHash = await computeHash(filePath);
@@ -143,10 +154,12 @@ async function runMain(cleanupS3, filePath, mode, messagePayload) {
     individualRef,
   );
 
-  if (mode.label === modes.FULL_RUN.label) {
+  let downloadId;
+
+  if (!isDryRun) {
     await S3Writes(cleanupS3, filePath, rawKey, productKey, outputPath);
 
-    const transactionId = await DBWrites(
+    downloadId = await DBWrites(
       sourceNameInput,
       computedHash,
       rawKey,
@@ -157,11 +170,27 @@ async function runMain(cleanupS3, filePath, mode, messagePayload) {
       productKey,
       individualRef,
     );
-
-    return transactionId;
   }
 
-  return;
+  const productSqsPayload = {
+    dryRun: false,
+    products: [
+      fileFormats.GEOJSON.label,
+      fileFormats.GPKG.label,
+      fileFormats.SHP.label,
+      fileFormats.TILES.label,
+    ],
+    productRef,
+    productOrigin: productOrigins.ORIGINAL,
+    fipsDetails,
+    geoid,
+    geoName,
+    downloadRef,
+    downloadId,
+    productKey,
+  };
+
+  return productSqsPayload;
 }
 
 // https://stackoverflow.com/a/61269447/8896489

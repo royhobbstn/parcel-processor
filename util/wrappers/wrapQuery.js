@@ -19,7 +19,7 @@ const {
   commitTransaction,
   rollbackTransaction,
 } = require('../primitives/queries');
-const { getSourceType } = require('../prompts');
+const { getSourceType } = require('../misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('../constants');
 const { log } = require('../logger');
 
@@ -81,6 +81,7 @@ exports.DBWrites = async function (
     log.info(`Recorded source check as disposition: 'viewed'`);
     log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
     log.info(`wrote NDgeoJSON product record.  ref: ${productRef}`);
+    return downloadId;
   } catch (e) {
     log.error(e);
     await rollbackTransaction(transactionId);

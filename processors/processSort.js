@@ -16,6 +16,7 @@ const { makeS3Key, acquireConnection } = require('../util/wrappers/wrapQuery');
 const { createProductDownloadKey } = require('../util/wrappers/wrapS3');
 const { putFileToS3, putTextToS3 } = require('../util/primitives/s3Operations');
 const { doBasicCleanup } = require('../util/cleanup');
+const { log } = require('winston');
 
 let counter = 0;
 
@@ -78,48 +79,65 @@ async function processSort(data) {
   const geonameLookup = keifyGeographies(messagePayload.geographies);
   const files = Array.from(new Set(Object.values(geoidTranslator)));
   const fileWrites = [];
-  const dataToProcess = [];
-  let lastChunkPiece = '';
 
-  // request the file
-  axios.get(remoteFile, { responseType: 'stream', adapter: httpAdapter }).then(response => {
-    const stream = response.data;
-    stream.on('data', chunk => {
-      const rawData = new Buffer.from(chunk).toString();
-      const splitData = rawData.split('\n');
+  await sortData();
 
-      if (splitData.length === 0) {
-      } else if (splitData.length === 1) {
-        lastChunkPiece = lastChunkPiece + splitData[0];
-      } else {
-        dataToProcess.push(JSON.parse(lastChunkPiece + splitData[0]));
+  // iterate through files and process each (stat files, s3 and db records)
+  for (let file of files) {
+    await processFile(file);
+  }
+  await doBasicCleanup([directories.subGeographiesDir], false, true);
 
-        for (let s = 1; s < splitData.length - 1; s++) {
-          dataToProcess.push(JSON.parse(splitData[s]));
-        }
-        lastChunkPiece = splitData[splitData.length - 1];
-      }
+  log.info('done with processSort');
 
-      processData(dataToProcess);
+  // ---- functions only below
+
+  function sortData() {
+    return new Promise((resolve, reject) => {
+      const dataToProcess = [];
+      let lastChunkPiece = '';
+
+      // request the file
+      axios.get(remoteFile, { responseType: 'stream', adapter: httpAdapter }).then(response => {
+        const stream = response.data;
+        stream.on('data', chunk => {
+          const rawData = new Buffer.from(chunk).toString();
+          const splitData = rawData.split('\n');
+
+          if (splitData.length === 0) {
+          } else if (splitData.length === 1) {
+            lastChunkPiece = lastChunkPiece + splitData[0];
+          } else {
+            dataToProcess.push(JSON.parse(lastChunkPiece + splitData[0]));
+
+            for (let s = 1; s < splitData.length - 1; s++) {
+              dataToProcess.push(JSON.parse(splitData[s]));
+            }
+            lastChunkPiece = splitData[splitData.length - 1];
+          }
+
+          processData(dataToProcess);
+        });
+        stream.on('error', err => {
+          log.error(err);
+          return reject(err);
+        });
+        stream.on('end', async () => {
+          // might only happen if there is no newline after last record
+          if (lastChunkPiece) {
+            dataToProcess.push(JSON.parse(lastChunkPiece));
+            processData(dataToProcess);
+          }
+
+          console.log('done reading remote file.');
+          await Promise.all(fileWrites);
+          console.log(`processed ${counter} lines`);
+
+          return resolve();
+        });
+      });
     });
-    stream.on('end', async () => {
-      // might only happen if there is no newline after last record
-      if (lastChunkPiece) {
-        dataToProcess.push(JSON.parse(lastChunkPiece));
-        processData(dataToProcess);
-      }
-
-      console.log('done reading remote file.');
-      await Promise.all(fileWrites);
-      console.log(`processed ${counter} lines`);
-
-      // iterate through files and process each (stat files, s3 and db records)
-      for (let file of files) {
-        await processFile(file);
-      }
-      await doBasicCleanup([directories.subGeographiesDir], false, true);
-    });
-  });
+  }
 
   function processData(dataArr) {
     while (dataArr.length) {
@@ -142,90 +160,66 @@ async function processSort(data) {
     fileWrites.push(appendFileAsync(fullPathFilename, obj));
   }
 
-  function processFile(file) {
-    return new Promise((resolve, reject) => {
-      console.log(`processing: ${geonameLookup[file]}`);
-      // file is a plain geoid with no file extension
-      const path = `${directories.subGeographiesDir}/${file}`;
+  async function processFile(file) {
+    console.log(`processing: ${geonameLookup[file]}`);
+    // file is a plain geoid with no file extension
+    const path = `${directories.subGeographiesDir}/${file}`;
 
-      // read each file as ndjson and create stat object
-      let transformed = 0;
-      const statCounter = new StatContext();
+    const statExport = await countStats(path);
 
-      fs.createReadStream(path)
-        .pipe(ndjson.parse())
-        .on('data', function (obj) {
-          statCounter.countStats(obj);
+    // create product ref
+    const productRef = generateRef(referenceIdLength);
+    const individualRef = generateRef(referenceIdLength);
 
-          transformed++;
-          if (transformed % 10000 === 0) {
-            console.log(transformed + ' records processed');
-          }
-        })
-        .on('error', err => {
-          console.error(err);
-          return reject(err);
-        })
-        .on('end', async end => {
-          console.log(transformed + ' records processed');
+    const productKey = createProductDownloadKey(
+      createFipsDetailsForCounty(file),
+      file,
+      geonameLookup[file],
+      downloadRef,
+      productRef,
+      individualRef,
+    );
 
-          // create product ref
-          const productRef = generateRef(referenceIdLength);
-          const individualRef = generateRef(referenceIdLength);
+    if (!isDryRun) {
+      // async operations done in parallel
+      const operations = [];
 
-          const productKey = createProductDownloadKey(
-            createFipsDetailsForCounty(file),
-            file,
-            geonameLookup[file],
-            downloadRef,
-            productRef,
-            individualRef,
-          );
+      // upload stat file
+      operations.push(
+        putTextToS3(
+          config.get('Buckets.productsBucket'),
+          `${productKey}-stat.json`,
+          JSON.stringify(statExport),
+          'application/json',
+          true,
+        ),
+      );
 
-          if (!isDryRun) {
-            // async operations done in parallel
-            const operations = [];
+      // upload ndgeojson file
+      operations.push(
+        putFileToS3(
+          config.get('Buckets.productsBucket'),
+          `${productKey}.ndgeojson`,
+          path,
+          'application/geo+json-seq',
+          true,
+        ),
+      );
 
-            // upload stat file
-            operations.push(
-              putTextToS3(
-                config.get('Buckets.productsBucket'),
-                `${productKey}-stat.json`,
-                JSON.stringify(statCounter.export()),
-                'application/json',
-                true,
-              ),
-            );
+      // write product record
+      operations.push(
+        queryCreateProductRecord(
+          downloadId,
+          productRef,
+          fileFormats.NDGEOJSON.extension,
+          productOrigins.DERIVED,
+          file,
+          `${productKey}.ndgeojson`,
+        ),
+      );
 
-            // upload ndgeojson file
-            operations.push(
-              putFileToS3(
-                config.get('Buckets.productsBucket'),
-                `${productKey}.ndgeojson`,
-                path,
-                'application/geo+json-seq',
-                true,
-              ),
-            );
-
-            // write product record
-            operations.push(
-              queryCreateProductRecord(
-                downloadId,
-                productRef,
-                fileFormats.NDGEOJSON.extension,
-                productOrigins.DERIVED,
-                file,
-                `${productKey}.ndgeojson`,
-              ),
-            );
-
-            await Promise.all(operations);
-          }
-
-          return resolve();
-        });
-    });
+      await Promise.all(operations);
+    }
   }
 }
 
@@ -257,4 +251,32 @@ function createFipsDetailsForCounty(geoid) {
     COUNTYFIPS: geoid.slice(2),
     PLACEFIPS: '',
   };
+}
+
+function countStats(path) {
+  return new Promise((resolve, reject) => {
+    // read each file as ndjson and create stat object
+    let transformed = 0;
+    const statCounter = new StatContext();
+
+    fs.createReadStream(path)
+      .pipe(ndjson.parse())
+      .on('data', function (obj) {
+        statCounter.countStats(obj);
+
+        transformed++;
+        if (transformed % 10000 === 0) {
+          console.log(transformed + ' records processed');
+        }
+      })
+      .on('error', err => {
+        console.error(err);
+        return reject(err);
+      })
+      .on('end', async () => {
+        console.log(transformed + ' records processed');
+
+        return resolve(statCounter.export());
+      });
+  });
 }
