@@ -1,4 +1,7 @@
 {
+  "Worker": {
+    "port": ""
+  },
   "SQS": {
     "sortQueueUrl": "",
     "productQueueUrl": "",

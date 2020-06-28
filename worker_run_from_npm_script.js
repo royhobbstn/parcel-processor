@@ -1,12 +1,12 @@
 // @ts-check
 
 const express = require('express');
-const { appRouter } = require('./router/app-routes.js');
+const { appRouter } = require('./router/worker-routes.js');
 const { commonRouter } = require('./router/common-routes');
 const bodyParser = require('body-parser');
-
+const config = require('config');
 const app = express();
-const port = 4000;
+const port = config.get('Worker.port');
 
 app.use(bodyParser.json());
 app.use(express.static('public'));
@@ -20,4 +20,4 @@ app.use(function (req, res, next) {
 commonRouter(app);
 appRouter(app);
 
-app.listen(port, () => console.log(`App Listening at http://localhost:${port}`));
+app.listen(port, () => console.log(`Worker Listening at http://localhost:${port}`));

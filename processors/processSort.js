@@ -221,6 +221,7 @@ async function processSort(data) {
       await Promise.all(operations);
 
       // Send SQS message to create products
+
       const productsQueueUrl = config.get('SQS.productQueueUrl');
       const payload = {
         dryRun: false,
