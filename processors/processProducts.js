@@ -30,7 +30,7 @@ const { doBasicCleanup } = require('../util/cleanup');
 const { zipShapefile, getMaxDirectoryLevel } = require('../util/filesystemUtil');
 const { log } = require('../util/logger');
 
-exports.processProducts = async function () {
+exports.processProducts = async function (data) {
   await acquireConnection();
 
   // to avoid uploading anything from a previous run
