@@ -219,6 +219,27 @@ async function processSort(data) {
       );
 
       await Promise.all(operations);
+
+      // Send SQS message to create products
+      const productsQueueUrl = config.get('SQS.productQueueUrl');
+      const payload = {
+        dryRun: false,
+        products: [
+          fileFormats.GEOJSON.label,
+          fileFormats.GPKG.label,
+          fileFormats.SHP.label,
+          fileFormats.TILES.label,
+        ],
+        productRef,
+        productOrigin: productOrigins.DERIVED,
+        fipsDetails,
+        geoid,
+        geoName,
+        downloadRef,
+        downloadId,
+        productKey,
+      };
+      await sendQueueMessage(productsQueueUrl, payload);
     }
   }
 }

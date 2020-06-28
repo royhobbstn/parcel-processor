@@ -67,7 +67,7 @@ async function processInbox(data) {
       await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
 
       // Send SQS message to create products
-      const productsQueueUrl = config.get('SQS.sortQueueUrl');
+      const productsQueueUrl = config.get('SQS.productQueueUrl');
       await sendQueueMessage(productsQueueUrl, payload);
     } else {
       log.info(
@@ -174,12 +174,7 @@ async function runMain(cleanupS3, filePath, isDryRun, messagePayload) {
 
   const productSqsPayload = {
     dryRun: false,
-    products: [
-      fileFormats.GEOJSON.label,
-      fileFormats.GPKG.label,
-      fileFormats.SHP.label,
-      fileFormats.TILES.label,
-    ],
+    products: [fileFormats.GEOJSON.label, fileFormats.GPKG.label, fileFormats.SHP.label],
     productRef,
     productOrigin: productOrigins.ORIGINAL,
     fipsDetails,
@@ -189,6 +184,11 @@ async function runMain(cleanupS3, filePath, isDryRun, messagePayload) {
     downloadId,
     productKey,
   };
+
+  // dont generate tiles for state-level datasets
+  if (fipsDetails.SUMLEV !== '040') {
+    productSqsPayload.products.push(fileFormats.TILES.label);
+  }
 
   return productSqsPayload;
 }
