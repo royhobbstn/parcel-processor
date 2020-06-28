@@ -1,12 +1,12 @@
 // @ts-check
 
 exports.directories = {
-  outputDir: './output',
-  rawDir: './raw',
-  unzippedDir: './unzipped',
-  processedDir: './processed',
-  subGeographiesDir: './processors/subGeographies',
-  productTemp: './processors/productTemp',
+  outputDir: './staging/output',
+  rawDir: './staging/raw',
+  unzippedDir: './staging/unzipped',
+  processedDir: './staging/processed',
+  subGeographiesDir: './staging/subGeographies',
+  productTemp: './staging/productTemp',
 };
 
 // length of refs for products / downloads table

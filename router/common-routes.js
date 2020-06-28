@@ -1,5 +1,6 @@
 // @ts-check
 
+const { execSync } = require('child_process');
 const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 const { acquireConnection } = require('../util/wrappers/wrapQuery');
@@ -25,5 +26,23 @@ exports.commonRouter = async app => {
   app.get('/fetchEnv', async function (req, res) {
     await acquireConnection();
     return res.json({ env: process.env.NODE_ENV });
+  });
+
+  app.get('/status', async function (req, res) {
+    //
+    const applications = ['tippecanoe', 'ogr2ogr', 'aws', 'asdfasdf'];
+
+    const status = {};
+
+    for (let appName of applications) {
+      try {
+        execSync('command -v ' + appName);
+        status[appName] = 'ok';
+      } catch (e) {
+        status[appName] = 'failed';
+      }
+    }
+
+    return res.json(status);
   });
 };

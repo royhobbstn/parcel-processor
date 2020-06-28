@@ -12,6 +12,7 @@
     "config": "^3.3.1",
     "data-api-client": "^1.0.1",
     "express": "^4.17.1",
+    "forever": "^3.0.0",
     "gdal-next": "^1.0.3",
     "mkdirp": "^1.0.4",
     "ndjson": "^1.5.0",
@@ -24,11 +25,12 @@
   "scripts": {
     "app-server-dev": "NODE_ENV=development node app_run_from_npm_script.js",
     "app-server-prod": "NODE_ENV=production node app_run_from_npm_script.js",
-    "worker-dev": "NODE_ENV=development node worker_run_from_npm_script.js",
-    "worker-prod": "NODE_ENV=production node worker_run_from_npm_script.js",
+    "worker-dev": "NODE_ENV=development forever start worker_run_from_npm_script.js",
+    "worker-prod": "NODE_ENV=production forever start worker_run_from_npm_script.js",
     "dangerous-clean-s3-dev": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive",
     "dangerous-clean-s3-prod": "aws s3 rm s3://raw-data-po-dev --recursive && aws s3 rm s3://data-products-po-dev --recursive && aws s3 rm s3://tile-server-po-dev --recursive",
-    "dangerous-clean-s3-staging": "aws s3 rm s3://staging-po --recursive"
+    "dangerous-clean-s3-staging": "aws s3 rm s3://staging-po --recursive",
+    "loc": "scc --by-file --include-ext js ."
   },
   "devDependencies": {
     "prettier": "2.0.5"
