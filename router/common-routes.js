@@ -3,8 +3,8 @@
 const { execSync } = require('child_process');
 const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
-const { acquireConnection } = require('../util/wrappers/wrapQuery');
-const { queryHealth } = require('../util/primitives/queries');
+const { acquireConnection } = require('../util/wrapQuery');
+const { queryHealth } = require('../util/queries');
 const { log } = require('../util/logger');
 
 exports.commonRouter = async app => {

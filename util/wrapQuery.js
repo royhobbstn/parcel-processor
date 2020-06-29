@@ -18,10 +18,10 @@ const {
   startTransaction,
   commitTransaction,
   rollbackTransaction,
-} = require('../primitives/queries');
-const { getSourceType } = require('../misc');
-const { sourceTypes, dispositions, fileFormats, productOrigins } = require('../constants');
-const { log } = require('../logger');
+} = require('./queries');
+const { getSourceType } = require('./misc');
+const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
+const { log } = require('./logger');
 
 exports.DBWrites = async function (
   sourceNameInput,

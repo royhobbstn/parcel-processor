@@ -2,11 +2,11 @@
 
 const AWS = require('aws-sdk');
 const path = require('path');
-const { s3deleteType } = require('../constants');
-const { putFileToS3, emptyS3Directory } = require('../primitives/s3Operations');
-const { lookupState } = require('../lookupState');
+const { s3deleteType } = require('./constants');
+const { putFileToS3, emptyS3Directory } = require('./s3Operations');
+const { lookupState } = require('./lookupState');
 const config = require('config');
-const { log } = require('../logger');
+const { log } = require('./logger');
 
 exports.S3Writes = async function (cleanupS3, filePath, rawKey, productKey, outputPath) {
   await uploadRawFileToS3(filePath, rawKey);

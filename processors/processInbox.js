@@ -1,4 +1,5 @@
 // @ts-check
+
 const fs = require('fs');
 const axios = require('axios').default;
 const config = require('config');
@@ -16,7 +17,7 @@ const {
   createRawDownloadKey,
   createProductDownloadKey,
   S3Writes,
-} = require('../util/wrappers/wrapS3');
+} = require('../util/wrapS3');
 const { computeHash, generateRef } = require('../util/crypto');
 const { extractZip, checkForFileType } = require('../util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('../util/processGeoFile');
@@ -25,7 +26,7 @@ const {
   doesHashExist,
   lookupCleanGeoName,
   DBWrites,
-} = require('../util/wrappers/wrapQuery');
+} = require('../util/wrapQuery');
 
 exports.processInbox = processInbox;
 

@@ -2,7 +2,7 @@
 const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
-const { log } = require('../util/logger');
+const { log } = require('./logger');
 
 exports.sendQueueMessage = function (queueUrl, payload) {
   return new Promise((resolve, reject) => {

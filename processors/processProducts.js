@@ -8,15 +8,10 @@ const {
   referenceIdLength,
   productOrigins,
 } = require('../util/constants');
-const { acquireConnection } = require('../util/wrappers/wrapQuery');
-const { createProductDownloadKey } = require('../util/wrappers/wrapS3');
-const {
-  putFileToS3,
-  streamS3toFileSystem,
-  putTextToS3,
-  s3Sync,
-} = require('../util/primitives/s3Operations');
-const { queryCreateProductRecord } = require('../util/primitives/queries');
+const { acquireConnection } = require('../util/wrapQuery');
+const { createProductDownloadKey } = require('../util/wrapS3');
+const { putFileToS3, streamS3toFileSystem, putTextToS3, s3Sync } = require('../util/s3Operations');
+const { queryCreateProductRecord } = require('../util/queries');
 const {
   convertToFormat,
   spawnTippecane,

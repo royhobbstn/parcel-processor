@@ -1,7 +1,7 @@
 // @ts-check
 const config = require('config');
-const { generateRef } = require('../crypto');
-const { referenceIdLength } = require('../constants');
+const { generateRef } = require('./crypto');
+const { referenceIdLength } = require('./constants');
 
 const slsAuroraClient = require('data-api-client')({
   secretArn: config.get('RDS.secretArn'),
