@@ -43,17 +43,33 @@ sudo mkdir -p /opt/scripts
 sudo touch /opt/scripts/run-script-on-boot.sh
         
 crontab -e
-@reboot /opt/scripts/run-script-on-boot.sh >> ~/on-boot-output.txt
+@reboot nohup /opt/scripts/run-script-on-boot.sh >> ~/on-boot-output.txt 2>&1
         
 sudo vi /opt/scripts/run-script-on-boot.sh        
         
+---
+
 #!/bin/bash
 
-cd ~/dev/parcel-processor
+cat /dev/null > ~/on-boot-output.txt
+
+source ~/.nvm/nvm.sh
+
+cd ~/dev/parcel-processor/
+nvm use 10.14.2
+git checkout package-lock.json
 git pull
-npm run worker-dev &
-cd ~/prod/parcel-processor
+npm --version
+npm install
+npm run worker-dev
+
+cd ~/prod/parcel-processor/
+nvm use 10.14.2
+git checkout package-lock.json
 git pull
-npm run worker-prod &
+npm install
+npm run worker-prod
+
+---
         
 chmod +x /opt/scripts/run-script-on-boot.sh
