@@ -25,6 +25,7 @@
   "scripts": {
     "app-server-dev": "NODE_ENV=development node app_run_from_npm_script.js",
     "app-server-prod": "NODE_ENV=production node app_run_from_npm_script.js",
+    "worker-local": "NODE_ENV=development node worker_run_from_npm_script.js",
     "worker-dev": "NODE_ENV=development forever start worker_run_from_npm_script.js",
     "worker-prod": "NODE_ENV=production forever start worker_run_from_npm_script.js",
     "dangerous-clean-s3-dev": "aws s3 rm s3://raw-data-po --recursive && aws s3 rm s3://data-products-po --recursive && aws s3 rm s3://tile-server-po --recursive",

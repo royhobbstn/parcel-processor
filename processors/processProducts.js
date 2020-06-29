@@ -8,15 +8,10 @@ const {
   referenceIdLength,
   productOrigins,
 } = require('../util/constants');
-const { acquireConnection } = require('../util/wrappers/wrapQuery');
-const { createProductDownloadKey } = require('../util/wrappers/wrapS3');
-const {
-  putFileToS3,
-  streamS3toFileSystem,
-  putTextToS3,
-  s3Sync,
-} = require('../util/primitives/s3Operations');
-const { queryCreateProductRecord } = require('../util/primitives/queries');
+const { acquireConnection } = require('../util/wrapQuery');
+const { createProductDownloadKey } = require('../util/wrapS3');
+const { putFileToS3, streamS3toFileSystem, putTextToS3, s3Sync } = require('../util/s3Operations');
+const { queryCreateProductRecord, checkForProducts } = require('../util/queries');
 const {
   convertToFormat,
   spawnTippecane,
@@ -39,9 +34,9 @@ exports.processProducts = async function (data) {
   const messagePayload = {
     dryRun: false,
     products: [
-      //   fileFormats.GEOJSON.label,
-      //   fileFormats.GPKG.label,
-      //   fileFormats.SHP.label,
+      fileFormats.GEOJSON.label,
+      fileFormats.GPKG.label,
+      fileFormats.SHP.label,
       fileFormats.TILES.label,
     ],
     productRef: '6f612f99',
@@ -80,6 +75,22 @@ exports.processProducts = async function (data) {
 
   console.log({ fileNameBase, fileNameNoExtension, destPlain, destUnzipped, convertToFormatBase });
 
+  // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
+  // SQS can sometimes duplicate messages, and this would guard against it.
+  const existingProducts = await checkForProducts(geoid, downloadId);
+  const existingGeoJson = existingProducts.some(product => {
+    return product.product_type === fileFormats.GEOJSON.extension;
+  });
+  const existingGpkg = existingProducts.some(product => {
+    return product.product_type === fileFormats.GPKG.extension;
+  });
+  const existingShp = existingProducts.some(product => {
+    return product.product_type === fileFormats.SHP.extension;
+  });
+  const existingPbf = existingProducts.some(product => {
+    return product.product_type === fileFormats.TILES.extension;
+  });
+
   await streamS3toFileSystem(
     config.get('Buckets.productsBucket'),
     productKey,
@@ -88,7 +99,10 @@ exports.processProducts = async function (data) {
   );
 
   // GEOJSON
-  if (messagePayload.products.includes(fileFormats.GEOJSON.label)) {
+  if (existingGeoJson) {
+    log.info('GeoJson product for this Geoid and DownloadId already exists.  Skipping.');
+  }
+  if (messagePayload.products.includes(fileFormats.GEOJSON.label) && !existingGeoJson) {
     await convertToFormat(fileFormats.GEOJSON, convertToFormatBase);
 
     const individualRefGeoJson = generateRef(referenceIdLength);
@@ -129,7 +143,10 @@ exports.processProducts = async function (data) {
   // dont crash program on account of failures here
 
   // GPKG
-  if (messagePayload.products.includes(fileFormats.GPKG.label)) {
+  if (existingGpkg) {
+    log.info('GeoPackage product for this Geoid and DownloadId already exists.  Skipping.');
+  }
+  if (messagePayload.products.includes(fileFormats.GPKG.label) && !existingGpkg) {
     try {
       await convertToFormat(fileFormats.GPKG, convertToFormatBase);
       const individualRefGPKG = generateRef(referenceIdLength);
@@ -170,7 +187,10 @@ exports.processProducts = async function (data) {
   }
 
   // SHP
-  if (messagePayload.products.includes(fileFormats.SHP.label)) {
+  if (existingShp) {
+    log.info('Shapefile product for this Geoid and DownloadId already exists.  Skipping.');
+  }
+  if (messagePayload.products.includes(fileFormats.SHP.label) && !existingShp) {
     try {
       await convertToFormat(fileFormats.SHP, convertToFormatBase);
       const individualRefSHP = generateRef(referenceIdLength);
@@ -213,7 +233,14 @@ exports.processProducts = async function (data) {
 
   // TILES
   // but not on State Data
-  if (messagePayload.products.includes(fileFormats.TILES.label) && fipsDetails.SUMLEV !== '040') {
+  if (existingPbf) {
+    log.info('Tiles product for this Geoid and DownloadId already exists.  Skipping.');
+  }
+  if (
+    messagePayload.products.includes(fileFormats.TILES.label) &&
+    fipsDetails.SUMLEV !== '040' &&
+    !existingPbf
+  ) {
     const productRefTiles = generateRef(referenceIdLength);
 
     const meta = {

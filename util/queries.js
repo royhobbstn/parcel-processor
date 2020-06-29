@@ -1,7 +1,7 @@
 // @ts-check
 const config = require('config');
-const { generateRef } = require('../crypto');
-const { referenceIdLength } = require('../constants');
+const { generateRef } = require('./crypto');
+const { referenceIdLength } = require('./constants');
 
 const slsAuroraClient = require('data-api-client')({
   secretArn: config.get('RDS.secretArn'),
@@ -145,4 +145,22 @@ exports.commitTransaction = function (transactionId) {
 
 exports.rollbackTransaction = async function (transactionId) {
   return slsAuroraClient.rollbackTransaction({ transactionId });
+};
+
+exports.checkForProduct = async function (geoid, downloadId, format, returnBool) {
+  const query = await slsAuroraClient.query({
+    sql:
+      'select * from products where products.geoid = :geoid and products.download_id = :downloadId and products.product_type = :format',
+    parameters: { geoid, downloadId, format },
+  });
+  return query.records.length > 0;
+};
+
+exports.checkForProducts = async function (geoid, downloadId) {
+  const query = await slsAuroraClient.query({
+    sql:
+      'select * from products where products.geoid = :geoid and products.download_id = :downloadId',
+    parameters: { geoid, downloadId },
+  });
+  return query.records;
 };

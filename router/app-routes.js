@@ -10,8 +10,8 @@ const {
   getSplittableDownloads,
   getCountiesByState,
   querySourceNames,
-} = require('../util/wrappers/wrapQuery');
-const { getObject } = require('../util/primitives/s3Operations');
+} = require('../util/wrapQuery');
+const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
 
 exports.appRouter = async app => {

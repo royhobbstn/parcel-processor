@@ -1,5 +1,7 @@
+// @ts-check
+
 const config = require('config');
-const axios = require('axios');
+const { default: axios } = require('axios');
 const httpAdapter = require('axios/lib/adapters/http');
 const fs = require('fs');
 const ndjson = require('ndjson');
@@ -11,12 +13,13 @@ const {
   productOrigins,
   referenceIdLength,
 } = require('../util/constants');
-const { queryCreateProductRecord } = require('../util/primitives/queries');
-const { makeS3Key, acquireConnection } = require('../util/wrappers/wrapQuery');
-const { createProductDownloadKey } = require('../util/wrappers/wrapS3');
-const { putFileToS3, putTextToS3 } = require('../util/primitives/s3Operations');
+const { queryCreateProductRecord, checkForProduct } = require('../util/queries');
+const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
+const { createProductDownloadKey } = require('../util/wrapS3');
+const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
+const { sendQueueMessage } = require('../util/sqsOperations');
 const { doBasicCleanup } = require('../util/cleanup');
-const { log } = require('winston');
+const { log } = require('../util/logger');
 
 let counter = 0;
 
@@ -101,7 +104,7 @@ async function processSort(data) {
       axios.get(remoteFile, { responseType: 'stream', adapter: httpAdapter }).then(response => {
         const stream = response.data;
         stream.on('data', chunk => {
-          const rawData = new Buffer.from(chunk).toString();
+          const rawData = Buffer.from(chunk).toString();
           const splitData = rawData.split('\n');
 
           if (splitData.length === 0) {
@@ -162,6 +165,22 @@ async function processSort(data) {
 
   async function processFile(file) {
     console.log(`processing: ${geonameLookup[file]}`);
+
+    // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
+    // SQS can sometimes duplicate messages, and this would guard against it.
+    const doesProductExist = await checkForProduct(
+      file,
+      downloadId,
+      fileFormats.NDGEOJSON.extension,
+    );
+
+    if (doesProductExist) {
+      log.info(
+        `Product ${fileFormats.NDGEOJSON.extension} has already been created for geoid: ${file}.  Skipping.`,
+      );
+      return;
+    }
+
     // file is a plain geoid with no file extension
     const path = `${directories.subGeographiesDir}/${file}`;
 
@@ -170,10 +189,13 @@ async function processSort(data) {
     // create product ref
     const productRef = generateRef(referenceIdLength);
     const individualRef = generateRef(referenceIdLength);
+    const fipsDetails = createFipsDetailsForCounty(file);
+
+    const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
 
     const productKey = createProductDownloadKey(
-      createFipsDetailsForCounty(file),
-      file,
+      fipsDetails,
+      geoid,
       geonameLookup[file],
       downloadRef,
       productRef,

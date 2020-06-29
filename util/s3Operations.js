@@ -5,7 +5,7 @@ const fs = require('fs');
 const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
-const { log } = require('../logger');
+const { log } = require('./logger');
 const S3 = new AWS.S3({ apiVersion: '2006-03-01' });
 
 exports.putTextToS3 = function (bucketName, keyName, text, contentType, useGzip) {
@@ -191,9 +191,6 @@ async function emptyDirectory(bucket, dir) {
 // streams a download to the filesystem.
 // optionally un-gzips the file to a new location
 exports.streamS3toFileSystem = function (bucket, key, s3DestFile, s3UnzippedFile = null) {
-  // const s3DestFile = './archive.gz';
-  // const s3UnzippedFile = './deflated.csv';
-
   return new Promise((resolve, reject) => {
     const gunzip = zlib.createGunzip();
     const file = fs.createWriteStream(s3DestFile);
