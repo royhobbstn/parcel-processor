@@ -13,7 +13,7 @@ const {
   productOrigins,
   referenceIdLength,
 } = require('../util/constants');
-const { queryCreateProductRecord } = require('../util/queries');
+const { queryCreateProductRecord, checkForProduct } = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
 const { createProductDownloadKey } = require('../util/wrapS3');
 const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
@@ -165,6 +165,22 @@ async function processSort(data) {
 
   async function processFile(file) {
     console.log(`processing: ${geonameLookup[file]}`);
+
+    // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
+    // SQS can sometimes duplicate messages, and this would guard against it.
+    const doesProductExist = await checkForProduct(
+      file,
+      downloadId,
+      fileFormats.NDGEOJSON.extension,
+    );
+
+    if (doesProductExist) {
+      log.info(
+        `Product ${fileFormats.NDGEOJSON.extension} has already been created for geoid: ${file}.  Skipping.`,
+      );
+      return;
+    }
+
     // file is a plain geoid with no file extension
     const path = `${directories.subGeographiesDir}/${file}`;
 

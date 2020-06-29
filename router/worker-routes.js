@@ -24,8 +24,8 @@ exports.appRouter = async app => {
   });
 
   app.get('/processSort', async function (req, res) {
-    // await processSort();
-    // return res.json({ ok: 'ok' });
+    await processSort();
+    return res.json({ ok: 'ok' });
 
     const sortQueueUrl = config.get('SQS.sortQueueUrl');
 
@@ -39,8 +39,8 @@ exports.appRouter = async app => {
   });
 
   app.get('/processProducts', async function (req, res) {
-    // await processProducts();
-    // return res.json({ ok: 'ok' });
+    await processProducts();
+    return res.json({ ok: 'ok' });
 
     const productQueueUrl = config.get('SQS.productQueueUrl');
 
