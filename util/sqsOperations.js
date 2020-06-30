@@ -2,9 +2,8 @@
 const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
-const { log } = require('./logger');
 
-exports.sendQueueMessage = function (queueUrl, payload) {
+exports.sendQueueMessage = function (ctx, queueUrl, payload) {
   return new Promise((resolve, reject) => {
     const params = {
       MessageAttributes: {},
@@ -14,10 +13,13 @@ exports.sendQueueMessage = function (queueUrl, payload) {
 
     sqs.sendMessage(params, function (err, data) {
       if (err) {
-        log.error(err);
+        ctx.log.error(`Error sending message to queue: ${queueUrl}`, {
+          err: err.message,
+          stack: err.stack,
+        });
         return reject(err);
       } else {
-        log.info(`Successfully sent message to queue: ${queueUrl}`);
+        ctx.log.info(`Successfully sent message to queue: ${queueUrl}`);
         return resolve();
       }
     });
@@ -26,7 +28,7 @@ exports.sendQueueMessage = function (queueUrl, payload) {
 
 exports.readMessage = readMessage;
 
-function readMessage(queueUrl) {
+function readMessage(ctx, queueUrl) {
   return new Promise((resolve, reject) => {
     const params = {
       MaxNumberOfMessages: 1,
@@ -36,20 +38,22 @@ function readMessage(queueUrl) {
 
     sqs.receiveMessage(params, async function (err, data) {
       if (err) {
-        log.error(err);
-        return reject('Unable to receive SQS Sort message.');
+        ctx.log.error('Unable to receive SQS Sort message', { err: err.message, stack: err.stack });
+        return reject('Unable to receive SQS Sort message');
       } else if (data.Messages) {
-        log.info('received message');
+        ctx.log.info('Received message');
         return resolve(data);
       } else {
-        return resolve('No messages');
+        ctx.log.info('Found no messages');
+        return resolve('');
       }
     });
   });
 }
 
 exports.deleteMessage = deleteMessage;
-function deleteMessage(queueUrl, data) {
+
+function deleteMessage(ctx, queueUrl, data) {
   return new Promise((resolve, reject) => {
     const deleteParams = {
       QueueUrl: queueUrl,
@@ -58,25 +62,20 @@ function deleteMessage(queueUrl, data) {
 
     sqs.deleteMessage(deleteParams, function (err, data) {
       if (err) {
-        log.error(err);
-        return reject('Unable to delete SQS message.');
+        ctx.log.error('Unable to delete SQS message', { err: err.message, stack: err.stack });
+        return reject('Unable to delete SQS message');
       } else {
-        log.info('Message Deleted', data);
+        ctx.log.info('Message Deleted', data);
         return resolve({ success: 'Successfully processed SQS Sort message' });
       }
     });
   });
 }
 
-exports.processMessage = async function (queueUrl, messageProcessor) {
-  const message = await readMessage(queueUrl);
-  if (message === 'No message') {
-    return { status: 'no message' };
+exports.processMessage = async function (ctx, queueUrl) {
+  const message = await readMessage(ctx, queueUrl);
+  if (message) {
+    await deleteMessage(ctx, queueUrl, message);
   }
-
-  await deleteMessage(queueUrl, message);
-
-  messageProcessor(message); // purposely not await.  this happens in background
-
-  return { status: 'Processing new message' };
+  return message;
 };

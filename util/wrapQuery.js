@@ -21,9 +21,9 @@ const {
 } = require('./queries');
 const { getSourceType } = require('./misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
-const { log } = require('./logger');
 
 exports.DBWrites = async function (
+  ctx,
   sourceNameInput,
   computedHash,
   rawKey,
@@ -35,28 +35,29 @@ exports.DBWrites = async function (
   individualRef,
 ) {
   // refresh connection just in case the upload /parse took a long time
-  await acquireConnection();
+  await acquireConnection(ctx);
 
   let sourceLine;
-  const transactionId = await startTransaction();
+  const transactionId = await startTransaction(ctx);
 
   try {
-    let [sourceId, sourceType] = await fetchSourceIdIfExists(sourceNameInput);
+    let [sourceId, sourceType] = await fetchSourceIdIfExists(ctx, sourceNameInput);
 
     if (sourceId === -1) {
-      log.info(`Source doesn't exist in database.  Creating a new source.`);
-      sourceType = getSourceType(sourceNameInput);
-      sourceId = await createSource(sourceNameInput, sourceType, transactionId);
+      ctx.log.info(`Source doesn't exist in database.  Creating a new source.`);
+      sourceType = getSourceType(ctx, sourceNameInput);
+      sourceId = await createSource(ctx, sourceNameInput, sourceType, transactionId);
       sourceLine = `Created a new source record for: ${sourceNameInput} of type ${sourceType}`;
     } else {
       sourceLine = `Found source record for: ${sourceNameInput}`;
     }
 
     // todo, accomodate 'received' disposition by prompt
-    const checkId = await recordSourceCheck(sourceId, sourceType, transactionId);
+    const checkId = await recordSourceCheck(ctx, sourceId, sourceType, transactionId);
 
     // if not in database write a record in the download table
     const downloadId = await constructDownloadRecord(
+      ctx,
       sourceId,
       checkId,
       computedHash,
@@ -67,6 +68,7 @@ exports.DBWrites = async function (
     );
 
     await queryCreateProductRecord(
+      ctx,
       downloadId,
       productRef,
       individualRef,
@@ -76,40 +78,40 @@ exports.DBWrites = async function (
       `${productKey}.ndgeojson`,
     );
 
-    await commitTransaction(transactionId);
-    log.info(sourceLine);
-    log.info(`Recorded source check as disposition: 'viewed'`);
-    log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
-    log.info(`wrote NDgeoJSON product record.  ref: ${productRef}`);
+    await commitTransaction(ctx, transactionId);
+    ctx.log.info(sourceLine);
+    ctx.log.info(`Recorded source check as disposition: 'viewed'`);
+    ctx.log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
+    ctx.log.info(`wrote NDgeoJSON product record.  ref: ${productRef}`);
     return downloadId;
-  } catch (e) {
-    log.error(e);
-    await rollbackTransaction(transactionId);
-    log.error('Database transaction has been rolled back.');
+  } catch (err) {
+    ctx.log.error('Error', { err: err.message, stack: err.stack });
+    await rollbackTransaction(ctx, transactionId);
+    ctx.log.info('Database transaction has been rolled back.');
     throw new Error('database transaction failed.  re-throwing to roll back S3 saves.');
   }
 };
 
 exports.acquireConnection = acquireConnection;
 
-async function acquireConnection() {
+async function acquireConnection(ctx) {
   // ping the database to make sure its up / get it ready
   // after that, keep-alives from data-api-client should do the rest
   const seconds = 10;
   let connected = false;
   do {
-    log.info('attempting to connect to database');
-    connected = await checkHealth();
+    ctx.log.info('attempting to connect to database');
+    connected = await checkHealth(ctx);
     if (!connected) {
-      log.info(`attempt failed.  trying again in ${seconds} seconds...`);
-      await setPause(seconds * 1000);
+      ctx.log.info(`attempt failed.  trying again in ${seconds} seconds...`);
+      await setPause(ctx, seconds * 1000);
     }
   } while (!connected);
 
-  log.info('connected');
+  ctx.log.info('connected');
 }
 
-function setPause(timer) {
+function setPause(ctx, timer) {
   return new Promise(resolve => {
     setTimeout(() => {
       resolve();
@@ -117,9 +119,9 @@ function setPause(timer) {
   });
 }
 
-async function checkHealth() {
+async function checkHealth(ctx) {
   try {
-    await queryHealth();
+    await queryHealth(ctx);
     return true;
   } catch (e) {
     return false;
@@ -128,22 +130,22 @@ async function checkHealth() {
 
 exports.recordSourceCheck = recordSourceCheck;
 
-async function recordSourceCheck(sourceId, sourceType, transactionId) {
+async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
   }
 
   const disposition =
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
-  const query = await queryWriteSourceCheck(sourceId, disposition, transactionId);
+  const query = await queryWriteSourceCheck(ctx, sourceId, disposition, transactionId);
 
   return query.insertId;
 }
 
 exports.fetchSourceIdIfExists = fetchSourceIdIfExists;
 
-async function fetchSourceIdIfExists(pageName) {
-  const query = await querySource(pageName);
+async function fetchSourceIdIfExists(ctx, pageName) {
+  const query = await querySource(ctx, pageName);
   if (query.records.length) {
     return [query.records[0].source_id, query.records[0].source_type];
   }
@@ -152,27 +154,28 @@ async function fetchSourceIdIfExists(pageName) {
 
 exports.createSource = createSource;
 
-async function createSource(sourceName, sourceType, transactionId) {
-  const query = await queryWriteSource(sourceName, sourceType, transactionId);
+async function createSource(ctx, sourceName, sourceType, transactionId) {
+  const query = await queryWriteSource(ctx, sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
     return query.insertId;
   }
   throw new Error(`unable to create page record for: ${sourceName}`);
 }
 
-exports.doesHashExist = async function (computedHash) {
-  const query = await queryHash(computedHash);
+exports.doesHashExist = async function (ctx, computedHash) {
+  const query = await queryHash(ctx, computedHash);
   if (query.records.length) {
-    log.info('Hash exists in database.  File has already been processed.\n');
+    ctx.log.info('Hash exists in database.  File has already been processed.\n');
     return true;
   }
-  log.info('Hash is unique.  Processing new download.');
+  ctx.log.info('Hash is unique.  Processing new download.');
   return false;
 };
 
 exports.constructDownloadRecord = constructDownloadRecord;
 
 async function constructDownloadRecord(
+  ctx,
   sourceId,
   checkId,
   computedHash,
@@ -184,6 +187,7 @@ async function constructDownloadRecord(
   const originalFilename = path.parse(filePath).base;
 
   const query = await queryCreateDownloadRecord(
+    ctx,
     sourceId,
     checkId,
     computedHash,
@@ -196,17 +200,17 @@ async function constructDownloadRecord(
   if (!query || !query.insertId) {
     throw new Error('unexpected result from create download request');
   }
-  log.info('new download record created');
+  ctx.log.info('new download record created');
   return query.insertId;
 }
 
 exports.makeS3Key = makeS3Key;
 
-function makeS3Key(str) {
+function makeS3Key(ctx, str) {
   return str.replace(/[^a-z0-9]+/gi, '-');
 }
 
-exports.lookupCleanGeoName = async function (fipsDetails) {
+exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 
   let geoid;
@@ -218,12 +222,12 @@ exports.lookupCleanGeoName = async function (fipsDetails) {
   } else if (SUMLEV === '160') {
     geoid = `${STATEFIPS}${PLACEFIPS}`;
   } else {
-    log.error('SUMLEV out of range.  Exiting.');
+    ctx.log.error('SUMLEV out of range');
     throw new Error('SUMLEV out of range');
   }
 
-  const query = await queryGeographicIdentifier(geoid);
-  log.info(query);
+  const query = await queryGeographicIdentifier(ctx, geoid);
+  ctx.log.info(query);
 
   if (!query || !query.records || !query.records.length) {
     throw new Error(
@@ -233,21 +237,21 @@ exports.lookupCleanGeoName = async function (fipsDetails) {
 
   const rawGeoName = query.records[0].geoname;
 
-  log.info(`Found corresponding geographic area: ${rawGeoName}`);
+  ctx.log.info(`Found corresponding geographic area: ${rawGeoName}`);
 
   // Alter geo name to be s3 key friendly (all non alphanumeric become -)
-  const geoName = makeS3Key(rawGeoName);
+  const geoName = makeS3Key(ctx, rawGeoName);
 
   return { geoid, geoName };
 };
 
-exports.getSplittableDownloads = async function (geoid) {
+exports.getSplittableDownloads = async function (ctx, geoid) {
   let query;
 
   if (geoid) {
-    query = await queryAllOriginalRecentDownloadsWithGeoid(geoid);
+    query = await queryAllOriginalRecentDownloadsWithGeoid(ctx, geoid);
   } else {
-    query = await queryAllOriginalRecentDownloads();
+    query = await queryAllOriginalRecentDownloads(ctx);
   }
 
   if (!query) {
@@ -257,15 +261,15 @@ exports.getSplittableDownloads = async function (geoid) {
   return { rows: query.records };
 };
 
-exports.getCountiesByState = async function (geoid) {
-  const query = await queryAllCountiesFromState(geoid);
+exports.getCountiesByState = async function (ctx, geoid) {
+  const query = await queryAllCountiesFromState(ctx, geoid);
   if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
   }
   return query.records;
 };
 
-exports.querySourceNames = async function (sourceName) {
+exports.querySourceNames = async function (ctx, sourceName) {
   // take root of http source, or domain of email sources
 
   // figure if email or webpage
@@ -273,7 +277,7 @@ exports.querySourceNames = async function (sourceName) {
 
   if (sourceName.includes('@')) {
     const domain = sourceName.split('@');
-    query = await querySourceNamesLike(domain[1]);
+    query = await querySourceNamesLike(ctx, domain[1]);
   } else if (
     sourceName.includes('http://') ||
     sourceName.includes('https://') ||
@@ -281,10 +285,9 @@ exports.querySourceNames = async function (sourceName) {
     sourceName.includes('ftps://')
   ) {
     const root = url.parse(sourceName).hostname;
-    query = await querySourceNamesLike(root);
+    query = await querySourceNamesLike(ctx, root);
   } else {
-    console.error('invalid sourceName input in querySourceNames');
-    return [];
+    throw new Error('invalid sourceName input in querySourceNames');
   }
 
   if (!query) {

@@ -4,7 +4,7 @@ const { idPrefix } = require('./constants');
 
 // gather field statistics for a dataset
 
-exports.StatContext = function (uniquesMax = 500) {
+exports.StatContext = function (ctx, uniquesMax = 500) {
   this.rowCount = 0;
   this.fields = null;
 

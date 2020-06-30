@@ -5,10 +5,9 @@ const fs = require('fs');
 const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
-const { log } = require('./logger');
 const S3 = new AWS.S3({ apiVersion: '2006-03-01' });
 
-exports.putTextToS3 = function (bucketName, keyName, text, contentType, useGzip) {
+exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, useGzip) {
   return new Promise((resolve, reject) => {
     const objectParams = {
       Bucket: bucketName,
@@ -31,22 +30,24 @@ exports.putTextToS3 = function (bucketName, keyName, text, contentType, useGzip)
     const uploadPromise = S3.putObject(objectParams).promise();
     uploadPromise
       .then(data => {
-        log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
-        log.info(data);
+        ctx.log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
+        ctx.log.info(data);
         return resolve();
       })
       .catch(err => {
-        log.error(err);
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
         return reject(err);
       });
   });
 };
 
-exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useGzip) {
+exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType, useGzip) {
   return new Promise((resolve, reject) => {
-    log.info(`uploading file to s3 (${filePathToUpload} as s3://${bucket}/${key}), please wait...`);
+    ctx.log.info(
+      `uploading file to s3 (${filePathToUpload} as s3://${bucket}/${key}), please wait...`,
+    );
 
-    const uploadStream = () => {
+    const uploadStream = ctx => {
       const pass = new stream.PassThrough();
 
       let params = {
@@ -65,7 +66,7 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
         promise: S3.upload(params).promise(),
       };
     };
-    const { writeStream, promise } = uploadStream();
+    const { writeStream, promise } = uploadStream(ctx);
     const readStream = fs.createReadStream(filePathToUpload);
     const z = zlib.createGzip();
 
@@ -77,21 +78,23 @@ exports.putFileToS3 = function (bucket, key, filePathToUpload, contentType, useG
 
     promise
       .then(result => {
-        log.info(
+        ctx.log.info(
           `uploading (${filePathToUpload} as s3://${bucket}/${key}) completed successfully.`,
         );
-        log.info('result', result);
+        ctx.log.info('result', result);
         return resolve();
       })
       .catch(err => {
-        log.error(`upload (${filePathToUpload} as s3://${bucket}/${key}) failed.`);
-        log.error(err);
+        ctx.log.error(`upload (${filePathToUpload} as s3://${bucket}/${key}) failed.`, {
+          err: err.message,
+          stack: err.stack,
+        });
         return reject(err);
       });
   });
 };
 
-exports.getObject = function (bucket, key) {
+exports.getObject = function (ctx, bucket, key) {
   return new Promise((resolve, reject) => {
     S3.getObject(
       {
@@ -121,7 +124,7 @@ exports.getObject = function (bucket, key) {
   });
 };
 
-exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder) {
+exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFolder) {
   return new Promise((resolve, reject) => {
     const application = 'aws';
     const args = [
@@ -133,12 +136,12 @@ exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder)
       'gzip',
     ];
     const command = `${application} ${args.join(' ')}`;
-    log.info(`running: ${command}`);
+    ctx.log.info(`running: ${command}`);
 
     const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      console.log(data.toString());
+      ctx.log.info(data.toString());
     });
 
     proc.stderr.on('data', data => {
@@ -146,12 +149,12 @@ exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder)
     });
 
     proc.on('error', err => {
-      log.error(err);
+      ctx.log.error('Error', { err: err.message, stack: err.stack });
       reject(err);
     });
 
     proc.on('close', code => {
-      log.info(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
+      ctx.log.info(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
       resolve({ command });
     });
   });
@@ -159,7 +162,7 @@ exports.s3Sync = async function (currentTilesDir, bucketName, destinationFolder)
 
 exports.emptyS3Directory = emptyDirectory;
 
-async function emptyDirectory(bucket, dir) {
+async function emptyDirectory(ctx, bucket, dir) {
   const listParams = {
     Bucket: bucket,
     Prefix: dir,
@@ -181,23 +184,23 @@ async function emptyDirectory(bucket, dir) {
   });
 
   const result = await S3.deleteObjects(deleteParams).promise();
-  log.info(result);
+  ctx.log.info(result);
 
   if (listedObjects.IsTruncated) {
-    await emptyDirectory(bucket, dir);
+    await emptyDirectory(ctx, bucket, dir);
   }
 }
 
 // streams a download to the filesystem.
 // optionally un-gzips the file to a new location
-exports.streamS3toFileSystem = function (bucket, key, s3DestFile, s3UnzippedFile = null) {
+exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3UnzippedFile = null) {
   return new Promise((resolve, reject) => {
     const gunzip = zlib.createGunzip();
     const file = fs.createWriteStream(s3DestFile);
 
     S3.getObject({ Bucket: bucket, Key: key })
       .on('error', function (err) {
-        log.error(err);
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
         return reject(err);
       })
       .on('httpData', function (chunk) {
@@ -205,16 +208,16 @@ exports.streamS3toFileSystem = function (bucket, key, s3DestFile, s3UnzippedFile
       })
       .on('httpDone', function () {
         file.end();
-        console.log('downloaded file to' + s3DestFile);
+        ctx.log.info('downloaded file to' + s3DestFile);
 
         if (s3UnzippedFile) {
           fs.createReadStream(s3DestFile)
             .on('error', err => {
-              log.error(err);
+              ctx.log.error('Error', { err: err.message, stack: err.stack });
               return reject(err);
             })
             .on('end', () => {
-              console.log('deflated to ' + s3UnzippedFile);
+              ctx.log.info('deflated to ' + s3UnzippedFile);
               return resolve();
             })
             .pipe(gunzip)

@@ -17,46 +17,69 @@ const { log } = require('../util/logger');
 exports.appRouter = async app => {
   //
   app.get('/queryStatFiles', async function (req, res) {
+    const ctx = { log };
     const geoid = req.query.geoid;
-    await acquireConnection();
-    const rows = await getSplittableDownloads(geoid);
-    return res.json(rows);
+    try {
+      await acquireConnection(ctx);
+      const rows = await getSplittableDownloads(ctx, geoid);
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).send(err.message);
+    }
   });
 
   app.get('/proxyS3File', async function (req, res) {
+    const ctx = { log };
     const key = decodeURIComponent(req.query.key);
     const bucket = decodeURIComponent(req.query.bucket);
-    const data = await getObject(bucket, key);
-    return res.json(data);
+    try {
+      const data = await getObject(ctx, bucket, key);
+      return res.json(data);
+    } catch (err) {
+      return res.status(500).send(err.message);
+    }
   });
 
   app.get('/getSubGeographies', async function (req, res) {
+    const ctx = { log };
     const geoid = req.query.geoid;
-    await acquireConnection();
-    const rows = await getCountiesByState(geoid);
-    return res.json(rows);
+    try {
+      await acquireConnection(ctx);
+      const rows = await getCountiesByState(ctx, geoid);
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).send(err.message);
+    }
   });
 
   app.get('/querySources', async function (req, res) {
+    const ctx = { log };
     const sourceName = decodeURIComponent(req.query.name);
-    await acquireConnection();
-    const rows = await querySourceNames(sourceName);
-    return res.json(rows);
+    try {
+      await acquireConnection(ctx);
+      const rows = await querySourceNames(ctx, sourceName);
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).send(err.message);
+    }
   });
 
   app.get('/proxyHeadRequest', function (req, res) {
+    const ctx = { log };
     const url = decodeURIComponent(req.query.url);
     axios
       .head(url)
       .then(function (response) {
+        ctx.log.info('Status: ' + response.status);
         if (response.status === 200) {
           return true;
         } else {
           return false;
         }
       })
-      .catch(function (error) {
-        console.log(error);
+      .catch(err => {
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
+        ctx.log.info(`Unable to proxy: ${url}`);
         return false;
       })
       .then(function (result) {
@@ -65,6 +88,8 @@ exports.appRouter = async app => {
   });
 
   app.post('/sendInboxSQS', async function (req, res) {
+    const ctx = { log };
+
     const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
 
     const payload = req.body;
@@ -75,17 +100,24 @@ exports.appRouter = async app => {
       QueueUrl: inboxQueueUrl,
     };
 
-    sqs.sendMessage(params, function (err, data) {
+    sqs.sendMessage(params, (err, data) => {
+      ctx.log.info('SQS response: ', { data });
       if (err) {
-        log.error(err);
-        return res.status(500).send('Unable to send SQS message.');
+        ctx.log.error(`Unable to send SQS message to queue: ${inboxQueueUrl}`, {
+          err: err.message,
+          stack: err.stack,
+        });
+        return res.status(500).send(`Unable to send SQS message to queue: ${inboxQueueUrl}`);
       } else {
-        return res.json({ success: 'Successfully sent SQS message' });
+        ctx.log.info(`Successfully sent SQS message to queue: ${inboxQueueUrl}`);
+        return res.json({ success: `Successfully sent SQS message to queue: ${inboxQueueUrl}` });
       }
     });
   });
 
-  app.post('/sendSortSQS', async function (req, res) {
+  app.post('/sendSortSQS', (req, res) => {
+    const ctx = { log };
+
     const sortQueueUrl = config.get('SQS.sortQueueUrl');
 
     const payload = req.body;
@@ -97,11 +129,16 @@ exports.appRouter = async app => {
     };
 
     sqs.sendMessage(params, function (err, data) {
+      ctx.log.info('SQS response: ', { data });
       if (err) {
-        log.error(err);
-        return res.status(500).send('Unable to send SQS message.');
+        ctx.log.error(`Unable to send SQS message to queue: ${sortQueueUrl}`, {
+          err: err.message,
+          stack: err.stack,
+        });
+        return res.status(500).send(`Unable to send SQS message to queue: ${sortQueueUrl}`);
       } else {
-        return res.json({ success: 'Successfully sent SQS message' });
+        ctx.log.info(`Successfully sent SQS message to queue: ${sortQueueUrl}`);
+        return res.json({ success: `Successfully sent SQS message to queue: ${sortQueueUrl}` });
       }
     });
   });

@@ -6,11 +6,15 @@ exports.directories = {
   unzippedDir: './staging/unzipped',
   processedDir: './staging/processed',
   subGeographiesDir: './staging/subGeographies',
-  productTemp: './staging/productTemp',
+  productTempDir: './staging/productTemp',
+  logDir: './staging/logs',
 };
 
 // length of refs for products / downloads table
 exports.referenceIdLength = 8;
+
+// logfiles
+exports.logfileNameLength = 5;
 
 // prefix to flag that file needs to be gzipped in a separate process
 exports.tileInfoPrefix = '_po_';

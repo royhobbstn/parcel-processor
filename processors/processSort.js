@@ -19,17 +19,16 @@ const { createProductDownloadKey } = require('../util/wrapS3');
 const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const { doBasicCleanup } = require('../util/cleanup');
-const { log } = require('../util/logger');
 
 let counter = 0;
 
 exports.processSort = processSort;
 
-async function processSort(data) {
-  await acquireConnection();
+async function processSort(ctx, data) {
+  await acquireConnection(ctx);
 
   // to avoid uploading anything from a previous run
-  await doBasicCleanup([directories.subGeographiesDir], false, true);
+  await doBasicCleanup(ctx, [directories.subGeographiesDir], true);
 
   const messagePayload = {
     dryRun: true,
@@ -70,7 +69,7 @@ async function processSort(data) {
   };
 
   // const messagePayload = JSON.parse(data.Messages[0].Body);
-  console.log(messagePayload);
+  ctx.log.info(messagePayload);
 
   const isDryRun = messagePayload.dryRun;
   const bucket = config.get('Buckets.productsBucket');
@@ -79,23 +78,23 @@ async function processSort(data) {
   const geoidTranslator = messagePayload.modalStatsObj.mapping;
   const downloadId = messagePayload.selectedDownload.download_id;
   const downloadRef = messagePayload.selectedDownload.download_ref;
-  const geonameLookup = keifyGeographies(messagePayload.geographies);
+  const geonameLookup = keifyGeographies(ctx, messagePayload.geographies);
   const files = Array.from(new Set(Object.values(geoidTranslator)));
   const fileWrites = [];
 
-  await sortData();
+  await sortData(ctx);
 
   // iterate through files and process each (stat files, s3 and db records)
   for (let file of files) {
-    await processFile(file);
+    await processFile(ctx, file);
   }
-  await doBasicCleanup([directories.subGeographiesDir], false, true);
+  await doBasicCleanup(ctx, [directories.subGeographiesDir], true);
 
-  log.info('done with processSort');
+  ctx.log.info('done with processSort');
 
   // ---- functions only below
 
-  function sortData() {
+  function sortData(ctx) {
     return new Promise((resolve, reject) => {
       const dataToProcess = [];
       let lastChunkPiece = '';
@@ -119,22 +118,22 @@ async function processSort(data) {
             lastChunkPiece = splitData[splitData.length - 1];
           }
 
-          processData(dataToProcess);
+          processData(ctx, dataToProcess);
         });
         stream.on('error', err => {
-          log.error(err);
+          ctx.log.error('Error', { err: err.message, stack: err.stack });
           return reject(err);
         });
         stream.on('end', async () => {
           // might only happen if there is no newline after last record
           if (lastChunkPiece) {
             dataToProcess.push(JSON.parse(lastChunkPiece));
-            processData(dataToProcess);
+            processData(ctx, dataToProcess);
           }
 
-          console.log('done reading remote file.');
+          ctx.log.info('done reading remote file.');
           await Promise.all(fileWrites);
-          console.log(`processed ${counter} lines`);
+          ctx.log.info(`processed ${counter} lines`);
 
           return resolve();
         });
@@ -142,17 +141,17 @@ async function processSort(data) {
     });
   }
 
-  function processData(dataArr) {
+  function processData(ctx, dataArr) {
     while (dataArr.length) {
-      processLine(dataArr.pop());
+      processLine(ctx, dataArr.pop());
     }
   }
 
-  async function processLine(obj) {
+  async function processLine(ctx, obj) {
     counter++;
 
     if (counter % 1000 === 0) {
-      console.log(counter);
+      ctx.log.info(counter);
     }
 
     const splitValue = obj.properties[selectedFieldKey];
@@ -160,22 +159,23 @@ async function processSort(data) {
     const fullPathFilename = `${directories.subGeographiesDir}/${geoidFileTranslate}`;
 
     // stuff json line into a file depending on the county
-    fileWrites.push(appendFileAsync(fullPathFilename, obj));
+    fileWrites.push(appendFileAsync(ctx, fullPathFilename, obj));
   }
 
-  async function processFile(file) {
-    console.log(`processing: ${geonameLookup[file]}`);
+  async function processFile(ctx, file) {
+    ctx.log.info(`processing: ${geonameLookup[file]}`);
 
     // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
     // SQS can sometimes duplicate messages, and this would guard against it.
     const doesProductExist = await checkForProduct(
+      ctx,
       file,
       downloadId,
       fileFormats.NDGEOJSON.extension,
     );
 
     if (doesProductExist) {
-      log.info(
+      ctx.log.info(
         `Product ${fileFormats.NDGEOJSON.extension} has already been created for geoid: ${file}.  Skipping.`,
       );
       return;
@@ -184,16 +184,17 @@ async function processSort(data) {
     // file is a plain geoid with no file extension
     const path = `${directories.subGeographiesDir}/${file}`;
 
-    const statExport = await countStats(path);
+    const statExport = await countStats(ctx, path);
 
     // create product ref
-    const productRef = generateRef(referenceIdLength);
-    const individualRef = generateRef(referenceIdLength);
-    const fipsDetails = createFipsDetailsForCounty(file);
+    const productRef = generateRef(ctx, referenceIdLength);
+    const individualRef = generateRef(ctx, referenceIdLength);
+    const fipsDetails = createFipsDetailsForCounty(ctx, file);
 
-    const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
+    const { geoid, geoName } = await lookupCleanGeoName(ctx, fipsDetails);
 
     const productKey = createProductDownloadKey(
+      ctx,
       fipsDetails,
       geoid,
       geonameLookup[file],
@@ -209,6 +210,7 @@ async function processSort(data) {
       // upload stat file
       operations.push(
         putTextToS3(
+          ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}-stat.json`,
           JSON.stringify(statExport),
@@ -220,6 +222,7 @@ async function processSort(data) {
       // upload ndgeojson file
       operations.push(
         putFileToS3(
+          ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}.ndgeojson`,
           path,
@@ -231,6 +234,7 @@ async function processSort(data) {
       // write product record
       operations.push(
         queryCreateProductRecord(
+          ctx,
           downloadId,
           productRef,
           fileFormats.NDGEOJSON.extension,
@@ -262,12 +266,12 @@ async function processSort(data) {
         downloadId,
         productKey,
       };
-      await sendQueueMessage(productsQueueUrl, payload);
+      await sendQueueMessage(ctx, productsQueueUrl, payload);
     }
   }
 }
 
-function appendFileAsync(fullPathFilename, json) {
+function appendFileAsync(ctx, fullPathFilename, json) {
   return new Promise((resolve, reject) => {
     fs.appendFile(fullPathFilename, JSON.stringify(json) + '\n', err => {
       if (err) {
@@ -278,17 +282,17 @@ function appendFileAsync(fullPathFilename, json) {
   });
 }
 
-function keifyGeographies(geographies) {
+function keifyGeographies(ctx, geographies) {
   const obj = {};
 
   geographies.forEach(geography => {
-    obj[geography.geoid] = makeS3Key(geography.geoname);
+    obj[geography.geoid] = makeS3Key(ctx, geography.geoname);
   });
 
   return obj;
 }
 
-function createFipsDetailsForCounty(geoid) {
+function createFipsDetailsForCounty(ctx, geoid) {
   return {
     SUMLEV: '050',
     STATEFIPS: geoid.slice(0, 2),
@@ -297,11 +301,11 @@ function createFipsDetailsForCounty(geoid) {
   };
 }
 
-function countStats(path) {
+function countStats(ctx, path) {
   return new Promise((resolve, reject) => {
     // read each file as ndjson and create stat object
     let transformed = 0;
-    const statCounter = new StatContext();
+    const statCounter = new StatContext(ctx);
 
     fs.createReadStream(path)
       .pipe(ndjson.parse())
@@ -310,15 +314,15 @@ function countStats(path) {
 
         transformed++;
         if (transformed % 10000 === 0) {
-          console.log(transformed + ' records processed');
+          ctx.log.info(transformed + ' records processed');
         }
       })
       .on('error', err => {
-        console.error(err);
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
         return reject(err);
       })
       .on('end', async () => {
-        console.log(transformed + ' records processed');
+        ctx.log.info(transformed + ' records processed');
 
         return resolve(statCounter.export());
       });

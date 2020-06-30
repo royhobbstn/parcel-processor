@@ -5,7 +5,7 @@ var invariant = require('@turf/invariant');
 var meta = require('@turf/meta');
 var skmeans = require('skmeans');
 
-exports.clustersKmeans = function (points, options) {
+exports.clustersKmeans = function (ctx, points, options) {
   // Optional parameters
   options = options || {};
   if (typeof options !== 'object') throw new Error('options is invalid');

@@ -5,9 +5,8 @@ const rimraf = require('rimraf');
 const mkdirp = require('mkdirp');
 const { directories } = require('./constants');
 const { moveFile } = require('./filesystemUtil');
-const { log } = require('./logger');
 
-exports.doBasicCleanup = async function (dirs, silent, cleanProcessedBool) {
+exports.doBasicCleanup = async function (ctx, dirs, cleanProcessedBool) {
   // move all files from given array dirs into processed
   if (cleanProcessedBool) {
     await new Promise((resolve, reject) => {
@@ -45,11 +44,9 @@ exports.doBasicCleanup = async function (dirs, silent, cleanProcessedBool) {
     });
   });
 
-  if (!silent) {
-    dirs.forEach(dir => {
-      log.info(`all files from '${dir}' moved to '${directories.processedDir}'.`);
-    });
+  dirs.forEach(dir => {
+    ctx.log.info(`all files from '${dir}' moved to '${directories.processedDir}'.`);
+  });
 
-    log.info('Done moving files.\n');
-  }
+  ctx.log.info('Done moving files.\n');
 };
