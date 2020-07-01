@@ -10,7 +10,6 @@ const { putFileToS3 } = require('../util/s3Operations');
 const { createInstanceLogger, getUniqueLogfileName } = require('../util/logger');
 const { sendAlertMail } = require('../util/email');
 const { directories } = require('../util/constants');
-const { FSx } = require('aws-sdk');
 
 exports.appRouter = async app => {
   //

@@ -30,46 +30,46 @@ async function processSort(ctx, data) {
   // to avoid uploading anything from a previous run
   await doBasicCleanup(ctx, [directories.subGeographiesDir], true);
 
-  const messagePayload = {
-    dryRun: true,
-    selectedFieldKey: 'county',
-    selectedDownload: {
-      geoid: '15',
-      geoname: 'Hawaii',
-      source_name: 'http://planning.hawaii.gov/gis/download-gis-data/',
-      source_type: 'webpage',
-      download_id: 3,
-      download_ref: '5fe3a581',
-      product_id: 11,
-      product_ref: '65aa145b',
-      last_checked: '2020-06-21 16:11:24',
-      product_key: '15-Hawaii/000-Hawaii/5fe3a581-65aa145b-15-Hawaii.ndgeojson',
-      original_filename: 'tmk_state.shp.zip',
-    },
-    modalStatsObj: {
-      missingAttributes: [],
-      missingGeoids: ['15005'],
-      countOfPossible: 5,
-      countOfUniqueGeoids: 4,
-      attributesUsingSameGeoid: [],
-      mapping: {
-        Hawaii: '15001',
-        Honolulu: '15003',
-        Kauai: '15007',
-        Maui: '15009',
-      },
-    },
-    geographies: [
-      { geoid: '15001', geoname: 'Hawaii County' },
-      { geoid: '15003', geoname: 'Honolulu County' },
-      { geoid: '15005', geoname: 'Kalawao County' },
-      { geoid: '15007', geoname: 'Kauai County' },
-      { geoid: '15009', geoname: 'Maui County' },
-    ],
-  };
+  // const messagePayload = {
+  //   dryRun: true,
+  //   selectedFieldKey: 'county',
+  //   selectedDownload: {
+  //     geoid: '15',
+  //     geoname: 'Hawaii',
+  //     source_name: 'http://planning.hawaii.gov/gis/download-gis-data/',
+  //     source_type: 'webpage',
+  //     download_id: 3,
+  //     download_ref: '5fe3a581',
+  //     product_id: 11,
+  //     product_ref: '65aa145b',
+  //     last_checked: '2020-06-21 16:11:24',
+  //     product_key: '15-Hawaii/000-Hawaii/5fe3a581-65aa145b-15-Hawaii.ndgeojson',
+  //     original_filename: 'tmk_state.shp.zip',
+  //   },
+  //   modalStatsObj: {
+  //     missingAttributes: [],
+  //     missingGeoids: ['15005'],
+  //     countOfPossible: 5,
+  //     countOfUniqueGeoids: 4,
+  //     attributesUsingSameGeoid: [],
+  //     mapping: {
+  //       Hawaii: '15001',
+  //       Honolulu: '15003',
+  //       Kauai: '15007',
+  //       Maui: '15009',
+  //     },
+  //   },
+  //   geographies: [
+  //     { geoid: '15001', geoname: 'Hawaii County' },
+  //     { geoid: '15003', geoname: 'Honolulu County' },
+  //     { geoid: '15005', geoname: 'Kalawao County' },
+  //     { geoid: '15007', geoname: 'Kauai County' },
+  //     { geoid: '15009', geoname: 'Maui County' },
+  //   ],
+  // };
 
-  // const messagePayload = JSON.parse(data.Messages[0].Body);
-  ctx.log.info(messagePayload);
+  const messagePayload = JSON.parse(data.Messages[0].Body);
+  ctx.log.info('Processing Message', { messagePayload });
 
   const isDryRun = messagePayload.dryRun;
   const bucket = config.get('Buckets.productsBucket');

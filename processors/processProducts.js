@@ -30,31 +30,31 @@ exports.processProducts = async function (ctx, data) {
   // to avoid uploading anything from a previous run
   await doBasicCleanup(ctx, [directories.productTempDir], true);
 
-  const messagePayload = {
-    dryRun: false,
-    products: [
-      fileFormats.GEOJSON.label,
-      fileFormats.GPKG.label,
-      fileFormats.SHP.label,
-      fileFormats.TILES.label,
-    ],
-    productRef: '6f612f99',
-    productOrigin: productOrigins.DERIVED,
-    fipsDetails: {
-      SUMLEV: '050',
-      STATEFIPS: '15',
-      COUNTYFIPS: '007',
-      PLACEFIPS: '',
-    },
-    geoid: '15007',
-    geoName: 'Kauai-County',
-    downloadRef: '5fe3a581',
-    downloadId: 3,
-    productKey: '15-Hawaii/007-Kauai-County/5fe3a581-6f612f99-15007-Kauai-County-Hawaii.ndgeojson',
-  };
+  // const messagePayload = {
+  //   dryRun: false,
+  //   products: [
+  //     fileFormats.GEOJSON.label,
+  //     fileFormats.GPKG.label,
+  //     fileFormats.SHP.label,
+  //     fileFormats.TILES.label,
+  //   ],
+  //   productRef: '6f612f99',
+  //   productOrigin: productOrigins.DERIVED,
+  //   fipsDetails: {
+  //     SUMLEV: '050',
+  //     STATEFIPS: '15',
+  //     COUNTYFIPS: '007',
+  //     PLACEFIPS: '',
+  //   },
+  //   geoid: '15007',
+  //   geoName: 'Kauai-County',
+  //   downloadRef: '5fe3a581',
+  //   downloadId: 3,
+  //   productKey: '15-Hawaii/007-Kauai-County/5fe3a581-6f612f99-15007-Kauai-County-Hawaii.ndgeojson',
+  // };
 
-  // const messagePayload = JSON.parse(data.Messages[0].Body);
-  ctx.log.info(messagePayload);
+  const messagePayload = JSON.parse(data.Messages[0].Body);
+  ctx.log.info('Processing Message', { messagePayload });
 
   const isDryRun = messagePayload.dryRun;
   const productRef = messagePayload.productRef;

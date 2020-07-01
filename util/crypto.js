@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const zlib = require('zlib');
 const { tileInfoPrefix } = require('./constants');
 
-exports.generateRef = function (digits) {
+exports.generateRef = function (ctx, digits) {
   const uuid = uuidv4();
   // @ts-ignore
   const plainString = uuid.replace(/-,/g);
