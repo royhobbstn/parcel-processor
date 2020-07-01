@@ -98,15 +98,17 @@ async function acquireConnection(ctx) {
   // ping the database to make sure its up / get it ready
   // after that, keep-alives from data-api-client should do the rest
   const seconds = 10;
+  let attempts = 5;
   let connected = false;
   do {
+    attempts++;
     ctx.log.info('attempting to connect to database');
     connected = await checkHealth(ctx);
     if (!connected) {
       ctx.log.info(`attempt failed.  trying again in ${seconds} seconds...`);
       await setPause(ctx, seconds * 1000);
     }
-  } while (!connected);
+  } while (!connected && attempts <= 5);
 
   ctx.log.info('connected');
 }

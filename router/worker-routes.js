@@ -1,151 +1,91 @@
 // @ts-check
 
-const AWS = require('aws-sdk');
-const nodemailer = require('nodemailer');
+const fs = require('fs');
 const config = require('config');
 const { processInbox } = require('../processors/processInbox');
 const { processSort } = require('../processors/processSort');
 const { processProducts } = require('../processors/processProducts');
 const { processMessage } = require('../util/sqsOperations');
+const { putFileToS3 } = require('../util/s3Operations');
 const { createInstanceLogger, getUniqueLogfileName } = require('../util/logger');
-
-const transporter = nodemailer.createTransport({
-  SES: new AWS.SES({
-    apiVersion: '2010-12-01',
-    region: 'us-east-1',
-  }),
-});
-
-// send some mail
-transporter.sendMail(
-  {
-    from: 'danieljtrone@gmail.com',
-    to: 'danieljtrone@gmail.com',
-    subject: 'Error in Sort 2',
-    html: '<b>HTML EMAIL BODY</b><pre>var js = 5;</pre>',
-  },
-  (err, info) => {
-    if (err) {
-      console.log(err);
-    } else {
-      console.log(info);
-    }
-  },
-);
+const { sendAlertMail } = require('../util/email');
+const { directories } = require('../util/constants');
+const { FSx } = require('aws-sdk');
 
 exports.appRouter = async app => {
   //
   app.get('/processInbox', async function (req, res) {
-    const logfile = getUniqueLogfileName('inbox');
-    const log = createInstanceLogger(logfile);
-    const ctx = { log };
-
+    const ctx = createContext('processInbox');
     const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
-    let message;
-
-    try {
-      message = await processMessage(ctx, inboxQueueUrl);
-      if (message) {
-        ctx.log.info(`Inbox Queue message has successfully started processing.`);
-      }
-      res.json({ status: 'OK', message }); // purposefully return before processing
-    } catch (err) {
-      ctx.log.error('Failed to Receive or Delete Message', { err: err.message, stack: err.stack });
-      return res.status(500).send(err.message);
-    } finally {
-      if (!message) return;
-      let errorFlag;
-      processInbox(message)
-        .then(() => {
-          errorFlag = false;
-        })
-        .catch(err => {
-          ctx.log.error('Fatal Error: ', { err: err.message, stack: err.stack });
-          errorFlag = true;
-        })
-        .finally(() => {
-          // upload Logfile to S3
-          // save to DB
-          if (errorFlag) {
-            // email S3 logfile link to ME - research formatting body of email for JSON
-          }
-        });
-    }
+    return runProcess(ctx, res, inboxQueueUrl, processInbox);
   });
 
   app.get('/processSort', async function (req, res) {
-    const logfile = getUniqueLogfileName('sort');
-    const log = createInstanceLogger(logfile);
-    const ctx = { log };
-
+    const ctx = createContext('processSort');
     const sortQueueUrl = config.get('SQS.sortQueueUrl');
-    let message;
-
-    try {
-      message = await processMessage(ctx, sortQueueUrl);
-      if (message) {
-        ctx.log.info(`Sort Queue message has successfully started processing.`);
-      }
-      res.json({ status: 'OK', message }); // purposefully return before processing
-    } catch (err) {
-      ctx.log.error('Failed to Receive or Delete Message', { err: err.message, stack: err.stack });
-      return res.status(500).send(err.message);
-    } finally {
-      if (!message) return;
-      let errorFlag;
-      processSort(message)
-        .then(() => {
-          errorFlag = false;
-        })
-        .catch(err => {
-          ctx.log.error('Fatal Error: ', { err: err.message, stack: err.stack });
-          errorFlag = true;
-        })
-        .finally(() => {
-          // upload Logfile to S3
-          // save to DB
-          if (errorFlag) {
-            // email S3 logfile link to ME - research formatting body of email for JSON
-          }
-        });
-    }
+    return runProcess(ctx, res, sortQueueUrl, processSort);
   });
 
   app.get('/processProducts', async function (req, res) {
-    const logfile = getUniqueLogfileName('product');
-    const log = createInstanceLogger(logfile);
-    const ctx = { log };
-
+    const ctx = createContext('processProducts');
     const productQueueUrl = config.get('SQS.productQueueUrl');
-    let message;
-
-    try {
-      message = await processMessage(ctx, productQueueUrl);
-      if (message) {
-        ctx.log.info(`Product Queue message has successfully started processing.`);
-      }
-      res.json({ status: 'OK', message }); // purposefully return before processing
-    } catch (err) {
-      ctx.log.error('Failed to Receive or Delete Message', { err: err.message, stack: err.stack });
-      return res.status(500).send(err.message);
-    } finally {
-      if (!message) return;
-      let errorFlag;
-      processProducts(message)
-        .then(() => {
-          errorFlag = false;
-        })
-        .catch(err => {
-          ctx.log.error('Fatal Error: ', { err: err.message, stack: err.stack });
-          errorFlag = true;
-        })
-        .finally(() => {
-          // upload Logfile to S3
-          // save to DB
-          if (errorFlag) {
-            // email S3 logfile link to ME - research formatting body of email for JSON
-          }
-        });
-    }
+    return runProcess(ctx, res, productQueueUrl, processProducts);
   });
 };
+
+function createContext(processor) {
+  const processorShort = processor.replace('process', '').toLowerCase();
+  const logfile = getUniqueLogfileName(processorShort);
+  const logpath = `${directories.logDir}/${logfile}`;
+  const log = createInstanceLogger(`${directories.logDir}/${logfile}`);
+  return { log, logfile, logpath, processor };
+}
+
+async function runProcess(ctx, res, queueUrl, messageProcessor) {
+  let message;
+  let SqsError = false;
+
+  try {
+    message = await processMessage(ctx, queueUrl);
+    if (message) {
+      ctx.log.info(`Queue message has successfully started processing.`);
+    }
+    res.json({ status: 'OK', message }); // purposefully return before processing
+  } catch (err) {
+    SqsError = true;
+    ctx.log.error('Failed to Receive or Delete Message', { err: err.message, stack: err.stack });
+    return res.status(500).send(err.message);
+  } finally {
+    if (SqsError || !message) {
+      // SqsError: error response already sent by HTTP.  nothing to do.
+      // !message: 200 response already sent by HTTP.  nothing to do.
+      // no logs generated for either scenario since nothing was processed.
+      return;
+    }
+    let errorFlag;
+    messageProcessor(ctx, message)
+      .then(() => {
+        errorFlag = false;
+      })
+      .catch(err => {
+        ctx.log.error('Fatal Error: ', { err: err.message, stack: err.stack });
+        errorFlag = true;
+      })
+      .finally(async () => {
+        // upload Logfile to S3
+        await putFileToS3(
+          { log: console },
+          config.get('Buckets.logfilesBucket'),
+          ctx.logfile,
+          ctx.logpath,
+          'application/json',
+          true,
+        );
+        // send email to myself if there was an error
+        if (errorFlag) {
+          const fileData = fs.readFileSync(ctx.logpath);
+          sendAlertMail(`${ctx.processor} error`, fileData);
+        }
+      });
+  }
+}

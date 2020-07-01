@@ -1,7 +1,7 @@
 // @ts-check
 
 const { createLogger, format, transports } = require('winston');
-const { directories, logfileNameLength } = require('./constants');
+const { logfileNameLength } = require('./constants');
 const { generateRef } = require('./crypto');
 const { combine, timestamp, ms } = format;
 
@@ -18,7 +18,7 @@ const log = createLogger({
 const getUniqueLogfileName = function (serviceName) {
   const ts = Math.round(new Date().getTime() / 1000);
   const entropy = generateRef(logfileNameLength);
-  return `${directories.logDir}/${ts}-${serviceName}-${entropy}.log`;
+  return `${ts}-${serviceName}-${entropy}.log`;
 };
 
 const createInstanceLogger = function (fileNameAndPath) {

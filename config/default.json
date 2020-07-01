@@ -16,6 +16,7 @@
   "Buckets": {
     "rawBucket": "",
     "productsBucket": "",
-    "tilesBucket": ""
+    "tilesBucket": "",
+    "logfilesBucket": ""
   }
 }
