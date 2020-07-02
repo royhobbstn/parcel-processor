@@ -9,7 +9,8 @@ const { processMessage } = require('../util/sqsOperations');
 const { putFileToS3 } = require('../util/s3Operations');
 const { createInstanceLogger, getUniqueLogfileName } = require('../util/logger');
 const { sendAlertMail } = require('../util/email');
-const { directories } = require('../util/constants');
+const { directories, directoryIdLength } = require('../util/constants');
+const { generateRef } = require('../util/crypto');
 
 exports.appRouter = async app => {
   //
@@ -34,10 +35,11 @@ exports.appRouter = async app => {
 
 function createContext(processor) {
   const processorShort = processor.replace('process', '').toLowerCase();
+  const directoryId = generateRef({ log: console }, directoryIdLength);
   const logfile = getUniqueLogfileName(processorShort);
-  const logpath = `${directories.logDir}/${logfile}`;
-  const log = createInstanceLogger(`${directories.logDir}/${logfile}`);
-  return { log, logfile, logpath, processor };
+  const logpath = `${directories.logDir + directoryId}/${logfile}`;
+  const log = createInstanceLogger(logpath);
+  return { log, logfile, logpath, processor, directoryId };
 }
 
 async function runProcess(ctx, res, queueUrl, messageProcessor) {
@@ -71,20 +73,23 @@ async function runProcess(ctx, res, queueUrl, messageProcessor) {
         errorFlag = true;
       })
       .finally(async () => {
-        // upload Logfile to S3
-        await putFileToS3(
-          { log: console },
-          config.get('Buckets.logfilesBucket'),
-          ctx.logfile,
-          ctx.logpath,
-          'application/json',
-          true,
-        );
-        // send email to myself if there was an error
-        if (errorFlag) {
-          const fileData = fs.readFileSync(ctx.logpath);
-          sendAlertMail(`${ctx.processor} error`, fileData);
+        if (!ctx.isDryRun) {
+          console.log('\n\nUploading logfile to S3.');
+          await putFileToS3(
+            { log: console },
+            config.get('Buckets.logfilesBucket'),
+            ctx.logfile,
+            ctx.logpath,
+            'application/json',
+            true,
+          );
+          // send email to myself if there was an error
+          if (errorFlag) {
+            const fileData = fs.readFileSync(ctx.logpath);
+            await sendAlertMail(`${ctx.processor} error`, fileData);
+          }
         }
+        console.log('\nAll complete!\n\n');
       });
   }
 }

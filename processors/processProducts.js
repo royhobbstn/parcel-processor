@@ -21,14 +21,17 @@ const {
   extractPointsFromNdGeoJson,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
-const { doBasicCleanup } = require('../util/cleanup');
-const { zipShapefile, getMaxDirectoryLevel } = require('../util/filesystemUtil');
+const { zipShapefile, getMaxDirectoryLevel, createDirectories } = require('../util/filesystemUtil');
 
 exports.processProducts = async function (ctx, data) {
   await acquireConnection(ctx);
 
-  // to avoid uploading anything from a previous run
-  await doBasicCleanup(ctx, [directories.productTempDir], true);
+  await createDirectories(ctx, [
+    directories.outputDir,
+    directories.productTempDir,
+    directories.logDir,
+    directories.tilesDir,
+  ]);
 
   // const messagePayload = {
   //   dryRun: false,
@@ -55,6 +58,7 @@ exports.processProducts = async function (ctx, data) {
 
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
+  ctx.isDryRun = messagePayload.dryRun;
 
   const isDryRun = messagePayload.dryRun;
   const productRef = messagePayload.productRef;
@@ -68,9 +72,11 @@ exports.processProducts = async function (ctx, data) {
 
   const fileNameBase = productKey.split('/').slice(-1)[0];
   const fileNameNoExtension = fileNameBase.split('.').slice(0, -1)[0];
-  const destPlain = `${directories.productTempDir}/${fileNameBase}.gz`;
-  const destUnzipped = `${directories.productTempDir}/${fileNameBase}`;
-  const convertToFormatBase = `${directories.productTempDir}/${fileNameNoExtension}`;
+  const destPlain = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.gz`;
+  const destUnzipped = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}`;
+  const convertToFormatBase = `${
+    directories.productTempDir + ctx.directoryId
+  }/${fileNameNoExtension}`;
 
   ctx.log.info({ fileNameBase, fileNameNoExtension, destPlain, destUnzipped, convertToFormatBase });
 
@@ -218,7 +224,7 @@ exports.processProducts = async function (ctx, data) {
           ctx,
           config.get('Buckets.productsBucket'),
           `${productKeySHP}-shp.zip`,
-          `${directories.outputDir}/${path.parse(productKeySHP).base}-shp.zip`,
+          `${directories.outputDir + ctx.directoryId}/${path.parse(productKeySHP).base}-shp.zip`,
           'application/zip',
           false,
         );
@@ -275,7 +281,7 @@ exports.processProducts = async function (ctx, data) {
     const derivativePath = await createNdGeoJsonWithClusterId(ctx, convertToFormatBase, lookup);
 
     const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
-    const tilesDir = `${directories.processedDir}/${dirName}`;
+    const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
     // todo include cluster_id as property in tippecanoe
     const commandInput = await spawnTippecane(ctx, tilesDir, derivativePath);

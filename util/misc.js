@@ -8,13 +8,13 @@ exports.getSourceType = function (ctx, sourceNameInput) {
     sourceNameInput.includes('https://') ||
     sourceNameInput.includes('ftp://')
   ) {
-    ctx.log.info('\nDetermined to be a WEBPAGE source.\n');
+    ctx.log.info('Determined to be a WEBPAGE source');
     return sourceTypes.WEBPAGE;
   } else if (sourceNameInput.includes('@') && sourceNameInput.includes('.')) {
     // can probably validate better than this
-    ctx.log.info('\nDetermined to be an EMAIL source.\n');
+    ctx.log.info('Determined to be an EMAIL source');
     return sourceTypes.EMAIL;
   } else {
-    throw new Error('Could not determine source type.');
+    throw new Error('Could not determine source type');
   }
 };

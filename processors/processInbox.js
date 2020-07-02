@@ -9,7 +9,6 @@ const {
   productOrigins,
   fileFormats,
 } = require('../util/constants');
-const { doBasicCleanup } = require('../util/cleanup');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const {
   removeS3Files,
@@ -18,7 +17,7 @@ const {
   S3Writes,
 } = require('../util/wrapS3');
 const { computeHash, generateRef } = require('../util/crypto');
-const { extractZip, checkForFileType } = require('../util/filesystemUtil');
+const { extractZip, checkForFileType, createDirectories } = require('../util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('../util/processGeoFile');
 const {
   acquireConnection,
@@ -31,6 +30,12 @@ exports.processInbox = processInbox;
 
 async function processInbox(ctx, data) {
   await acquireConnection(ctx);
+  await createDirectories(ctx, [
+    directories.logDir,
+    directories.outputDir,
+    directories.rawDir,
+    directories.unzippedDir,
+  ]);
 
   // const messagePayload = {
   //   sourceType: 'webpage',
@@ -47,35 +52,24 @@ async function processInbox(ctx, data) {
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 
-  const filename = messagePayload.urlKeyVal.split('/').slice(-1);
-  const filePath = `${directories.rawDir}/${filename}`;
-
-  await downloadFile(ctx, messagePayload.urlKeyVal, filePath);
-
-  const cleanupS3 = [];
-
+  ctx.isDryRun = messagePayload.dryRun;
   const isDryRun = messagePayload.dryRun;
 
-  await doBasicCleanup(ctx, [directories.outputDir, directories.unzippedDir], true);
+  const filename = messagePayload.urlKeyVal.split('/').slice(-1);
+  const filePath = `${directories.rawDir + ctx.directoryId}/${filename}`;
+  const cleanupS3 = [];
+
+  await downloadFile(ctx, messagePayload.urlKeyVal, filePath);
 
   try {
     const payload = await runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload);
 
     if (!isDryRun) {
-      await doBasicCleanup(
-        ctx,
-        [directories.rawDir, directories.outputDir, directories.unzippedDir],
-        false,
-      );
-
       // Send SQS message to create products
       const productsQueueUrl = config.get('SQS.productQueueUrl');
       await sendQueueMessage(ctx, productsQueueUrl, payload);
     } else {
-      ctx.log.info(
-        `\nBecause this was a dryRun no database records or S3 files have been written.  \nYour file remains in the raw directory.\n`,
-      );
-      await doBasicCleanup(ctx, [directories.outputDir, directories.unzippedDir], false);
+      ctx.log.info(`Because this was a dryRun no database records or S3 files have been written`);
     }
 
     ctx.log.info('Completed successfully.');
@@ -90,9 +84,6 @@ async function processInbox(ctx, data) {
         ctx.log.error('Unable to delete S3 files', { err: err.message, stack: err.stack });
       }
     }
-
-    await doBasicCleanup(ctx, [directories.outputDir, directories.unzippedDir], false);
-    ctx.log.info('output and unzipped directories cleaned.  Original raw file left in place.');
   }
 }
 

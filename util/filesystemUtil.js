@@ -2,25 +2,24 @@
 
 const fs = require('fs');
 const unzipper = require('unzipper');
-var archiver = require('archiver');
+const archiver = require('archiver');
 const path = require('path');
+const mkdirp = require('mkdirp');
 const { directories } = require('./constants');
 
-exports.moveFile = function (ctx, oldPath, newPath) {
-  return new Promise((resolve, reject) => {
-    fs.rename(path.normalize(oldPath), path.normalize(newPath), err => {
-      if (err) {
-        return reject(err);
-      }
-      return resolve();
-    });
-  });
+exports.createDirectories = async function (ctx, dirs) {
+  for (let dir of dirs) {
+    const newDir = `${dir}${ctx.directoryId}`;
+    mkdirp.sync(newDir);
+    ctx.log.info(`Created directory: ${newDir}`);
+  }
+  ctx.log.info('Done creating staging directories.');
 };
 
 exports.extractZip = function (ctx, filePath) {
   return new Promise((resolve, reject) => {
     fs.createReadStream(filePath)
-      .pipe(unzipper.Extract({ path: directories.unzippedDir }))
+      .pipe(unzipper.Extract({ path: directories.unzippedDir + ctx.directoryId }))
       .on('error', err => {
         ctx.log.error(`Error unzipping file: ${filePath}`, { err: err.message, stack: err.stack });
         return reject(err);
@@ -36,9 +35,9 @@ exports.extractZip = function (ctx, filePath) {
 // determine if the unzipped folder contains a shapefile or FGDB
 exports.checkForFileType = function (ctx) {
   return new Promise((resolve, reject) => {
-    const arrayOfFiles = fs.readdirSync(directories.unzippedDir);
+    const arrayOfFiles = fs.readdirSync(directories.unzippedDir + ctx.directoryId);
 
-    ctx.log.info({ arrayOfFiles });
+    ctx.log.info('unzipped directory files', { arrayOfFiles });
 
     // determine if it's a shapefile by examining files in directory and looking for .shp
     // noting that there could possibly be multiple shapefiles in a zip archive
@@ -56,7 +55,9 @@ exports.checkForFileType = function (ctx) {
     });
 
     if (shpFilenames.size > 0 && gdbFilenames.size > 0) {
-      return reject('ERROR: mix of shapefiles and geodatabases in raw folder.  Exiting.');
+      return reject(
+        new Error('ERROR: mix of shapefiles and geodatabases in raw folder.  Exiting.'),
+      );
     }
 
     if (gdbFilenames.size === 1) {
@@ -65,7 +66,7 @@ exports.checkForFileType = function (ctx) {
 
     if (gdbFilenames.size > 1) {
       // TODO multiple geodatabases
-      return reject('ERROR: multiple geodatabases in raw folder.  Exiting.');
+      return reject(new Error('ERROR: multiple geodatabases in raw folder.  Exiting.'));
     }
 
     if (shpFilenames.size === 1) {
@@ -74,14 +75,14 @@ exports.checkForFileType = function (ctx) {
 
     if (shpFilenames.size > 1) {
       // TODO multiple shapefiles
-      return reject('ERROR: multiple shapefiles in raw folder.  Exiting.');
+      return reject(new Error('ERROR: multiple shapefiles in raw folder.  Exiting.'));
     }
 
     if (shpFilenames.size + gdbFilenames.size === 0) {
-      return reject('Unknown filetypes in raw folder.  Nothing will be processed.');
+      return reject(new Error('Unknown filetypes in raw folder.  Nothing will be processed.'));
     }
 
-    return reject('unknown state in checkForFileType');
+    return reject(new Error('unknown state in checkForFileType'));
   });
 };
 
@@ -89,7 +90,9 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
   return new Promise((resolve, reject) => {
     const keyBase = path.parse(productKeySHP).base;
     // create a file to stream archive data to.
-    var output = fs.createWriteStream(`${directories.outputDir}/${keyBase}-shp.zip`);
+    var output = fs.createWriteStream(
+      `${directories.outputDir + ctx.directoryId}/${keyBase}-shp.zip`,
+    );
     var archive = archiver('zip', {
       zlib: { level: 9 }, // Sets the compression level.
     });
@@ -152,13 +155,13 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
 };
 
 exports.getMaxDirectoryLevel = function (ctx, dir) {
-  const directories = fs
+  const dirs = fs
     .readdirSync(dir, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
     .map(dirent => parseInt(dirent.name));
 
-  ctx.log.info({ directories });
+  ctx.log.info('Directories', { dirs });
 
-  ctx.log.info(Math.max(...directories));
-  return Math.max(...directories);
+  ctx.log.info(Math.max(...dirs));
+  return Math.max(...dirs);
 };

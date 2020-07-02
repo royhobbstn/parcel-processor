@@ -18,7 +18,7 @@ const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wr
 const { createProductDownloadKey } = require('../util/wrapS3');
 const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
-const { doBasicCleanup } = require('../util/cleanup');
+const { createDirectories } = require('../util/filesystemUtil');
 
 let counter = 0;
 
@@ -27,8 +27,7 @@ exports.processSort = processSort;
 async function processSort(ctx, data) {
   await acquireConnection(ctx);
 
-  // to avoid uploading anything from a previous run
-  await doBasicCleanup(ctx, [directories.subGeographiesDir], true);
+  await createDirectories(ctx, [directories.logDir, directories.subGeographiesDir]);
 
   // const messagePayload = {
   //   dryRun: true,
@@ -71,6 +70,7 @@ async function processSort(ctx, data) {
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 
+  ctx.isDryRun = messagePayload.dryRun;
   const isDryRun = messagePayload.dryRun;
   const bucket = config.get('Buckets.productsBucket');
   const selectedFieldKey = messagePayload.selectedFieldKey;
@@ -88,7 +88,6 @@ async function processSort(ctx, data) {
   for (let file of files) {
     await processFile(ctx, file);
   }
-  await doBasicCleanup(ctx, [directories.subGeographiesDir], true);
 
   ctx.log.info('done with processSort');
 
@@ -156,7 +155,9 @@ async function processSort(ctx, data) {
 
     const splitValue = obj.properties[selectedFieldKey];
     const geoidFileTranslate = geoidTranslator[splitValue];
-    const fullPathFilename = `${directories.subGeographiesDir}/${geoidFileTranslate}`;
+    const fullPathFilename = `${
+      directories.subGeographiesDir + ctx.directoryId
+    }/${geoidFileTranslate}`;
 
     // stuff json line into a file depending on the county
     fileWrites.push(appendFileAsync(ctx, fullPathFilename, obj));
@@ -182,7 +183,7 @@ async function processSort(ctx, data) {
     }
 
     // file is a plain geoid with no file extension
-    const path = `${directories.subGeographiesDir}/${file}`;
+    const path = `${directories.subGeographiesDir + ctx.directoryId}/${file}`;
 
     const statExport = await countStats(ctx, path);
 

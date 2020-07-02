@@ -12,14 +12,17 @@ const { clustersKmeans } = require('./modKmeans');
 exports.inspectFile = function (ctx, fileName, fileType) {
   ctx.log.info(`Found file: ${fileName}`);
 
-  ctx.log.info({ fileName, fileType });
   ctx.log.info(
     'opening from ' +
-      `${directories.unzippedDir}/${fileName + (fileType === 'shapefile' ? '.shp' : '')}`,
+      `${directories.unzippedDir + ctx.directoryId}/${
+        fileName + (fileType === 'shapefile' ? '.shp' : '')
+      }`,
   );
 
   const dataset = gdal.open(
-    `${directories.unzippedDir}/${fileName + (fileType === 'shapefile' ? '.shp' : '')}`,
+    `${directories.unzippedDir + ctx.directoryId}/${
+      fileName + (fileType === 'shapefile' ? '.shp' : '')
+    }`,
   );
 
   const driver = dataset.driver;
@@ -30,21 +33,25 @@ exports.inspectFile = function (ctx, fileName, fileType) {
     throw new Error('Source file is not a valid vector file');
   }
 
-  ctx.log.info(`Driver = ${driver.description}\n`);
+  ctx.log.info(`Driver = ${driver.description}`);
 
   let total_layers = 0; // iterator for layer labels
 
   // print out info for each layer in file
   const layerSelection = dataset.layers
     .map((layer, index) => {
-      ctx.log(`#${total_layers++}: ${layer.name}`);
-      ctx.log(`  Geometry Type = ${gdal.Geometry.getName(layer.geomType)}`);
-      ctx.log(`  Spatial Reference = ${layer.srs ? layer.srs.toWKT() : 'null'}`);
-      ctx.log('  Fields: ');
+      ctx.log.info(`#${total_layers++}: ${layer.name}`);
+      ctx.log.info(`  Geometry Type = ${gdal.Geometry.getName(layer.geomType)}`);
+      ctx.log.info(
+        `  Spatial Reference = ${
+          layer.srs ? layer.srs.toWKT().replace(/\"/g, "'") : 'no spatial reference defined'
+        }`,
+      );
+      ctx.log.info('  Fields: ');
       layer.fields.forEach(field => {
-        ctx.log(`    -${field.name} (${field.type})`);
+        ctx.log.info(`    -${field.name} (${field.type})`);
       });
-      ctx.log(`  Feature Count = ${layer.features.count()}`);
+      ctx.log.info(`  Feature Count = ${layer.features.count()}`);
       return {
         index,
         type: gdal.Geometry.getName(layer.geomType),
@@ -96,10 +103,10 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
     // the finish event is emitted when all data has been flushed from the stream
     writeStream.on('finish', async () => {
       fs.writeFileSync(`${outputPath}.json`, JSON.stringify(statCounter.export()), 'utf8');
-      ctx.log.info(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson\n`);
+      ctx.log.info(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson`);
 
       ctx.log.info(`processed ${counter} features`);
-      ctx.log.info(`found ${errored} feature errors\n`);
+      ctx.log.info(`found ${errored} feature errors`);
       return resolve();
     });
 
@@ -161,7 +168,7 @@ function createPointFeature(ctx, parsedFeature) {
 exports.parseOutputPath = function (ctx, fileName, fileType) {
   const SPLITTER = fileType === 'shapefile' ? '.shp' : '.gdb';
   const splitFileName = fileName.split(SPLITTER)[0];
-  const outputPath = `${directories.outputDir}/${splitFileName}`;
+  const outputPath = `${directories.outputDir + ctx.directoryId}/${splitFileName}`;
   return outputPath;
 };
 
@@ -322,7 +329,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
-        reject('error');
+        reject(err);
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
@@ -389,7 +396,7 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
-        reject('error');
+        reject(err);
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');

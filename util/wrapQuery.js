@@ -167,7 +167,7 @@ async function createSource(ctx, sourceName, sourceType, transactionId) {
 exports.doesHashExist = async function (ctx, computedHash) {
   const query = await queryHash(ctx, computedHash);
   if (query.records.length) {
-    ctx.log.info('Hash exists in database.  File has already been processed.\n');
+    ctx.log.info('Hash exists in database.  File has already been processed.');
     return true;
   }
   ctx.log.info('Hash is unique.  Processing new download.');
@@ -229,7 +229,7 @@ exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
   }
 
   const query = await queryGeographicIdentifier(ctx, geoid);
-  ctx.log.info(query);
+  ctx.log.info('queryResults', { query });
 
   if (!query || !query.records || !query.records.length) {
     throw new Error(

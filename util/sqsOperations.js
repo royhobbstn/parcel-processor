@@ -39,7 +39,7 @@ function readMessage(ctx, queueUrl) {
     sqs.receiveMessage(params, async function (err, data) {
       if (err) {
         ctx.log.error('Unable to receive SQS Sort message', { err: err.message, stack: err.stack });
-        return reject('Unable to receive SQS Sort message');
+        return reject(new Error('Unable to receive SQS Sort message'));
       } else if (data.Messages) {
         ctx.log.info('Received message');
         return resolve(data);
@@ -63,7 +63,7 @@ function deleteMessage(ctx, queueUrl, data) {
     sqs.deleteMessage(deleteParams, function (err, data) {
       if (err) {
         ctx.log.error('Unable to delete SQS message', { err: err.message, stack: err.stack });
-        return reject('Unable to delete SQS message');
+        return reject(new Error('Unable to delete SQS message'));
       } else {
         ctx.log.info('Message Deleted', data);
         return resolve({ success: 'Successfully processed SQS Sort message' });
