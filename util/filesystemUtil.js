@@ -5,6 +5,7 @@ const unzipper = require('unzipper');
 const archiver = require('archiver');
 const path = require('path');
 const mkdirp = require('mkdirp');
+const fsExtra = require('fs-extra');
 const { directories } = require('./constants');
 
 exports.createDirectories = async function (ctx, dirs) {
@@ -30,6 +31,36 @@ exports.extractZip = function (ctx, filePath) {
       });
   });
 };
+
+exports.collapseUnzippedDir = collapseUnzippedDir;
+
+function collapseUnzippedDir(ctx) {
+  const root = directories.unzippedDir + ctx.directoryId;
+  const arrayOfFiles = fs.readdirSync(root);
+  let movedFlag = false;
+
+  for (let file of arrayOfFiles) {
+    const isDir = fs
+      .lstatSync(`${directories.unzippedDir + ctx.directoryId}/${file}`)
+      .isDirectory();
+    const isGDB = file.slice(-4).toLowerCase() === '.gdb';
+
+    if (isDir && !isGDB) {
+      // move contents of this directory to root
+      const subDirectory = `${directories.unzippedDir + ctx.directoryId}/${file}`;
+      ctx.log.info(`Moving contents of folder: ${subDirectory} into base folder: ${root}`);
+      const arrayOfSubDirectoryFiles = fs.readdirSync(subDirectory);
+      for (let subFile of arrayOfSubDirectoryFiles) {
+        fsExtra.moveSync(`${subDirectory}/${subFile}`, `${root}/${subFile}`);
+      }
+      movedFlag = true;
+    }
+  }
+
+  if (movedFlag) {
+    return collapseUnzippedDir;
+  }
+}
 
 // todo dont know where else to put this function
 // determine if the unzipped folder contains a shapefile or FGDB

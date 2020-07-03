@@ -7,9 +7,10 @@ const {
   fileFormats,
   referenceIdLength,
   productOrigins,
+  s3deleteType,
 } = require('../util/constants');
 const { acquireConnection } = require('../util/wrapQuery');
-const { createProductDownloadKey } = require('../util/wrapS3');
+const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
 const { putFileToS3, streamS3toFileSystem, putTextToS3, s3Sync } = require('../util/s3Operations');
 const { queryCreateProductRecord, checkForProducts } = require('../util/queries');
 const {
@@ -69,6 +70,7 @@ exports.processProducts = async function (ctx, data) {
   const downloadRef = messagePayload.downloadRef;
   const productOrigin = messagePayload.productOrigin;
   const fipsDetails = messagePayload.fipsDetails;
+  let caughtError = false;
 
   const fileNameBase = productKey.split('/').slice(-1)[0];
   const fileNameNoExtension = fileNameBase.split('.').slice(0, -1)[0];
@@ -109,42 +111,61 @@ exports.processProducts = async function (ctx, data) {
     ctx.log.info('GeoJson product for this Geoid and DownloadId already exists.  Skipping.');
   }
   if (messagePayload.products.includes(fileFormats.GEOJSON.label) && !existingGeoJson) {
-    await convertToFormat(ctx, fileFormats.GEOJSON, convertToFormatBase);
+    const cleanupS3 = [];
 
-    const individualRefGeoJson = generateRef(ctx, referenceIdLength);
+    try {
+      await convertToFormat(ctx, fileFormats.GEOJSON, convertToFormatBase);
 
-    const productKeyGeoJSON = createProductDownloadKey(
-      ctx,
-      fipsDetails,
-      geoid,
-      geoName,
-      downloadRef,
-      productRef,
-      individualRefGeoJson,
-    );
+      const individualRefGeoJson = generateRef(ctx, referenceIdLength);
 
-    if (!isDryRun) {
-      await putFileToS3(
+      const productKeyGeoJSON = createProductDownloadKey(
         ctx,
-        config.get('Buckets.productsBucket'),
-        `${productKeyGeoJSON}.geojson`,
-        `${convertToFormatBase}.geojson`,
-        'application/geo+json',
-        true,
-      );
-      ctx.log.info(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
-
-      await queryCreateProductRecord(
-        ctx,
-        downloadId,
+        fipsDetails,
+        geoid,
+        geoName,
+        downloadRef,
         productRef,
         individualRefGeoJson,
-        fileFormats.GEOJSON.extension,
-        productOrigin,
-        geoid,
-        `${productKeyGeoJSON}.geojson`,
       );
-      ctx.log.info(`created geoJSON product record.  ref: ${individualRefGeoJson}`);
+
+      if (!isDryRun) {
+        await putFileToS3(
+          ctx,
+          config.get('Buckets.productsBucket'),
+          `${productKeyGeoJSON}.geojson`,
+          `${convertToFormatBase}.geojson`,
+          'application/geo+json',
+          true,
+        );
+        cleanupS3.push({
+          bucket: config.get('Buckets.productsBucket'),
+          key: `${productKeyGeoJSON}.geojson`,
+          type: s3deleteType.FILE,
+        });
+        ctx.log.info(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
+
+        await queryCreateProductRecord(
+          ctx,
+          downloadId,
+          productRef,
+          individualRefGeoJson,
+          fileFormats.GEOJSON.extension,
+          productOrigin,
+          geoid,
+          `${productKeyGeoJSON}.geojson`,
+        );
+        ctx.log.info(`created geoJSON product record.  ref: ${individualRefGeoJson}`);
+      }
+    } catch (err) {
+      // unlike in processSort, we won't let a failure in a product creation
+      // cancel processing of the other products
+      // but we will keep track of it for email notification purposes.
+      await removeS3Files(ctx, cleanupS3);
+      caughtError = true;
+      ctx.log.info(`Uploading or product record creation failed on GeoJSON`, {
+        data: err.message,
+        stack: err.stack,
+      });
     }
   }
 
@@ -156,6 +177,8 @@ exports.processProducts = async function (ctx, data) {
     ctx.log.info('GeoPackage product for this Geoid and DownloadId already exists.  Skipping.');
   }
   if (messagePayload.products.includes(fileFormats.GPKG.label) && !existingGpkg) {
+    const cleanupS3 = [];
+
     try {
       await convertToFormat(ctx, fileFormats.GPKG, convertToFormatBase);
       const individualRefGPKG = generateRef(ctx, referenceIdLength);
@@ -178,6 +201,11 @@ exports.processProducts = async function (ctx, data) {
           'application/geopackage+sqlite3',
           true,
         );
+        cleanupS3.push({
+          bucket: config.get('Buckets.productsBucket'),
+          key: `${productKeyGPKG}.gpkg`,
+          type: s3deleteType.FILE,
+        });
         ctx.log.info(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
 
         await queryCreateProductRecord(
@@ -193,6 +221,8 @@ exports.processProducts = async function (ctx, data) {
         ctx.log.info(`created GPKG product record.  ref: ${individualRefGPKG}`);
       }
     } catch (err) {
+      await removeS3Files(ctx, cleanupS3);
+      caughtError = true;
       ctx.log.error(`Uploading or product record creation failed on GPKG`, {
         err: err.message,
         stack: err.stack,
@@ -205,6 +235,8 @@ exports.processProducts = async function (ctx, data) {
     ctx.log.info('Shapefile product for this Geoid and DownloadId already exists.  Skipping.');
   }
   if (messagePayload.products.includes(fileFormats.SHP.label) && !existingShp) {
+    const cleanupS3 = [];
+
     try {
       await convertToFormat(ctx, fileFormats.SHP, convertToFormatBase);
       const individualRefSHP = generateRef(ctx, referenceIdLength);
@@ -228,6 +260,11 @@ exports.processProducts = async function (ctx, data) {
           'application/zip',
           false,
         );
+        cleanupS3.push({
+          bucket: config.get('Buckets.productsBucket'),
+          key: `${productKeySHP}-shp.zip`,
+          type: s3deleteType.FILE,
+        });
         ctx.log.info(`uploaded SHP file to S3  key: ${productKeySHP}`);
 
         await queryCreateProductRecord(
@@ -243,6 +280,8 @@ exports.processProducts = async function (ctx, data) {
         ctx.log.info(`created SHP product record.  ref: ${individualRefSHP}`);
       }
     } catch (err) {
+      await removeS3Files(ctx, cleanupS3);
+      caughtError = true;
       ctx.log.info(`Uploading or product record creation failed on SHP`, {
         data: err.message,
         stack: err.stack,
@@ -272,55 +311,73 @@ exports.processProducts = async function (ctx, data) {
       productRefTiles,
     };
 
-    const [points, propertyCount] = await extractPointsFromNdGeoJson(ctx, convertToFormatBase);
+    const cleanupS3 = [];
 
-    // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
-    const lookup = addClusterIdToGeoData(ctx, points, propertyCount);
+    try {
+      const [points, propertyCount] = await extractPointsFromNdGeoJson(ctx, convertToFormatBase);
 
-    // create derivative ndgeojson with clusterId
-    const derivativePath = await createNdGeoJsonWithClusterId(ctx, convertToFormatBase, lookup);
+      // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
+      const lookup = addClusterIdToGeoData(ctx, points, propertyCount);
 
-    const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
-    const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
+      // create derivative ndgeojson with clusterId
+      const derivativePath = await createNdGeoJsonWithClusterId(ctx, convertToFormatBase, lookup);
 
-    // todo include cluster_id as property in tippecanoe
-    const commandInput = await spawnTippecane(ctx, tilesDir, derivativePath);
-    const maxZoom = getMaxDirectoryLevel(ctx, tilesDir);
-    await writeTileAttributes(ctx, derivativePath, tilesDir);
-    await gzipTileAttributes(ctx, `${tilesDir}/attributes`);
-    const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
+      const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
+      const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
-    // sync tiles
-    if (!isDryRun) {
-      await s3Sync(ctx, tilesDir, config.get('Buckets.tilesBucket'), dirName);
-      ctx.log.info(`uploaded TILES directory to S3.  Dir: ${dirName}`);
+      // todo include cluster_id as property in tippecanoe
+      const commandInput = await spawnTippecane(ctx, tilesDir, derivativePath);
+      const maxZoom = getMaxDirectoryLevel(ctx, tilesDir);
+      await writeTileAttributes(ctx, derivativePath, tilesDir);
+      await gzipTileAttributes(ctx, `${tilesDir}/attributes`);
+      const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
 
-      // write metadata
-      await putTextToS3(
-        ctx,
-        config.get('Buckets.tilesBucket'),
-        `${dirName}/info.json`,
-        JSON.stringify(metadata),
-        'application/json',
-        false,
-      );
-      ctx.log.info(`uploaded TILES meta file to S3.  Dir: ${dirName}/info.json`);
+      // sync tiles
+      if (!isDryRun) {
+        await s3Sync(ctx, tilesDir, config.get('Buckets.tilesBucket'), dirName);
+        ctx.log.info(`uploaded TILES directory to S3.  Dir: ${dirName}`);
+        cleanupS3.push({
+          bucket: config.get('Buckets.tilesBucket'),
+          key: tilesDir,
+          type: s3deleteType.DIRECTORY,
+        });
 
-      await queryCreateProductRecord(
-        ctx,
-        downloadId,
-        productRef,
-        productRefTiles,
-        fileFormats.TILES.extension,
-        productOrigins.ORIGINAL,
-        geoid,
-        dirName,
-      );
-      ctx.log.info(`created TILES product record.  ref: ${productRefTiles}`);
+        // write metadata
+        await putTextToS3(
+          ctx,
+          config.get('Buckets.tilesBucket'),
+          `${dirName}/info.json`,
+          JSON.stringify(metadata),
+          'application/json',
+          false,
+        );
+        ctx.log.info(`uploaded TILES meta file to S3.  Dir: ${dirName}/info.json`);
+
+        await queryCreateProductRecord(
+          ctx,
+          downloadId,
+          productRef,
+          productRefTiles,
+          fileFormats.TILES.extension,
+          productOrigins.ORIGINAL,
+          geoid,
+          dirName,
+        );
+        ctx.log.info(`created TILES product record.  ref: ${productRefTiles}`);
+      }
+    } catch (err) {
+      await removeS3Files(ctx, cleanupS3);
+      caughtError = true;
+      ctx.log.info(`Uploading or product record creation failed on Tiles`, {
+        data: err.message,
+        stack: err.stack,
+      });
     }
   }
 
-  // todo cleanup
-
   ctx.log.info('product creation finished');
+
+  if (caughtError) {
+    throw new Error('There were issues with one or more products.  See logs.');
+  }
 };

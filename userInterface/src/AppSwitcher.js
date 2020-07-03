@@ -18,6 +18,7 @@ function AppSwitcher() {
 
     function logout() {
       updateEnv('down');
+      updateApp('');
     }
 
     function resetTimer() {

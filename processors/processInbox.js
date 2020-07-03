@@ -17,7 +17,12 @@ const {
   S3Writes,
 } = require('../util/wrapS3');
 const { computeHash, generateRef } = require('../util/crypto');
-const { extractZip, checkForFileType, createDirectories } = require('../util/filesystemUtil');
+const {
+  extractZip,
+  checkForFileType,
+  createDirectories,
+  collapseUnzippedDir,
+} = require('../util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('../util/processGeoFile');
 const {
   acquireConnection,
@@ -119,6 +124,8 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
   const rawKey = createRawDownloadKey(ctx, fipsDetails, geoid, geoName, downloadRef);
 
   await extractZip(ctx, filePath);
+
+  collapseUnzippedDir(ctx); // this is sync
 
   // determines if file(s) are of type shapefile or geodatabase
   const [fileName, fileType] = await checkForFileType(ctx);

@@ -12,10 +12,11 @@ const {
   fileFormats,
   productOrigins,
   referenceIdLength,
+  s3deleteType,
 } = require('../util/constants');
 const { queryCreateProductRecord, checkForProduct } = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
-const { createProductDownloadKey } = require('../util/wrapS3');
+const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
 const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const { createDirectories } = require('../util/filesystemUtil');
@@ -205,36 +206,43 @@ async function processSort(ctx, data) {
     );
 
     if (!isDryRun) {
-      // async operations done in parallel
-      const operations = [];
+      const cleanupS3 = [];
 
-      // upload stat file
-      operations.push(
-        putTextToS3(
+      try {
+        // upload stat file
+        await putTextToS3(
           ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}-stat.json`,
           JSON.stringify(statExport),
           'application/json',
           true,
-        ),
-      );
+        );
 
-      // upload ndgeojson file
-      operations.push(
-        putFileToS3(
+        cleanupS3.push({
+          bucket: config.get('Buckets.productsBucket'),
+          key: `${productKey}-stat.json`,
+          type: s3deleteType.FILE,
+        });
+
+        // upload ndgeojson file
+        await putFileToS3(
           ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}.ndgeojson`,
           path,
           'application/geo+json-seq',
           true,
-        ),
-      );
+        );
 
-      // write product record
-      operations.push(
-        queryCreateProductRecord(
+        cleanupS3.push({
+          bucket: config.get('Buckets.productsBucket'),
+          key: `${productKey}.ndgeojson`,
+          type: s3deleteType.FILE,
+        });
+
+        // writes just one record.  no transaction needed.  it works or it doesnt
+        await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -242,10 +250,13 @@ async function processSort(ctx, data) {
           productOrigins.DERIVED,
           file,
           `${productKey}.ndgeojson`,
-        ),
-      );
-
-      await Promise.all(operations);
+        );
+      } catch (err) {
+        await removeS3Files(ctx, cleanupS3);
+        // throwing here will cause processSort to end.
+        // accomodates resuming if identical message (in terms of data) is sent
+        throw err;
+      }
 
       // Send SQS message to create products
 
