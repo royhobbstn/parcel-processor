@@ -88,6 +88,8 @@ async function runProcess(ctx, res, queueUrl, messageProcessor) {
             const fileData = fs.readFileSync(ctx.logpath);
             await sendAlertMail(`${ctx.processor} error`, fileData);
           }
+        } else {
+          console.log('This is a DryRun so no email will be sent, and no logfile uploaded to S3.');
         }
         console.log('\nAll complete!\n\n');
       });

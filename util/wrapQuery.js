@@ -39,6 +39,7 @@ exports.DBWrites = async function (
 
   let sourceLine;
   const transactionId = await startTransaction(ctx);
+  ctx.log.info('Transaction started.', { transactionId });
 
   try {
     let [sourceId, sourceType] = await fetchSourceIdIfExists(ctx, sourceNameInput);
@@ -66,6 +67,7 @@ exports.DBWrites = async function (
       filePath,
       transactionId,
     );
+    ctx.log.info(`Created download record.`, { downloadId });
 
     await queryCreateProductRecord(
       ctx,
@@ -76,9 +78,13 @@ exports.DBWrites = async function (
       productOrigins.ORIGINAL,
       geoid,
       `${productKey}.ndgeojson`,
+      transactionId,
     );
+    ctx.log.info('NdGeoJson product record was created.');
 
     await commitTransaction(ctx, transactionId);
+    ctx.log.info('Transaction Committed');
+
     ctx.log.info(sourceLine);
     ctx.log.info(`Recorded source check as disposition: 'viewed'`);
     ctx.log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
@@ -202,7 +208,6 @@ async function constructDownloadRecord(
   if (!query || !query.insertId) {
     throw new Error('unexpected result from create download request');
   }
-  ctx.log.info('new download record created');
   return query.insertId;
 }
 

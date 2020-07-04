@@ -142,4 +142,32 @@ exports.appRouter = async app => {
       }
     });
   });
+
+  app.post('/sendProductSQS', (req, res) => {
+    const ctx = { log };
+
+    const productsQueueUrl = config.get('SQS.productQueueUrl');
+
+    const payload = req.body;
+
+    const params = {
+      MessageAttributes: {},
+      MessageBody: JSON.stringify(payload),
+      QueueUrl: productsQueueUrl,
+    };
+
+    sqs.sendMessage(params, function (err, data) {
+      ctx.log.info('SQS response: ', { data });
+      if (err) {
+        ctx.log.error(`Unable to send SQS message to queue: ${productsQueueUrl}`, {
+          err: err.message,
+          stack: err.stack,
+        });
+        return res.status(500).send(`Unable to send SQS message to queue: ${productsQueueUrl}`);
+      } else {
+        ctx.log.info(`Successfully sent SQS message to queue: ${productsQueueUrl}`);
+        return res.json({ success: `Successfully sent SQS message to queue: ${productsQueueUrl}` });
+      }
+    });
+  });
 };

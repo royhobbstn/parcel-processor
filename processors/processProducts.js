@@ -54,7 +54,7 @@ exports.processProducts = async function (ctx, data) {
   //   geoName: 'Kauai-County',
   //   downloadRef: '5fe3a581',
   //   downloadId: 3,
-  //   productKey: '15-Hawaii/007-Kauai-County/5fe3a581-6f612f99-15007-Kauai-County-Hawaii.ndgeojson',
+  //   productKey: '15-Hawaii/007-Kauai-County/5fe3a581-6f612f99-15007-Kauai-County-Hawaii',
   // };
 
   const messagePayload = JSON.parse(data.Messages[0].Body);
@@ -73,17 +73,20 @@ exports.processProducts = async function (ctx, data) {
   let caughtError = false;
 
   const fileNameBase = productKey.split('/').slice(-1)[0];
-  const fileNameNoExtension = fileNameBase.split('.').slice(0, -1)[0];
-  const destPlain = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.gz`;
-  const destUnzipped = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}`;
-  const convertToFormatBase = `${
-    directories.productTempDir + ctx.directoryId
-  }/${fileNameNoExtension}`;
+  const destPlain = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.ndgeojson.gz`;
+  const destUnzipped = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.ndgeojson`;
+  const convertToFormatBase = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}`;
 
-  ctx.log.info({ fileNameBase, fileNameNoExtension, destPlain, destUnzipped, convertToFormatBase });
+  ctx.log.info('paths', {
+    fileNameBase,
+    destPlain,
+    destUnzipped,
+    convertToFormatBase,
+  });
 
   // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
   // SQS can sometimes duplicate messages, and this would guard against it.
+  ctx.log.info('Checking for existing products....');
   const existingProducts = await checkForProducts(ctx, geoid, downloadId);
   const existingGeoJson = existingProducts.some(product => {
     return product.product_type === fileFormats.GEOJSON.extension;
@@ -98,19 +101,31 @@ exports.processProducts = async function (ctx, data) {
     return product.product_type === fileFormats.TILES.extension;
   });
 
-  await streamS3toFileSystem(
-    ctx,
-    config.get('Buckets.productsBucket'),
-    productKey,
-    destPlain,
-    destUnzipped,
-  );
+  ctx.log.info('existing products', { existingProducts });
+
+  try {
+    ctx.log.info('Beginning file download from S3.');
+    await streamS3toFileSystem(
+      ctx,
+      config.get('Buckets.productsBucket'),
+      `${productKey}.ndgeojson`,
+      destPlain,
+      destUnzipped,
+    );
+  } catch (err) {
+    caughtError = true;
+    ctx.log.info(`Error streaming the file from S3.`, {
+      data: err.message,
+      stack: err.stack,
+    });
+  }
 
   // GEOJSON
   if (existingGeoJson) {
     ctx.log.info('GeoJson product for this Geoid and DownloadId already exists.  Skipping.');
   }
   if (messagePayload.products.includes(fileFormats.GEOJSON.label) && !existingGeoJson) {
+    ctx.log.info('Starting GeoJson Product Creation');
     const cleanupS3 = [];
 
     try {
@@ -177,6 +192,8 @@ exports.processProducts = async function (ctx, data) {
     ctx.log.info('GeoPackage product for this Geoid and DownloadId already exists.  Skipping.');
   }
   if (messagePayload.products.includes(fileFormats.GPKG.label) && !existingGpkg) {
+    ctx.log.info('Starting GPKG Product Creation');
+
     const cleanupS3 = [];
 
     try {
@@ -235,6 +252,8 @@ exports.processProducts = async function (ctx, data) {
     ctx.log.info('Shapefile product for this Geoid and DownloadId already exists.  Skipping.');
   }
   if (messagePayload.products.includes(fileFormats.SHP.label) && !existingShp) {
+    ctx.log.info('Starting Shapefile Product Creation');
+
     const cleanupS3 = [];
 
     try {
@@ -299,6 +318,8 @@ exports.processProducts = async function (ctx, data) {
     fipsDetails.SUMLEV !== '040' &&
     !existingPbf
   ) {
+    ctx.log.info('Starting Tiles Product Creation');
+
     const productRefTiles = generateRef(ctx, referenceIdLength);
 
     const meta = {
@@ -326,6 +347,7 @@ exports.processProducts = async function (ctx, data) {
       const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
       // todo include cluster_id as property in tippecanoe
+      // todo logs here
       const commandInput = await spawnTippecane(ctx, tilesDir, derivativePath);
       const maxZoom = getMaxDirectoryLevel(ctx, tilesDir);
       await writeTileAttributes(ctx, derivativePath, tilesDir);
@@ -334,8 +356,9 @@ exports.processProducts = async function (ctx, data) {
 
       // sync tiles
       if (!isDryRun) {
+        ctx.log.info('syncing TILES to S3');
         await s3Sync(ctx, tilesDir, config.get('Buckets.tilesBucket'), dirName);
-        ctx.log.info(`uploaded TILES directory to S3.  Dir: ${dirName}`);
+        ctx.log.info(`finished!  uploaded TILES directory to S3.  Dir: ${dirName}`);
         cleanupS3.push({
           bucket: config.get('Buckets.tilesBucket'),
           key: tilesDir,

@@ -21,8 +21,6 @@ const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const { createDirectories } = require('../util/filesystemUtil');
 
-let counter = 0;
-
 exports.processSort = processSort;
 
 async function processSort(ctx, data) {
@@ -82,6 +80,7 @@ async function processSort(ctx, data) {
   const geonameLookup = keifyGeographies(ctx, messagePayload.geographies);
   const files = Array.from(new Set(Object.values(geoidTranslator)));
   const fileWrites = [];
+  let counter = 0;
 
   await sortData(ctx);
 
@@ -246,6 +245,7 @@ async function processSort(ctx, data) {
           ctx,
           downloadId,
           productRef,
+          individualRef,
           fileFormats.NDGEOJSON.extension,
           productOrigins.DERIVED,
           file,

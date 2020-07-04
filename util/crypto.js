@@ -47,6 +47,7 @@ exports.gzipTileAttributes = async function (ctx, directory) {
     })
     .map(file => {
       return convertToGzip(
+        ctx,
         `${directory}/${file}`,
         `${directory}/${file.slice(tileInfoPrefix.length)}`,
       );
@@ -64,15 +65,18 @@ function convertToGzip(ctx, oldPath, newPath) {
     const z = zlib.createGzip();
 
     readStream.on('error', err => {
-      return reject(err);
+      ctx.log.error('readStreamError', { error: err.message, stack: err.stack });
+      throw err;
     });
     writeStream.on('error', err => {
-      return reject(err);
+      ctx.log.error('writeStreamError', { error: err.message, stack: err.stack });
+      throw err;
     });
     readStream.on('close', function () {
-      fs.unlink(oldPath, () => {
-        return resolve();
-      });
+      fs.unlink(oldPath, () => {});
+    });
+    writeStream.on('close', function () {
+      return resolve();
     });
 
     readStream.pipe(z).pipe(writeStream);

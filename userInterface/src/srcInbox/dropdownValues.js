@@ -1,5 +1,23 @@
 // @ts-check
 
+export const sqsQueues = [
+  {
+    key: 'inbox',
+    text: 'Inbox',
+    value: 'sendInboxSQS',
+  },
+  {
+    key: 'products',
+    text: 'Products',
+    value: 'sendProductSQS',
+  },
+  {
+    key: 'sort',
+    text: 'Sort',
+    value: 'sendSortSQS',
+  },
+];
+
 export const summaryLevels = [
   {
     key: '040',

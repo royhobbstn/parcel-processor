@@ -31,7 +31,7 @@ exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, use
     uploadPromise
       .then(data => {
         ctx.log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
-        ctx.log.info(data);
+        ctx.log.info('upload resonse', { data });
         return resolve();
       })
       .catch(err => {

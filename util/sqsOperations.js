@@ -4,6 +4,8 @@ AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
 
 exports.sendQueueMessage = function (ctx, queueUrl, payload) {
+  ctx.log.info('queueUrl', { queueUrl });
+  ctx.log.info('queueMessage', { payload });
   return new Promise((resolve, reject) => {
     const params = {
       MessageAttributes: {},

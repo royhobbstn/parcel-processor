@@ -160,9 +160,14 @@ exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
 };
 
 function createPointFeature(ctx, parsedFeature) {
-  const center = turf.center(parsedFeature);
-  center.properties[idPrefix] = parsedFeature.properties[idPrefix];
-  return center;
+  try {
+    const center = turf.center(parsedFeature);
+    center.properties[idPrefix] = parsedFeature.properties[idPrefix];
+    return center;
+  } catch (err) {
+    ctx.log.info('ignoring error creating point feature in:', { __po_id: parsedFeature.__po_id });
+    return null;
+  }
 }
 
 exports.parseOutputPath = function (ctx, fileName, fileType) {
@@ -344,7 +349,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
 
     let transformed = 0;
     ctx.log.info('extractPointsFromNdGeoJson');
-    ctx.log.info({ outputPath });
+    ctx.log.info('outputPath', { outputPath });
     const points = []; // point centroid geojson features with parcel-outlet ids
     let propertyCount = 1; // will be updated below.  count of property attributes per feature.  used for deciding attribute file size and number of clusters
 
@@ -352,7 +357,10 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
       .pipe(ndjson.parse())
       .on('data', function (obj) {
         // create a point feature
-        points.push(createPointFeature(ctx, obj));
+        const pt = createPointFeature(ctx, obj);
+        if (pt) {
+          points.push(pt);
+        }
 
         transformed++;
         if (transformed % 10000 === 0) {
