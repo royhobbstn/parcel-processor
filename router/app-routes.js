@@ -13,9 +13,71 @@ const {
 } = require('../util/wrapQuery');
 const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
+const { readMessages, deleteMessage, sendQueueMessage } = require('../util/sqsOperations');
 
 exports.appRouter = async app => {
   //
+
+  app.post('/replay/viewInboxDlq', async function (req, res) {
+    const ctx = { log };
+    const payload = req.body;
+    const originalQueueUrl = config.get('SQS.inboxQueueUrl');
+    return replayDlq(ctx, res, originalQueueUrl, payload);
+  });
+
+  app.post('/replay/viewSortDlq', async function (req, res) {
+    const ctx = { log };
+    const payload = req.body;
+    const originalQueueUrl = config.get('SQS.sortQueueUrl');
+    return replayDlq(ctx, res, originalQueueUrl, payload);
+  });
+
+  app.post('/replay/viewProductDlq', async function (req, res) {
+    const ctx = { log };
+    const payload = req.body;
+    const originalQueueUrl = config.get('SQS.productQueueUrl');
+    return replayDlq(ctx, res, originalQueueUrl, payload);
+  });
+
+  app.get('/viewInboxDlq', async function (req, res) {
+    const ctx = { log };
+    const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
+    return readDlq(ctx, res, queueUrl);
+  });
+
+  app.get('/viewSortDlq', async function (req, res) {
+    const ctx = { log };
+    const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
+    return readDlq(ctx, res, queueUrl);
+  });
+
+  app.get('/viewProductDlq', async function (req, res) {
+    const ctx = { log };
+    const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
+    return readDlq(ctx, res, queueUrl);
+  });
+
+  app.post('/delete/viewInboxDlq', async function (req, res) {
+    const ctx = { log };
+    const payload = req.body;
+    const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
+    return deleteDlq(ctx, res, queueUrl, payload);
+  });
+
+  app.post('/delete/viewSortDlq', async function (req, res) {
+    const ctx = { log };
+    const payload = req.body;
+    const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
+    return deleteDlq(ctx, res, queueUrl, payload);
+  });
+
+  app.post('/delete/viewProductDlq', async function (req, res) {
+    const ctx = { log };
+    const payload = req.body;
+    const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
+    return deleteDlq(ctx, res, queueUrl, payload);
+  });
+
   app.get('/queryStatFiles', async function (req, res) {
     const ctx = { log };
     const geoid = req.query.geoid;
@@ -89,85 +151,91 @@ exports.appRouter = async app => {
 
   app.post('/sendInboxSQS', async function (req, res) {
     const ctx = { log };
-
     const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
-
     const payload = req.body;
-
-    const params = {
-      MessageAttributes: {},
-      MessageBody: JSON.stringify(payload),
-      QueueUrl: inboxQueueUrl,
-    };
-
-    sqs.sendMessage(params, (err, data) => {
-      ctx.log.info('SQS response: ', { data });
-      if (err) {
-        ctx.log.error(`Unable to send SQS message to queue: ${inboxQueueUrl}`, {
-          err: err.message,
-          stack: err.stack,
-        });
-        return res.status(500).send(`Unable to send SQS message to queue: ${inboxQueueUrl}`);
-      } else {
-        ctx.log.info(`Successfully sent SQS message to queue: ${inboxQueueUrl}`);
-        return res.json({ success: `Successfully sent SQS message to queue: ${inboxQueueUrl}` });
-      }
-    });
+    return sendSQS(ctx, res, inboxQueueUrl, payload);
   });
 
   app.post('/sendSortSQS', (req, res) => {
     const ctx = { log };
-
     const sortQueueUrl = config.get('SQS.sortQueueUrl');
-
     const payload = req.body;
-
-    const params = {
-      MessageAttributes: {},
-      MessageBody: JSON.stringify(payload),
-      QueueUrl: sortQueueUrl,
-    };
-
-    sqs.sendMessage(params, function (err, data) {
-      ctx.log.info('SQS response: ', { data });
-      if (err) {
-        ctx.log.error(`Unable to send SQS message to queue: ${sortQueueUrl}`, {
-          err: err.message,
-          stack: err.stack,
-        });
-        return res.status(500).send(`Unable to send SQS message to queue: ${sortQueueUrl}`);
-      } else {
-        ctx.log.info(`Successfully sent SQS message to queue: ${sortQueueUrl}`);
-        return res.json({ success: `Successfully sent SQS message to queue: ${sortQueueUrl}` });
-      }
-    });
+    return sendSQS(ctx, res, sortQueueUrl, payload);
   });
 
   app.post('/sendProductSQS', (req, res) => {
     const ctx = { log };
-
     const productsQueueUrl = config.get('SQS.productQueueUrl');
-
     const payload = req.body;
-
-    const params = {
-      MessageAttributes: {},
-      MessageBody: JSON.stringify(payload),
-      QueueUrl: productsQueueUrl,
-    };
-
-    sqs.sendMessage(params, function (err, data) {
-      ctx.log.info('SQS response: ', { data });
-      if (err) {
-        ctx.log.error(`Unable to send SQS message to queue: ${productsQueueUrl}`, {
-          err: err.message,
-          stack: err.stack,
-        });
-        return res.status(500).send(`Unable to send SQS message to queue: ${productsQueueUrl}`);
-      } else {
-        ctx.log.info(`Successfully sent SQS message to queue: ${productsQueueUrl}`);
-        return res.json({ success: `Successfully sent SQS message to queue: ${productsQueueUrl}` });
-      }
-    });
+    return sendSQS(ctx, res, productsQueueUrl, payload);
   });
 };
+
+async function sendSQS(ctx, res, queueUrl, payload) {
+  const params = {
+    MessageAttributes: {},
+    MessageBody: JSON.stringify(payload),
+    QueueUrl: queueUrl,
+  };
+
+  sqs.sendMessage(params, function (err, data) {
+    ctx.log.info('SQS response: ', { data });
+    if (err) {
+      ctx.log.error(`Unable to send SQS message to queue: ${queueUrl}`, {
+        err: err.message,
+        stack: err.stack,
+      });
+      return res.status(500).send(`Unable to send SQS message to queue: ${queueUrl}`);
+    } else {
+      ctx.log.info(`Successfully sent SQS message to queue: ${queueUrl}`);
+      return res.json({ success: `Successfully sent SQS message to queue: ${queueUrl}` });
+    }
+  });
+}
+
+async function replayDlq(ctx, res, originalQueueUrl, payload) {
+  const queueUrl = originalQueueUrl + '-dlq';
+  ctx.deleteParams = {
+    ReceiptHandle: payload.ReceiptHandle,
+    QueueUrl: queueUrl,
+  };
+  try {
+    await sendQueueMessage(ctx, originalQueueUrl, JSON.parse(payload.Body));
+    await deleteMessage(ctx);
+    return res.json({ ok: 'ok' });
+  } catch (err) {
+    ctx.log.error('Unable to replay SQS Message', { error: err.message, stack: err.stack });
+    return res.status(500).send('Unable to replay message.');
+  }
+}
+
+async function deleteDlq(ctx, res, queueUrl, payload) {
+  ctx.deleteParams = {
+    ReceiptHandle: payload.ReceiptHandle,
+    QueueUrl: queueUrl,
+  };
+  try {
+    await deleteMessage(ctx);
+    return res.json({ ok: 'ok' });
+  } catch (err) {
+    ctx.log.error('Unable to delete SQS Message', { error: err.message, stack: err.stack });
+    return res.status(500).send('Unable to delete message.');
+  }
+}
+
+async function readDlq(ctx, res, queueUrl) {
+  const response = {
+    messages: [],
+  };
+  try {
+    const result = await readMessages(ctx, queueUrl, 1);
+    console.log(result);
+    if (result) {
+      response.messages = result.Messages;
+    }
+    return res.json(response);
+  } catch (err) {
+    ctx.log.error('Error reading DLQ', { error: err.message, stack: err.stack });
+    return res.status(500).send('Error reading DLQ');
+  }
+}

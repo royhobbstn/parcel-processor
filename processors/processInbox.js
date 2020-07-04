@@ -88,9 +88,9 @@ async function processInbox(ctx, data) {
       } catch (err) {
         ctx.log.error('Unable to delete S3 files', { err: err.message, stack: err.stack });
       }
-      // rethrow to send email
-      throw new Error('Error in main function.  See logs.');
     }
+    // rethrow to send email
+    throw new Error('Error in main function.  See logs.');
   }
 }
 

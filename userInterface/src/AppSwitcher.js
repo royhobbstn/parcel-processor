@@ -5,6 +5,8 @@ import DPApp from './srcDerivedProducts/App';
 import EnvBar from './EnvBar';
 import SqsQueuesApp from './srcSendSQS/App';
 import InboxApp from './srcInbox/App';
+import DlqReplayApp from './srcDlqReplay/App';
+
 import { Button } from 'semantic-ui-react';
 
 function AppSwitcher() {
@@ -59,12 +61,18 @@ function AppSwitcher() {
           <Button style={{ width: '200px' }} onClick={() => updateApp('sqs')}>
             Send SQS Message
           </Button>
+          <br />
+          <br />
+          <Button style={{ width: '200px' }} onClick={() => updateApp('dlq')}>
+            Replay DLQ Message
+          </Button>
         </div>
       ) : null}
 
       {app === 'inbox' ? <InboxApp env={env} /> : null}
       {app === 'derived-product' ? <DPApp env={env} /> : null}
       {app === 'sqs' ? <SqsQueuesApp env={env} /> : null}
+      {app === 'dlq' ? <DlqReplayApp env={env} /> : null}
     </div>
   );
 }

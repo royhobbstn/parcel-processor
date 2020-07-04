@@ -5,7 +5,11 @@ const config = require('config');
 const { processInbox } = require('../processors/processInbox');
 const { processSort } = require('../processors/processSort');
 const { processProducts } = require('../processors/processProducts');
-const { processMessage } = require('../util/sqsOperations');
+const {
+  processMessage,
+  deleteMessage,
+  initiateVisibilityHeartbeat,
+} = require('../util/sqsOperations');
 const { putFileToS3 } = require('../util/s3Operations');
 const { createInstanceLogger, getUniqueLogfileName } = require('../util/logger');
 const { sendAlertMail } = require('../util/email');
@@ -64,6 +68,7 @@ async function runProcess(ctx, res, queueUrl, messageProcessor) {
       return;
     }
     let errorFlag;
+    const interval = initiateVisibilityHeartbeat(ctx, 12000, 180);
     messageProcessor(ctx, message)
       .then(() => {
         errorFlag = false;
@@ -73,6 +78,13 @@ async function runProcess(ctx, res, queueUrl, messageProcessor) {
         errorFlag = true;
       })
       .finally(async () => {
+        // discontinue updating visibility timeout
+        clearInterval(interval);
+
+        if (!errorFlag) {
+          await deleteMessage(ctx);
+        }
+
         if (!ctx.isDryRun) {
           console.log('\n\nUploading logfile to S3.');
           await putFileToS3(
