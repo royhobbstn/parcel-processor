@@ -90,11 +90,21 @@ exports.processMessage = async function (ctx, queueUrl) {
 };
 
 exports.initiateVisibilityHeartbeat = function (ctx, intervalMS, heartbeatSec) {
+  const params = {
+    ...ctx.deleteParams,
+    VisibilityTimeout: heartbeatSec,
+  };
+
+  // set off Initial so we dont have to wait for first interval
+  sqs.changeMessageVisibility(params, function (err, data) {
+    if (err) {
+      ctx.log.error('Error updating Visibility Timeout', { error: err, stack: err.stack });
+    } else {
+      ctx.log.info('Refreshing Visibility Timeout', { data });
+    }
+  });
+
   let interval = setInterval(() => {
-    var params = {
-      ...ctx.deleteParams,
-      VisibilityTimeout: heartbeatSec,
-    };
     // meant to be non-blocking
     sqs.changeMessageVisibility(params, function (err, data) {
       if (err) {
