@@ -1,16 +1,23 @@
 // @ts-check
 
 exports.directories = {
-  outputDir: './staging/output',
-  rawDir: './staging/raw',
-  unzippedDir: './staging/unzipped',
-  processedDir: './staging/processed',
-  subGeographiesDir: './staging/subGeographies',
-  productTemp: './staging/productTemp',
+  outputDir: './staging/output-',
+  rawDir: './staging/raw-',
+  unzippedDir: './staging/unzipped-',
+  tilesDir: './staging/tiles-',
+  subGeographiesDir: './staging/subGeographies-',
+  productTempDir: './staging/productTemp-',
+  logDir: './staging/logs-',
 };
 
 // length of refs for products / downloads table
 exports.referenceIdLength = 8;
+
+// length of logfile entropy
+exports.logfileNameLength = 5;
+
+// length of directory id
+exports.directoryIdLength = 6;
 
 // prefix to flag that file needs to be gzipped in a separate process
 exports.tileInfoPrefix = '_po_';

@@ -1,7 +1,5 @@
 // @ts-check
 const config = require('config');
-const { generateRef } = require('./crypto');
-const { referenceIdLength } = require('./constants');
 
 const slsAuroraClient = require('data-api-client')({
   secretArn: config.get('RDS.secretArn'),
@@ -10,11 +8,11 @@ const slsAuroraClient = require('data-api-client')({
   region: config.get('RDS.region'),
 });
 
-exports.queryHealth = function () {
+exports.queryHealth = function (ctx) {
   return slsAuroraClient.query(`SELECT 1 + 1 AS sum;`);
 };
 
-exports.queryHash = function (computedHash) {
+exports.queryHash = function (ctx, computedHash) {
   // queries the database for a given hash
   // (if found, than we already have the most recent download)
   return slsAuroraClient.query(`SELECT * FROM downloads where checksum = :computedHash;`, {
@@ -22,14 +20,14 @@ exports.queryHash = function (computedHash) {
   });
 };
 
-exports.querySource = function (sourceName) {
+exports.querySource = function (ctx, sourceName) {
   // queries if a source exists in the source table
   return slsAuroraClient.query('SELECT * FROM sources WHERE source_name = :sourceName;', {
     sourceName,
   });
 };
 
-exports.queryWriteSource = function (sourceName, sourceType, transactionId) {
+exports.queryWriteSource = function (ctx, sourceName, sourceType, transactionId) {
   // writes a new source record in the source table
   return slsAuroraClient.query({
     sql: 'INSERT INTO sources(source_name, source_type) VALUES (:sourceName, :sourceType);',
@@ -41,7 +39,7 @@ exports.queryWriteSource = function (sourceName, sourceType, transactionId) {
   });
 };
 
-exports.queryWriteSourceCheck = function (sourceId, disposition, transactionId) {
+exports.queryWriteSourceCheck = function (ctx, sourceId, disposition, transactionId) {
   // write a 'sourceCheck' record to the database
   // it's a record that a source was checked for a more recent download version
   // it is written whether or not a more recent version was found
@@ -55,6 +53,7 @@ exports.queryWriteSourceCheck = function (sourceId, disposition, transactionId) 
 };
 
 exports.queryCreateDownloadRecord = function (
+  ctx,
   sourceId,
   checkId,
   checksum,
@@ -73,6 +72,7 @@ exports.queryCreateDownloadRecord = function (
 };
 
 exports.queryCreateProductRecord = function (
+  ctx,
   downloadId,
   productRef,
   individualRef,
@@ -98,13 +98,13 @@ exports.queryCreateProductRecord = function (
   });
 };
 
-exports.queryGeographicIdentifier = function (geoid) {
+exports.queryGeographicIdentifier = function (ctx, geoid) {
   return slsAuroraClient.query('SELECT * FROM geographic_identifiers WHERE geoid = :geoid;', {
     geoid,
   });
 };
 
-exports.queryAllCountiesFromState = function (geoid) {
+exports.queryAllCountiesFromState = function (ctx, geoid) {
   return slsAuroraClient.query({
     sql: `SELECT geoid, geoname FROM geographic_identifiers WHERE LEFT(geoid, 2) = :geoid and sumlev = "050" order by geoname asc;`,
     parameters: {
@@ -113,13 +113,13 @@ exports.queryAllCountiesFromState = function (geoid) {
   });
 };
 
-exports.queryAllOriginalRecentDownloads = function () {
+exports.queryAllOriginalRecentDownloads = function (ctx) {
   return slsAuroraClient.query(
     'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original"',
   );
 };
 
-exports.queryAllOriginalRecentDownloadsWithGeoid = function (geoid) {
+exports.queryAllOriginalRecentDownloadsWithGeoid = function (ctx, geoid) {
   return slsAuroraClient.query({
     sql:
       'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original" and geographic_identifiers.geoid = :geoid',
@@ -127,27 +127,27 @@ exports.queryAllOriginalRecentDownloadsWithGeoid = function (geoid) {
   });
 };
 
-exports.querySourceNamesLike = function (sourceName) {
+exports.querySourceNamesLike = function (ctx, sourceName) {
   return slsAuroraClient.query({
     sql: 'SELECT * from sources WHERE source_name LIKE :sourceName',
     parameters: { sourceName: `%${sourceName}%` },
   });
 };
 
-exports.startTransaction = async function () {
+exports.startTransaction = async function (ctx) {
   const query = await slsAuroraClient.beginTransaction();
   return query.transactionId;
 };
 
-exports.commitTransaction = function (transactionId) {
+exports.commitTransaction = function (ctx, transactionId) {
   return slsAuroraClient.commitTransaction({ transactionId });
 };
 
-exports.rollbackTransaction = async function (transactionId) {
+exports.rollbackTransaction = async function (ctx, transactionId) {
   return slsAuroraClient.rollbackTransaction({ transactionId });
 };
 
-exports.checkForProduct = async function (geoid, downloadId, format, returnBool) {
+exports.checkForProduct = async function (ctx, geoid, downloadId, format, returnBool) {
   const query = await slsAuroraClient.query({
     sql:
       'select * from products where products.geoid = :geoid and products.download_id = :downloadId and products.product_type = :format',
@@ -156,7 +156,7 @@ exports.checkForProduct = async function (geoid, downloadId, format, returnBool)
   return query.records.length > 0;
 };
 
-exports.checkForProducts = async function (geoid, downloadId) {
+exports.checkForProducts = async function (ctx, geoid, downloadId) {
   const query = await slsAuroraClient.query({
     sql:
       'select * from products where products.geoid = :geoid and products.download_id = :downloadId',

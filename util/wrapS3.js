@@ -6,17 +6,16 @@ const { s3deleteType } = require('./constants');
 const { putFileToS3, emptyS3Directory } = require('./s3Operations');
 const { lookupState } = require('./lookupState');
 const config = require('config');
-const { log } = require('./logger');
 
-exports.S3Writes = async function (cleanupS3, filePath, rawKey, productKey, outputPath) {
-  await uploadRawFileToS3(filePath, rawKey);
+exports.S3Writes = async function (ctx, cleanupS3, filePath, rawKey, productKey, outputPath) {
+  await uploadRawFileToS3(ctx, filePath, rawKey);
   cleanupS3.push({
     bucket: config.get('Buckets.rawBucket'),
     key: rawKey,
     type: s3deleteType.FILE,
   });
-  log.info(`uploaded raw file to S3.  key: ${rawKey}`);
-  await uploadProductFiles(productKey, outputPath);
+  ctx.log.info(`uploaded raw file to S3.  key: ${rawKey}`);
+  await uploadProductFiles(ctx, productKey, outputPath);
   cleanupS3.push({
     bucket: config.get('Buckets.productsBucket'),
     key: `${productKey}-stat.json`,
@@ -27,12 +26,12 @@ exports.S3Writes = async function (cleanupS3, filePath, rawKey, productKey, outp
     key: `${productKey}.ndgeojson`,
     type: s3deleteType.FILE,
   });
-  log.info(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
+  ctx.log.info(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
 };
 
 exports.uploadRawFileToS3 = uploadRawFileToS3;
 
-async function uploadRawFileToS3(filePath, rawKey) {
+async function uploadRawFileToS3(ctx, filePath, rawKey) {
   const extension = path.extname(rawKey);
 
   if (extension !== '.zip') {
@@ -40,13 +39,21 @@ async function uploadRawFileToS3(filePath, rawKey) {
   }
 
   // save downloaded file to the raw bucket in s3 (don't gzip here)
-  await putFileToS3(config.get('Buckets.rawBucket'), rawKey, filePath, 'application/zip', false);
+  await putFileToS3(
+    ctx,
+    config.get('Buckets.rawBucket'),
+    rawKey,
+    filePath,
+    'application/zip',
+    false,
+  );
 }
 
 exports.uploadProductFiles = uploadProductFiles;
 
-async function uploadProductFiles(key, outputPath) {
+async function uploadProductFiles(ctx, key, outputPath) {
   const statFile = putFileToS3(
+    ctx,
     config.get('Buckets.productsBucket'),
     `${key}-stat.json`,
     `${outputPath}.json`,
@@ -54,6 +61,7 @@ async function uploadProductFiles(key, outputPath) {
     true,
   );
   const ndgeojsonFile = putFileToS3(
+    ctx,
     config.get('Buckets.productsBucket'),
     `${key}.ndgeojson`,
     `${outputPath}.ndgeojson`,
@@ -62,13 +70,13 @@ async function uploadProductFiles(key, outputPath) {
   );
 
   await Promise.all([statFile, ndgeojsonFile]);
-  log.info('Output files were successfully loaded to S3');
+  ctx.log.info('Output files were successfully loaded to S3');
 
   return;
 }
 
-exports.createRawDownloadKey = function (fipsDetails, geoid, geoName, downloadRef) {
-  const stateName = lookupState(fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
+exports.createRawDownloadKey = function (ctx, fipsDetails, geoid, geoName, downloadRef) {
+  const stateName = lookupState(ctx, fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
 
   let key;
 
@@ -86,6 +94,7 @@ exports.createRawDownloadKey = function (fipsDetails, geoid, geoName, downloadRe
 };
 
 exports.createProductDownloadKey = function (
+  ctx,
   fipsDetails,
   geoid,
   geoName,
@@ -93,7 +102,7 @@ exports.createProductDownloadKey = function (
   productRef,
   individualRef,
 ) {
-  const stateName = lookupState(fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
+  const stateName = lookupState(ctx, fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
 
   let key;
 
@@ -110,7 +119,7 @@ exports.createProductDownloadKey = function (
   return key;
 };
 
-exports.removeS3Files = function (cleanupS3) {
+exports.removeS3Files = function (ctx, cleanupS3) {
   const s3 = new AWS.S3();
 
   const cleaned = cleanupS3.map(item => {
@@ -122,7 +131,7 @@ exports.removeS3Files = function (cleanupS3) {
         })
         .promise();
     } else if (item.type === s3deleteType.DIRECTORY) {
-      return emptyS3Directory(item.bucket, item.key);
+      return emptyS3Directory(ctx, item.bucket, item.key);
     } else {
       throw new Error(`unexpected type: ${item.type} in removeS3Files`);
     }

@@ -2,9 +2,10 @@
 const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
-const { log } = require('./logger');
 
-exports.sendQueueMessage = function (queueUrl, payload) {
+exports.sendQueueMessage = function (ctx, queueUrl, payload) {
+  ctx.log.info('queueUrl', { queueUrl });
+  ctx.log.info('queueMessage', { payload });
   return new Promise((resolve, reject) => {
     const params = {
       MessageAttributes: {},
@@ -14,69 +15,109 @@ exports.sendQueueMessage = function (queueUrl, payload) {
 
     sqs.sendMessage(params, function (err, data) {
       if (err) {
-        log.error(err);
+        ctx.log.error(`Error sending message to queue: ${queueUrl}`, {
+          err: err.message,
+          stack: err.stack,
+        });
         return reject(err);
       } else {
-        log.info(`Successfully sent message to queue: ${queueUrl}`);
+        ctx.log.info(`Successfully sent message to queue: ${queueUrl}`);
         return resolve();
       }
     });
   });
 };
 
-exports.readMessage = readMessage;
+exports.readMessages = readMessages;
 
-function readMessage(queueUrl) {
+function readMessages(ctx, queueUrl, numberOfMessages) {
+  // note that for small scale operations - numberOfMessages is worthless and you should just set it to 1.  see AWS docs.
   return new Promise((resolve, reject) => {
     const params = {
-      MaxNumberOfMessages: 1,
+      MaxNumberOfMessages: numberOfMessages,
       MessageAttributeNames: ['All'],
       QueueUrl: queueUrl,
     };
 
+    ctx.log.info('numberOfMessagesRequested', { numberOfMessages });
+
     sqs.receiveMessage(params, async function (err, data) {
       if (err) {
-        log.error(err);
-        return reject('Unable to receive SQS Sort message.');
+        ctx.log.error('Unable to receive SQS message(s)', { err: err.message, stack: err.stack });
+        return reject(new Error('Unable to receive SQS message(s)'));
       } else if (data.Messages) {
-        log.info('received message');
+        ctx.log.info('sqsResponse', { data });
+
+        ctx.log.info('Received message(s)');
         return resolve(data);
       } else {
-        return resolve('No messages');
+        ctx.log.info('Found no message(s)');
+        return resolve('');
       }
     });
   });
 }
 
-exports.deleteMessage = deleteMessage;
-function deleteMessage(queueUrl, data) {
+exports.deleteMessage = function (ctx) {
   return new Promise((resolve, reject) => {
-    const deleteParams = {
-      QueueUrl: queueUrl,
-      ReceiptHandle: data.Messages[0].ReceiptHandle,
-    };
-
-    sqs.deleteMessage(deleteParams, function (err, data) {
+    sqs.deleteMessage(ctx.deleteParams, function (err, data) {
       if (err) {
-        log.error(err);
-        return reject('Unable to delete SQS message.');
+        ctx.log.error('Unable to delete SQS message', { err: err.message, stack: err.stack });
+        return reject(new Error('Unable to delete SQS message'));
       } else {
-        log.info('Message Deleted', data);
-        return resolve({ success: 'Successfully processed SQS Sort message' });
+        ctx.log.info('Message Deleted', { deleteParams: ctx.deleteParams });
+        return resolve({ success: 'Successfully deleted SQS message' });
       }
     });
   });
+};
+
+function attachDeleteParams(ctx, queueUrl, data) {
+  const deleteParams = {
+    QueueUrl: queueUrl,
+    ReceiptHandle: data.Messages[0].ReceiptHandle,
+  };
+  ctx.deleteParams = deleteParams;
 }
 
-exports.processMessage = async function (queueUrl, messageProcessor) {
-  const message = await readMessage(queueUrl);
-  if (message === 'No message') {
-    return { status: 'no message' };
+exports.processMessage = async function (ctx, queueUrl) {
+  const message = await readMessages(ctx, queueUrl, 1);
+  if (message) {
+    // store delete payload on ctx to be used later
+    attachDeleteParams(ctx, queueUrl, message);
   }
+  return message;
+};
 
-  await deleteMessage(queueUrl, message);
+exports.initiateVisibilityHeartbeat = function (ctx, intervalMS, heartbeatSec) {
+  let interval = setInterval(() => {
+    var params = {
+      ...ctx.deleteParams,
+      VisibilityTimeout: heartbeatSec,
+    };
+    // meant to be non-blocking
+    sqs.changeMessageVisibility(params, function (err, data) {
+      if (err) {
+        ctx.log.error('Error updating Visibility Timeout', { error: err, stack: err.stack });
+      } else {
+        ctx.log.info('Refreshing Visibility Timeout', { data });
+      }
+    });
+  }, intervalMS);
+  return interval;
+};
 
-  messageProcessor(message); // purposely not await.  this happens in background
-
-  return { status: 'Processing new message' };
+exports.getQueueAttributes = function (ctx, queueUrl) {
+  return new Promise((resolve, reject) => {
+    var params = {
+      QueueUrl: queueUrl,
+      AttributeNames: ['All'],
+    };
+    sqs.getQueueAttributes(params, function (err, data) {
+      if (err) {
+        return reject(err);
+      }
+      return resolve(data);
+    });
+  });
 };

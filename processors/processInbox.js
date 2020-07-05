@@ -3,14 +3,12 @@
 const fs = require('fs');
 const axios = require('axios').default;
 const config = require('config');
-const { log } = require('../util/logger');
 const {
   directories,
   referenceIdLength,
   productOrigins,
   fileFormats,
 } = require('../util/constants');
-const { doBasicCleanup } = require('../util/cleanup');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const {
   removeS3Files,
@@ -19,7 +17,12 @@ const {
   S3Writes,
 } = require('../util/wrapS3');
 const { computeHash, generateRef } = require('../util/crypto');
-const { extractZip, checkForFileType } = require('../util/filesystemUtil');
+const {
+  extractZip,
+  checkForFileType,
+  createDirectories,
+  collapseUnzippedDir,
+} = require('../util/filesystemUtil');
 const { inspectFile, parseOutputPath, parseFile } = require('../util/processGeoFile');
 const {
   acquireConnection,
@@ -30,8 +33,16 @@ const {
 
 exports.processInbox = processInbox;
 
-async function processInbox(data) {
-  // {
+async function processInbox(ctx, data) {
+  await acquireConnection(ctx);
+  await createDirectories(ctx, [
+    directories.logDir,
+    directories.outputDir,
+    directories.rawDir,
+    directories.unzippedDir,
+  ]);
+
+  // const messagePayload = {
   //   sourceType: 'webpage',
   //   urlKeyVal: 'https://www.google.com',
   //   sumlevVal: '040',
@@ -40,73 +51,62 @@ async function processInbox(data) {
   //   dryRun: true,
   //   STATEFIPS: '15',
   //   COUNTYFIPS: '',
-  //   PLACEFIPS: ''
-  // }
+  //   PLACEFIPS: '',
+  // };
 
+  ctx.messageId = data.Messages[0].MessageId;
+  ctx.type = 'inbox';
   const messagePayload = JSON.parse(data.Messages[0].Body);
-  console.log(messagePayload);
+  ctx.log.info('Processing Message', { messagePayload });
 
-  //
-
-  // todo download file
-
-  const filename = messagePayload.urlKeyVal.split('/').slice(-1);
-  const filePath = `${directories.rawDir}/${filename}`;
-
-  await downloadFile(messagePayload.urlKeyVal, filePath);
-
-  const cleanupS3 = [];
-
+  ctx.isDryRun = messagePayload.dryRun;
   const isDryRun = messagePayload.dryRun;
 
-  await doBasicCleanup([directories.outputDir, directories.unzippedDir], true, true);
+  const filename = messagePayload.urlKeyVal.split('/').slice(-1);
+  const filePath = `${directories.rawDir + ctx.directoryId}/${filename}`;
+  const cleanupS3 = [];
+
+  await downloadFile(ctx, messagePayload.urlKeyVal, filePath);
 
   try {
-    const payload = await runMain(cleanupS3, filePath, isDryRun, messagePayload);
+    const payload = await runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload);
 
     if (!isDryRun) {
-      await doBasicCleanup([directories.rawDir, directories.outputDir, directories.unzippedDir]);
-
       // Send SQS message to create products
       const productsQueueUrl = config.get('SQS.productQueueUrl');
-      await sendQueueMessage(productsQueueUrl, payload);
+      await sendQueueMessage(ctx, productsQueueUrl, payload);
     } else {
-      log.info(
-        `\nBecause this was a dryRun no database records or S3 files have been written.  \nYour file remains in the raw directory.\n`,
-      );
-      await doBasicCleanup([directories.outputDir, directories.unzippedDir]);
+      ctx.log.info(`Because this was a dryRun no database records or S3 files have been written`);
     }
 
-    log.info('Completed successfully.');
+    ctx.log.info('Completed successfully.');
   } catch (err) {
-    log.error(err);
+    ctx.log.error('Error:', { err: err.message, stack: err.stack });
 
     if (!isDryRun) {
       try {
-        await removeS3Files(cleanupS3);
-        log.error('All created S3 assets have been deleted');
-      } catch (e) {
-        log.error(e);
-        log.error('Unable to delete S3 files.');
+        await removeS3Files(ctx, cleanupS3);
+        ctx.log.info('All created S3 assets have been deleted');
+      } catch (err) {
+        ctx.log.error('Unable to delete S3 files', { err: err.message, stack: err.stack });
       }
     }
-
-    await doBasicCleanup([directories.outputDir, directories.unzippedDir], true);
-    log.info('output and unzipped directories cleaned.  Original raw file left in place.');
+    // rethrow to send email
+    throw new Error('Error in main function.  See logs.');
   }
 }
 
-async function runMain(cleanupS3, filePath, isDryRun, messagePayload) {
+async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
   const sourceNameInput = messagePayload.sourceVal;
 
-  const computedHash = await computeHash(filePath);
+  const computedHash = await computeHash(ctx, filePath);
 
   // call database and find out if hash is already in DB
-  await acquireConnection();
-  const hashExists = await doesHashExist(computedHash);
+  await acquireConnection(ctx);
+  const hashExists = await doesHashExist(ctx, computedHash);
 
   if (hashExists) {
-    log.info(`Hash for ${filePath} already exists.`);
+    ctx.log.info(`Hash for ${filePath} already exists.`);
     return;
   }
 
@@ -119,34 +119,37 @@ async function runMain(cleanupS3, filePath, isDryRun, messagePayload) {
   };
 
   // get geoname corresponding to FIPS
-  const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
-  log.info(`geoName:  ${geoName},  geoid: ${geoid}`);
+  const { geoid, geoName } = await lookupCleanGeoName(ctx, fipsDetails);
+  ctx.log.info(`geoName:  ${geoName},  geoid: ${geoid}`);
 
-  const downloadRef = generateRef(referenceIdLength);
+  const downloadRef = generateRef(ctx, referenceIdLength);
 
   // Contains ZIP extension.  create the key (path) to be used to store the zipfile in S3
-  const rawKey = createRawDownloadKey(fipsDetails, geoid, geoName, downloadRef);
+  const rawKey = createRawDownloadKey(ctx, fipsDetails, geoid, geoName, downloadRef);
 
-  await extractZip(filePath);
+  await extractZip(ctx, filePath);
+
+  collapseUnzippedDir(ctx); // this is sync
 
   // determines if file(s) are of type shapefile or geodatabase
-  const [fileName, fileType] = await checkForFileType();
+  const [fileName, fileType] = await checkForFileType(ctx);
 
   // open file && choose layer with OGR/GDAL
-  const [dataset, chosenLayer] = inspectFile(fileName, fileType);
+  const [dataset, chosenLayer] = inspectFile(ctx, fileName, fileType);
 
   // determine where on the local disk the output geo products will be written
-  const outputPath = parseOutputPath(fileName, fileType);
+  const outputPath = parseOutputPath(ctx, fileName, fileType);
 
   // process all features and convert them to WGS84 ndgeojson
   // while gathering stats on the data.  Writes ndgeojson and stat files to output.
-  await parseFile(dataset, chosenLayer, fileName, outputPath);
+  await parseFile(ctx, dataset, chosenLayer, fileName, outputPath);
 
-  const productRef = generateRef(referenceIdLength);
-  const individualRef = generateRef(referenceIdLength);
+  const productRef = generateRef(ctx, referenceIdLength);
+  const individualRef = generateRef(ctx, referenceIdLength);
 
   // contains no file extension.  Used as base key for -stat.json  and .ndgeojson
   const productKey = createProductDownloadKey(
+    ctx,
     fipsDetails,
     geoid,
     geoName,
@@ -158,9 +161,10 @@ async function runMain(cleanupS3, filePath, isDryRun, messagePayload) {
   let downloadId;
 
   if (!isDryRun) {
-    await S3Writes(cleanupS3, filePath, rawKey, productKey, outputPath);
+    await S3Writes(ctx, cleanupS3, filePath, rawKey, productKey, outputPath);
 
     downloadId = await DBWrites(
+      ctx,
       sourceNameInput,
       computedHash,
       rawKey,
@@ -194,10 +198,9 @@ async function runMain(cleanupS3, filePath, isDryRun, messagePayload) {
   return productSqsPayload;
 }
 
+// todo move
 // https://stackoverflow.com/a/61269447/8896489
-async function downloadFile(fileUrl, outputLocationPath) {
-  console.log({ fileUrl, outputLocationPath });
-
+async function downloadFile(ctx, fileUrl, outputLocationPath) {
   const writer = fs.createWriteStream(outputLocationPath);
 
   return axios({

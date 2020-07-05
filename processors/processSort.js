@@ -12,66 +12,66 @@ const {
   fileFormats,
   productOrigins,
   referenceIdLength,
+  s3deleteType,
 } = require('../util/constants');
 const { queryCreateProductRecord, checkForProduct } = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
-const { createProductDownloadKey } = require('../util/wrapS3');
+const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
 const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
-const { doBasicCleanup } = require('../util/cleanup');
-const { log } = require('../util/logger');
-
-let counter = 0;
+const { createDirectories } = require('../util/filesystemUtil');
 
 exports.processSort = processSort;
 
-async function processSort(data) {
-  await acquireConnection();
+async function processSort(ctx, data) {
+  await acquireConnection(ctx);
 
-  // to avoid uploading anything from a previous run
-  await doBasicCleanup([directories.subGeographiesDir], false, true);
+  await createDirectories(ctx, [directories.logDir, directories.subGeographiesDir]);
 
-  const messagePayload = {
-    dryRun: true,
-    selectedFieldKey: 'county',
-    selectedDownload: {
-      geoid: '15',
-      geoname: 'Hawaii',
-      source_name: 'http://planning.hawaii.gov/gis/download-gis-data/',
-      source_type: 'webpage',
-      download_id: 3,
-      download_ref: '5fe3a581',
-      product_id: 11,
-      product_ref: '65aa145b',
-      last_checked: '2020-06-21 16:11:24',
-      product_key: '15-Hawaii/000-Hawaii/5fe3a581-65aa145b-15-Hawaii.ndgeojson',
-      original_filename: 'tmk_state.shp.zip',
-    },
-    modalStatsObj: {
-      missingAttributes: [],
-      missingGeoids: ['15005'],
-      countOfPossible: 5,
-      countOfUniqueGeoids: 4,
-      attributesUsingSameGeoid: [],
-      mapping: {
-        Hawaii: '15001',
-        Honolulu: '15003',
-        Kauai: '15007',
-        Maui: '15009',
-      },
-    },
-    geographies: [
-      { geoid: '15001', geoname: 'Hawaii County' },
-      { geoid: '15003', geoname: 'Honolulu County' },
-      { geoid: '15005', geoname: 'Kalawao County' },
-      { geoid: '15007', geoname: 'Kauai County' },
-      { geoid: '15009', geoname: 'Maui County' },
-    ],
-  };
+  // const messagePayload = {
+  //   dryRun: true,
+  //   selectedFieldKey: 'county',
+  //   selectedDownload: {
+  //     geoid: '15',
+  //     geoname: 'Hawaii',
+  //     source_name: 'http://planning.hawaii.gov/gis/download-gis-data/',
+  //     source_type: 'webpage',
+  //     download_id: 3,
+  //     download_ref: '5fe3a581',
+  //     product_id: 11,
+  //     product_ref: '65aa145b',
+  //     last_checked: '2020-06-21 16:11:24',
+  //     product_key: '15-Hawaii/000-Hawaii/5fe3a581-65aa145b-15-Hawaii.ndgeojson',
+  //     original_filename: 'tmk_state.shp.zip',
+  //   },
+  //   modalStatsObj: {
+  //     missingAttributes: [],
+  //     missingGeoids: ['15005'],
+  //     countOfPossible: 5,
+  //     countOfUniqueGeoids: 4,
+  //     attributesUsingSameGeoid: [],
+  //     mapping: {
+  //       Hawaii: '15001',
+  //       Honolulu: '15003',
+  //       Kauai: '15007',
+  //       Maui: '15009',
+  //     },
+  //   },
+  //   geographies: [
+  //     { geoid: '15001', geoname: 'Hawaii County' },
+  //     { geoid: '15003', geoname: 'Honolulu County' },
+  //     { geoid: '15005', geoname: 'Kalawao County' },
+  //     { geoid: '15007', geoname: 'Kauai County' },
+  //     { geoid: '15009', geoname: 'Maui County' },
+  //   ],
+  // };
 
-  // const messagePayload = JSON.parse(data.Messages[0].Body);
-  console.log(messagePayload);
+  ctx.messageId = data.Messages[0].MessageId;
+  ctx.type = 'sort';
+  const messagePayload = JSON.parse(data.Messages[0].Body);
+  ctx.log.info('Processing Message', { messagePayload });
 
+  ctx.isDryRun = messagePayload.dryRun;
   const isDryRun = messagePayload.dryRun;
   const bucket = config.get('Buckets.productsBucket');
   const selectedFieldKey = messagePayload.selectedFieldKey;
@@ -79,23 +79,23 @@ async function processSort(data) {
   const geoidTranslator = messagePayload.modalStatsObj.mapping;
   const downloadId = messagePayload.selectedDownload.download_id;
   const downloadRef = messagePayload.selectedDownload.download_ref;
-  const geonameLookup = keifyGeographies(messagePayload.geographies);
+  const geonameLookup = keifyGeographies(ctx, messagePayload.geographies);
   const files = Array.from(new Set(Object.values(geoidTranslator)));
   const fileWrites = [];
+  let counter = 0;
 
-  await sortData();
+  await sortData(ctx);
 
   // iterate through files and process each (stat files, s3 and db records)
   for (let file of files) {
-    await processFile(file);
+    await processFile(ctx, file);
   }
-  await doBasicCleanup([directories.subGeographiesDir], false, true);
 
-  log.info('done with processSort');
+  ctx.log.info('done with processSort');
 
   // ---- functions only below
 
-  function sortData() {
+  function sortData(ctx) {
     return new Promise((resolve, reject) => {
       const dataToProcess = [];
       let lastChunkPiece = '';
@@ -119,22 +119,22 @@ async function processSort(data) {
             lastChunkPiece = splitData[splitData.length - 1];
           }
 
-          processData(dataToProcess);
+          processData(ctx, dataToProcess);
         });
         stream.on('error', err => {
-          log.error(err);
+          ctx.log.error('Error', { err: err.message, stack: err.stack });
           return reject(err);
         });
         stream.on('end', async () => {
           // might only happen if there is no newline after last record
           if (lastChunkPiece) {
             dataToProcess.push(JSON.parse(lastChunkPiece));
-            processData(dataToProcess);
+            processData(ctx, dataToProcess);
           }
 
-          console.log('done reading remote file.');
+          ctx.log.info('done reading remote file.');
           await Promise.all(fileWrites);
-          console.log(`processed ${counter} lines`);
+          ctx.log.info(`processed ${counter} lines`);
 
           return resolve();
         });
@@ -142,58 +142,62 @@ async function processSort(data) {
     });
   }
 
-  function processData(dataArr) {
+  function processData(ctx, dataArr) {
     while (dataArr.length) {
-      processLine(dataArr.pop());
+      processLine(ctx, dataArr.pop());
     }
   }
 
-  async function processLine(obj) {
+  async function processLine(ctx, obj) {
     counter++;
 
     if (counter % 1000 === 0) {
-      console.log(counter);
+      ctx.log.info(counter);
     }
 
     const splitValue = obj.properties[selectedFieldKey];
     const geoidFileTranslate = geoidTranslator[splitValue];
-    const fullPathFilename = `${directories.subGeographiesDir}/${geoidFileTranslate}`;
+    const fullPathFilename = `${
+      directories.subGeographiesDir + ctx.directoryId
+    }/${geoidFileTranslate}`;
 
     // stuff json line into a file depending on the county
-    fileWrites.push(appendFileAsync(fullPathFilename, obj));
+    fileWrites.push(appendFileAsync(ctx, fullPathFilename, obj));
   }
 
-  async function processFile(file) {
-    console.log(`processing: ${geonameLookup[file]}`);
+  async function processFile(ctx, file) {
+    ctx.log.info(`processing: ${geonameLookup[file]}`);
 
     // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
     // SQS can sometimes duplicate messages, and this would guard against it.
     const doesProductExist = await checkForProduct(
+      ctx,
       file,
       downloadId,
       fileFormats.NDGEOJSON.extension,
     );
 
     if (doesProductExist) {
-      log.info(
+      ctx.log.info(
         `Product ${fileFormats.NDGEOJSON.extension} has already been created for geoid: ${file}.  Skipping.`,
       );
       return;
     }
 
     // file is a plain geoid with no file extension
-    const path = `${directories.subGeographiesDir}/${file}`;
+    const path = `${directories.subGeographiesDir + ctx.directoryId}/${file}`;
 
-    const statExport = await countStats(path);
+    const statExport = await countStats(ctx, path);
 
     // create product ref
-    const productRef = generateRef(referenceIdLength);
-    const individualRef = generateRef(referenceIdLength);
-    const fipsDetails = createFipsDetailsForCounty(file);
+    const productRef = generateRef(ctx, referenceIdLength);
+    const individualRef = generateRef(ctx, referenceIdLength);
+    const fipsDetails = createFipsDetailsForCounty(ctx, file);
 
-    const { geoid, geoName } = await lookupCleanGeoName(fipsDetails);
+    const { geoid, geoName } = await lookupCleanGeoName(ctx, fipsDetails);
 
     const productKey = createProductDownloadKey(
+      ctx,
       fipsDetails,
       geoid,
       geonameLookup[file],
@@ -203,44 +207,58 @@ async function processSort(data) {
     );
 
     if (!isDryRun) {
-      // async operations done in parallel
-      const operations = [];
+      const cleanupS3 = [];
 
-      // upload stat file
-      operations.push(
-        putTextToS3(
+      try {
+        // upload stat file
+        await putTextToS3(
+          ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}-stat.json`,
           JSON.stringify(statExport),
           'application/json',
           true,
-        ),
-      );
+        );
 
-      // upload ndgeojson file
-      operations.push(
-        putFileToS3(
+        cleanupS3.push({
+          bucket: config.get('Buckets.productsBucket'),
+          key: `${productKey}-stat.json`,
+          type: s3deleteType.FILE,
+        });
+
+        // upload ndgeojson file
+        await putFileToS3(
+          ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}.ndgeojson`,
           path,
           'application/geo+json-seq',
           true,
-        ),
-      );
+        );
 
-      // write product record
-      operations.push(
-        queryCreateProductRecord(
+        cleanupS3.push({
+          bucket: config.get('Buckets.productsBucket'),
+          key: `${productKey}.ndgeojson`,
+          type: s3deleteType.FILE,
+        });
+
+        // writes just one record.  no transaction needed.  it works or it doesnt
+        await queryCreateProductRecord(
+          ctx,
           downloadId,
           productRef,
+          individualRef,
           fileFormats.NDGEOJSON.extension,
           productOrigins.DERIVED,
           file,
           `${productKey}.ndgeojson`,
-        ),
-      );
-
-      await Promise.all(operations);
+        );
+      } catch (err) {
+        await removeS3Files(ctx, cleanupS3);
+        // throwing here will cause processSort to end.
+        // accomodates resuming if identical message (in terms of data) is sent
+        throw err;
+      }
 
       // Send SQS message to create products
 
@@ -262,12 +280,12 @@ async function processSort(data) {
         downloadId,
         productKey,
       };
-      await sendQueueMessage(productsQueueUrl, payload);
+      await sendQueueMessage(ctx, productsQueueUrl, payload);
     }
   }
 }
 
-function appendFileAsync(fullPathFilename, json) {
+function appendFileAsync(ctx, fullPathFilename, json) {
   return new Promise((resolve, reject) => {
     fs.appendFile(fullPathFilename, JSON.stringify(json) + '\n', err => {
       if (err) {
@@ -278,17 +296,17 @@ function appendFileAsync(fullPathFilename, json) {
   });
 }
 
-function keifyGeographies(geographies) {
+function keifyGeographies(ctx, geographies) {
   const obj = {};
 
   geographies.forEach(geography => {
-    obj[geography.geoid] = makeS3Key(geography.geoname);
+    obj[geography.geoid] = makeS3Key(ctx, geography.geoname);
   });
 
   return obj;
 }
 
-function createFipsDetailsForCounty(geoid) {
+function createFipsDetailsForCounty(ctx, geoid) {
   return {
     SUMLEV: '050',
     STATEFIPS: geoid.slice(0, 2),
@@ -297,11 +315,11 @@ function createFipsDetailsForCounty(geoid) {
   };
 }
 
-function countStats(path) {
+function countStats(ctx, path) {
   return new Promise((resolve, reject) => {
     // read each file as ndjson and create stat object
     let transformed = 0;
-    const statCounter = new StatContext();
+    const statCounter = new StatContext(ctx);
 
     fs.createReadStream(path)
       .pipe(ndjson.parse())
@@ -310,15 +328,15 @@ function countStats(path) {
 
         transformed++;
         if (transformed % 10000 === 0) {
-          console.log(transformed + ' records processed');
+          ctx.log.info(transformed + ' records processed');
         }
       })
       .on('error', err => {
-        console.error(err);
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
         return reject(err);
       })
       .on('end', async () => {
-        console.log(transformed + ' records processed');
+        ctx.log.info(transformed + ' records processed');
 
         return resolve(statCounter.export());
       });
