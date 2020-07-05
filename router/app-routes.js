@@ -18,6 +18,23 @@ const { readMessages, deleteMessage, sendQueueMessage } = require('../util/sqsOp
 exports.appRouter = async app => {
   //
 
+  app.get('/getLogfile', async function (req, res) {
+    const ctx = { log };
+    const messageId = req.query.messageId;
+    const messageType = req.query.messageType;
+    const s3Key = `${messageId}-${messageType}.log`;
+    const bucket = config.get('Buckets.logfilesBucket');
+    res.set('Content-Type', 'text/plain');
+    try {
+      const data = await getObject(ctx, bucket, s3Key);
+      console.log(data);
+      return res.send(data);
+    } catch (err) {
+      ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+      return res.status(404).send(err.message);
+    }
+  });
+
   app.post('/replay/viewInboxDlq', async function (req, res) {
     const ctx = { log };
     const payload = req.body;

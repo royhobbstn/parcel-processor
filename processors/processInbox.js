@@ -54,6 +54,8 @@ async function processInbox(ctx, data) {
   //   PLACEFIPS: '',
   // };
 
+  ctx.messageId = data.Messages[0].MessageId;
+  ctx.type = 'inbox';
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 

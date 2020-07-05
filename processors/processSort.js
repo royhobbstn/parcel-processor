@@ -66,6 +66,8 @@ async function processSort(ctx, data) {
   //   ],
   // };
 
+  ctx.messageId = data.Messages[0].MessageId;
+  ctx.type = 'sort';
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 

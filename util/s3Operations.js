@@ -95,6 +95,7 @@ exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType,
 };
 
 exports.getObject = function (ctx, bucket, key) {
+  ctx.log.info('getting s3 object', { bucket, key });
   return new Promise((resolve, reject) => {
     S3.getObject(
       {
@@ -107,6 +108,8 @@ exports.getObject = function (ctx, bucket, key) {
         }
 
         const body = data.Body;
+        ctx.log.info('ContentType: ', { ContentType: data.ContentType });
+        ctx.log.info('ContentEncoding: ', { ContentEncoding: data.ContentEncoding });
 
         if (data.ContentEncoding === 'gzip') {
           // @ts-ignore
@@ -114,9 +117,15 @@ exports.getObject = function (ctx, bucket, key) {
             if (err) {
               return reject(err);
             }
+            if (data.ContentType === 'text/plain') {
+              return resolve(fileBuffer.toString('utf-8'));
+            }
             return resolve(JSON.parse(fileBuffer.toString('utf-8')));
           });
         } else {
+          if (data.ContentType === 'text/plain') {
+            return resolve(data.Body.toString('utf-8'));
+          }
           return resolve(JSON.parse(data.Body.toString('utf-8')));
         }
       },

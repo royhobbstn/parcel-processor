@@ -57,6 +57,8 @@ exports.processProducts = async function (ctx, data) {
   //   productKey: '15-Hawaii/007-Kauai-County/5fe3a581-6f612f99-15007-Kauai-County-Hawaii',
   // };
 
+  ctx.messageId = data.Messages[0].MessageId;
+  ctx.type = 'product';
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
   ctx.isDryRun = messagePayload.dryRun;

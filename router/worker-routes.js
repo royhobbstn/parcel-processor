@@ -90,9 +90,9 @@ async function runProcess(ctx, res, queueUrl, messageProcessor) {
           await putFileToS3(
             { log: console },
             config.get('Buckets.logfilesBucket'),
-            ctx.logfile,
+            `${ctx.messageId}-${ctx.type}.log`,
             ctx.logpath,
-            'application/json',
+            'text/plain',
             true,
           );
           // send email to myself if there was an error
