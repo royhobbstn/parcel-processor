@@ -25,8 +25,6 @@ function SendSQS({ env }) {
   };
 
   const deleteMessage = message => {
-    console.log(message);
-
     const deletePayload = {
       ReceiptHandle: message.ReceiptHandle,
     };
@@ -54,8 +52,6 @@ function SendSQS({ env }) {
   };
 
   const replayMessage = message => {
-    console.log(message);
-
     const replayPayload = {
       ReceiptHandle: message.ReceiptHandle,
       Body: message.Body,
@@ -98,7 +94,6 @@ function SendSQS({ env }) {
     fetch(`http://localhost:4000/getLogfile?messageId=${messageId}&messageType=${type}`)
       .then(response => response.text())
       .then(response => {
-        console.log(response);
         updateLogText(response);
       })
       .catch(err => {
