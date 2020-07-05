@@ -345,7 +345,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 
 exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
   return new Promise((resolve, reject) => {
-    ctx.log.info('creating derivative ndgeojson with clusterId...');
+    ctx.log.info('extracting points from ndgeojson...');
 
     let transformed = 0;
     ctx.log.info('extractPointsFromNdGeoJson');
