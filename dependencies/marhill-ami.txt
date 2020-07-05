@@ -53,8 +53,6 @@ sudo vi /opt/scripts/run-script-on-boot.sh
 
 cat /dev/null > ~/on-boot-output.txt
 
-brew install tippecanoe
-
 source ~/.nvm/nvm.sh
 
 cd ~/dev/parcel-processor/

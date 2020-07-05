@@ -39,7 +39,7 @@ exports.commonRouter = async app => {
 
   app.get('/status', async function (req, res) {
     const ctx = { log };
-    const applications = ['tippecanoe', 'ogr2ogr', 'aws'];
+    const applications = ['/home/linuxbrew/.linuxbrew/bin/tippecanoe', 'ogr2ogr', 'aws'];
     const status = {};
 
     for (let appName of applications) {
