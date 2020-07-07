@@ -68,7 +68,7 @@ async function runProcess(ctx, res, queueUrl, messageProcessor) {
       return;
     }
     let errorFlag;
-    const interval = initiateVisibilityHeartbeat(ctx, 12000, 180);
+    const interval = initiateVisibilityHeartbeat(ctx, 120000, 180);
     messageProcessor(ctx, message)
       .then(() => {
         errorFlag = false;

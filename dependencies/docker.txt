@@ -1,0 +1,10 @@
+sudo docker build -t parcel-outlet .
+sudo docker run -v $HOME/.aws/credentials:/root/.aws/credentials:ro -d -p 8050:8050 --name test parcel-outlet
+sudo docker logs test -f
+
+sudo docker tag parcel-outlet:latest 000009394762.dkr.ecr.us-east-2.amazonaws.com/parcel-outlet:latest
+
+aws ecr get-login-password --region us-east-2
+sudo docker login --username AWS --password pasteBigPassword 000009394762.dkr.ecr.us-east-2.amazonaws.com
+
+sudo docker push 000009394762.dkr.ecr.us-east-2.amazonaws.com/parcel-outlet:latest

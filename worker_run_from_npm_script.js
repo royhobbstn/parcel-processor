@@ -1,4 +1,10 @@
 // @ts-check
+console.log('Environment:');
+console.log(process.env.NODE_ENV);
+
+if (!process.env.NODE_ENV) {
+  process.exit();
+}
 
 const express = require('express');
 const { appRouter } = require('./router/worker-routes.js');
