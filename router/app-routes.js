@@ -212,13 +212,13 @@ async function sendSQS(ctx, res, queueUrl, payload) {
 
 async function replayDlq(ctx, res, originalQueueUrl, payload) {
   const queueUrl = originalQueueUrl + '-dlq';
-  ctx.deleteParams = {
+  const deleteParams = {
     ReceiptHandle: payload.ReceiptHandle,
     QueueUrl: queueUrl,
   };
   try {
     await sendQueueMessage(ctx, originalQueueUrl, JSON.parse(payload.Body));
-    await deleteMessage(ctx);
+    await deleteMessage(ctx, deleteParams);
     return res.json({ ok: 'ok' });
   } catch (err) {
     ctx.log.error('Unable to replay SQS Message', { error: err.message, stack: err.stack });
@@ -227,12 +227,12 @@ async function replayDlq(ctx, res, originalQueueUrl, payload) {
 }
 
 async function deleteDlq(ctx, res, queueUrl, payload) {
-  ctx.deleteParams = {
+  const deleteParams = {
     ReceiptHandle: payload.ReceiptHandle,
     QueueUrl: queueUrl,
   };
   try {
-    await deleteMessage(ctx);
+    await deleteMessage(ctx, deleteParams);
     return res.json({ ok: 'ok' });
   } catch (err) {
     ctx.log.error('Unable to delete SQS Message', { error: err.message, stack: err.stack });
@@ -245,7 +245,7 @@ async function readDlq(ctx, res, queueUrl) {
     messages: [],
   };
   try {
-    const result = await readMessages(ctx, queueUrl, 1);
+    const result = await readMessages(ctx, queueUrl, 10);
     console.log(result);
     if (result) {
       response.messages = result.Messages;

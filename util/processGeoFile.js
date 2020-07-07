@@ -264,7 +264,7 @@ exports.convertToFormat = function (ctx, format, outputPath) {
 exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
   return new Promise((resolve, reject) => {
     const layername = 'parcelslayer';
-    const application = '/home/linuxbrew/.linuxbrew/bin/tippecanoe';
+    const application = 'tippecanoe';
     const args = [
       '-f',
       '-l',
