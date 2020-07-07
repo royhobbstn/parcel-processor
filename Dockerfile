@@ -27,4 +27,4 @@ RUN curl -sL https://deb.nodesource.com/setup_10.x  | bash -
 RUN apt-get -y install nodejs
 RUN npm install
 
-CMD node --stack_size=8192 --max-old-space-size=8192 
+CMD npm run worker-local 

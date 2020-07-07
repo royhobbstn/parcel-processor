@@ -31,15 +31,12 @@ exports.sendQueueMessage = function (ctx, queueUrl, payload) {
 exports.readMessages = readMessages;
 
 function readMessages(ctx, queueUrl, numberOfMessages) {
-  // note that for small scale operations - numberOfMessages is worthless and you should just set it to 1.  see AWS docs.
   return new Promise((resolve, reject) => {
     const params = {
-      MaxNumberOfMessages: numberOfMessages,
+      MaxNumberOfMessages: numberOfMessages, // max = 10
       MessageAttributeNames: ['All'],
       QueueUrl: queueUrl,
     };
-
-    ctx.log.info('numberOfMessagesRequested', { numberOfMessages });
 
     sqs.receiveMessage(params, async function (err, data) {
       if (err) {
@@ -48,50 +45,33 @@ function readMessages(ctx, queueUrl, numberOfMessages) {
       } else if (data.Messages) {
         ctx.log.info('sqsResponse', { data });
 
-        ctx.log.info('Received message(s)');
+        ctx.log.info('Received message: ' + queueUrl);
         return resolve(data);
       } else {
-        ctx.log.info('Found no message(s)');
-        return resolve('');
+        ctx.log.info('Found no message: ' + queueUrl);
+        return resolve(null);
       }
     });
   });
 }
 
-exports.deleteMessage = function (ctx) {
+exports.deleteMessage = function (ctx, deleteParams) {
   return new Promise((resolve, reject) => {
-    sqs.deleteMessage(ctx.deleteParams, function (err, data) {
+    sqs.deleteMessage(deleteParams, function (err, data) {
       if (err) {
         ctx.log.error('Unable to delete SQS message', { err: err.message, stack: err.stack });
         return reject(new Error('Unable to delete SQS message'));
       } else {
-        ctx.log.info('Message Deleted', { deleteParams: ctx.deleteParams });
+        ctx.log.info('Message Deleted', { deleteParams });
         return resolve({ success: 'Successfully deleted SQS message' });
       }
     });
   });
 };
 
-function attachDeleteParams(ctx, queueUrl, data) {
-  const deleteParams = {
-    QueueUrl: queueUrl,
-    ReceiptHandle: data.Messages[0].ReceiptHandle,
-  };
-  ctx.deleteParams = deleteParams;
-}
-
-exports.processMessage = async function (ctx, queueUrl) {
-  const message = await readMessages(ctx, queueUrl, 1);
-  if (message) {
-    // store delete payload on ctx to be used later
-    attachDeleteParams(ctx, queueUrl, message);
-  }
-  return message;
-};
-
-exports.initiateVisibilityHeartbeat = function (ctx, intervalMS, heartbeatSec) {
+exports.initiateVisibilityHeartbeat = function (ctx, deleteParams, intervalMS, heartbeatSec) {
   const params = {
-    ...ctx.deleteParams,
+    ...deleteParams,
     VisibilityTimeout: heartbeatSec,
   };
 
