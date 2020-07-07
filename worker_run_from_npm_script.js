@@ -1,29 +1,64 @@
 // @ts-check
-console.log('Environment:');
-console.log(process.env.NODE_ENV);
+const config = require('config');
+const { readMessages } = require('./util/sqsOperations');
+const { processInbox } = require('./processors/processInbox');
+const { processSort } = require('./processors/processSort');
+const { processProducts } = require('./processors/processProducts');
+const { runProcess, createContext } = require('./util/worker');
+const { getStatus } = require('./util/misc');
 
-if (!process.env.NODE_ENV) {
-  process.exit();
+console.log('Environment: ' + process.env.NODE_ENV);
+
+const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
+const sortQueueUrl = config.get('SQS.sortQueueUrl');
+const productQueueUrl = config.get('SQS.productQueueUrl');
+
+const baseCtx = { log: console };
+
+// tries (5) x queues (3) x pollTime (10s)  must be > Visibility Timeout Heartbeat (120s)
+// todo need some constants and a validation check when this file runs
+let tries = 0;
+
+async function pollQueues() {
+  let foundMessage = false;
+
+  const inboxMessages = await readMessages(baseCtx, inboxQueueUrl, 1);
+  if (inboxMessages) {
+    foundMessage = true;
+    const ctx = createContext('processInbox');
+    await runProcess(ctx, inboxQueueUrl, processInbox, inboxMessages);
+    baseCtx.log.info('Finished handling inbox message.');
+  }
+
+  const sortMessages = await readMessages(baseCtx, sortQueueUrl, 1);
+  if (sortMessages) {
+    foundMessage = true;
+    const ctx = createContext('processSort');
+    await runProcess(ctx, sortQueueUrl, processSort, sortMessages);
+    baseCtx.log.info('Finished handling sort message.');
+  }
+
+  const productMessages = await readMessages(baseCtx, productQueueUrl, 1);
+  if (productMessages) {
+    foundMessage = true;
+    const ctx = createContext('processProducts');
+    await runProcess(ctx, productQueueUrl, processProducts, productMessages);
+    baseCtx.log.info('Finished handling product message.');
+  }
+
+  if (foundMessage) {
+    tries = 0;
+  } else {
+    tries++;
+  }
+
+  if (tries < 5) {
+    baseCtx.log.info('re-polling:', { foundMessage, tries });
+    return pollQueues();
+  }
 }
 
-const express = require('express');
-const { appRouter } = require('./router/worker-routes.js');
-const { commonRouter } = require('./router/common-routes');
-const bodyParser = require('body-parser');
-const config = require('config');
-const app = express();
-const port = config.get('Worker.port');
-
-app.use(bodyParser.json());
-app.use(express.static('public'));
-
-app.use(function (req, res, next) {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  next();
+getStatus(baseCtx).then(status => {
+  baseCtx.log.info('Status: ', status);
+  pollQueues();
 });
-
-commonRouter(app);
-appRouter(app);
-
-app.listen(port, () => console.log(`Worker Listening at http://localhost:${port}`));

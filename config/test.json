@@ -1,0 +1,19 @@
+{
+  "SQS": {
+    "sortQueueUrl": "https://sqs.us-east-2.amazonaws.com/000009394762/sortByGeography-test",
+    "productQueueUrl": "https://sqs.us-east-2.amazonaws.com/000009394762/createProducts-test",
+    "inboxQueueUrl": "https://sqs.us-east-2.amazonaws.com/000009394762/inbox-test"
+  },
+  "RDS": {
+    "secretArn": "arn:aws:secretsmanager:us-east-2:000009394762:secret:rds-db-credentials/cluster-DFMKRGAEZALSW5CFHLUBKWDLKQ/admin-PnSVCT",
+    "resourceArn": "arn:aws:rds:us-east-2:000009394762:cluster:parcel-outlet-dev",
+    "database": "main",
+    "region": "us-east-2"
+  },
+  "Buckets": {
+    "rawBucket": "raw-data-po-dev",
+    "productsBucket": "data-products-po-dev",
+    "tilesBucket": "tile-server-po-dev",
+    "logfilesBucket": "logfiles-po-dev"
+  }
+}
