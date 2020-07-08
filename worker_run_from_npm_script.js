@@ -5,7 +5,7 @@ const { processInbox } = require('./processors/processInbox');
 const { processSort } = require('./processors/processSort');
 const { processProducts } = require('./processors/processProducts');
 const { runProcess, createContext } = require('./util/worker');
-const { getStatus } = require('./util/misc');
+const { getStatus, initiateFreeMemoryQuery } = require('./util/misc');
 
 console.log('Environment: ' + process.env.NODE_ENV);
 
@@ -18,6 +18,8 @@ const baseCtx = { log: console };
 // tries (5) x queues (3) x pollTime (10s)  must be > Visibility Timeout Heartbeat (120s)
 // todo need some constants and a validation check when this file runs
 let tries = 0;
+
+let freeInterval = initiateFreeMemoryQuery(baseCtx);
 
 async function pollQueues() {
   let foundMessage = false;
@@ -56,6 +58,9 @@ async function pollQueues() {
     baseCtx.log.info('re-polling:', { foundMessage, tries });
     return pollQueues();
   }
+
+  clearInterval(freeInterval);
+  baseCtx.log.info('Exiting from lack of messages.');
 }
 
 getStatus(baseCtx).then(status => {
