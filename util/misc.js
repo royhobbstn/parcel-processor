@@ -19,6 +19,18 @@ exports.getSourceType = function (ctx, sourceNameInput) {
   }
 };
 
+exports.initiateFreeMemoryQuery = function (ctx) {
+  let interval = setInterval(() => {
+    try {
+      const output = execSync('free -mh');
+      ctx.log.info('Mem: ', { output: output.toString() });
+    } catch (e) {
+      ctx.log.info(`mem check failed`);
+    }
+  }, 30000);
+  return interval;
+};
+
 exports.getStatus = async function (ctx) {
   const applications = ['tippecanoe', 'ogr2ogr', 'aws'];
   const status = {};
