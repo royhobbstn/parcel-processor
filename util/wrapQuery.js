@@ -18,6 +18,7 @@ const {
   startTransaction,
   commitTransaction,
   rollbackTransaction,
+  createLogfileRecord,
 } = require('./queries');
 const { getSourceType } = require('./misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
@@ -33,6 +34,7 @@ exports.DBWrites = async function (
   geoid,
   productKey,
   individualRef,
+  messagePayload,
 ) {
   // refresh connection just in case the upload /parse took a long time
   await acquireConnection(ctx);
@@ -69,7 +71,7 @@ exports.DBWrites = async function (
     );
     ctx.log.info(`Created download record.`, { downloadId });
 
-    await queryCreateProductRecord(
+    const product_id = await queryCreateProductRecord(
       ctx,
       downloadId,
       productRef,
@@ -81,6 +83,16 @@ exports.DBWrites = async function (
       transactionId,
     );
     ctx.log.info('NdGeoJson product record was created.');
+
+    await createLogfileRecord(
+      ctx,
+      product_id,
+      ctx.messageId,
+      JSON.stringify(messagePayload),
+      ctx.type,
+      transactionId,
+    );
+    ctx.log.info('Logfile reference record was created.');
 
     await commitTransaction(ctx, transactionId);
     ctx.log.info('Transaction Committed');

@@ -2,7 +2,8 @@
 CREATE table sources(
    source_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
    source_name VARCHAR(500) NOT NULL,
-   source_type ENUM('webpage', 'email')
+   source_type ENUM('webpage', 'email'),
+   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 );
    
 CREATE UNIQUE INDEX idx_sources ON sources(source_name);
@@ -23,6 +24,7 @@ CREATE table downloads(
    checksum CHAR(32),
    raw_key VARCHAR(500),
    original_filename VARCHAR(500),
+   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
    CONSTRAINT fk_dl_source FOREIGN KEY (source_id) REFERENCES sources(source_id),
    CONSTRAINT fk_check FOREIGN KEY (check_id) REFERENCES source_checks(check_id)
 );
@@ -51,12 +53,26 @@ CREATE table products(
    product_origin ENUM('original', 'derived'),
    geoid VARCHAR(7),
    product_key VARCHAR(500),
+   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
    CONSTRAINT fk_geoid FOREIGN KEY (geoid) REFERENCES geographic_identifiers(geoid),
    CONSTRAINT fk_dl_id FOREIGN KEY (download_id) REFERENCES downloads(download_id)
 );
 
 CREATE INDEX idx_pr_ref ON products(product_ref);
 CREATE INDEX idx_pr_geoid ON products(geoid);
+
+CREATE table logfiles(
+   logfile_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+   product_id INT,
+   message_id VARCHAR(100),
+   message_body TEXT,
+   message_type ENUM('inbox', 'sort', 'product'),
+   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   CONSTRAINT fk_prod_id FOREIGN KEY (product_id) REFERENCES products(product_id)
+)
+
+CREATE INDEX idx_msg_id ON logfiles(message_id);
+
 
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("040", "state");
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("050", "county");

@@ -8,6 +8,7 @@ const {
   referenceIdLength,
   productOrigins,
   fileFormats,
+  messageTypes,
 } = require('../util/constants');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const {
@@ -55,7 +56,7 @@ async function processInbox(ctx, data) {
   // };
 
   ctx.messageId = data.Messages[0].MessageId;
-  ctx.type = 'inbox';
+  ctx.type = messageTypes.INBOX;
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 
@@ -174,6 +175,7 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
       geoid,
       productKey,
       individualRef,
+      messagePayload,
     );
   }
 

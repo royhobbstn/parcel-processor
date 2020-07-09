@@ -13,8 +13,13 @@ const {
   productOrigins,
   referenceIdLength,
   s3deleteType,
+  messageTypes,
 } = require('../util/constants');
-const { queryCreateProductRecord, checkForProduct } = require('../util/queries');
+const {
+  queryCreateProductRecord,
+  checkForProduct,
+  createLogfileRecord,
+} = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
 const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
@@ -67,7 +72,7 @@ async function processSort(ctx, data) {
   // };
 
   ctx.messageId = data.Messages[0].MessageId;
-  ctx.type = 'sort';
+  ctx.type = messageTypes.SORT;
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 
@@ -243,7 +248,7 @@ async function processSort(ctx, data) {
         });
 
         // writes just one record.  no transaction needed.  it works or it doesnt
-        await queryCreateProductRecord(
+        const product_id = await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -253,6 +258,15 @@ async function processSort(ctx, data) {
           file,
           `${productKey}.ndgeojson`,
         );
+
+        await createLogfileRecord(
+          ctx,
+          product_id,
+          ctx.messageId,
+          JSON.stringify(messagePayload),
+          ctx.type,
+        );
+        ctx.log.info('Logfile reference record was created.');
       } catch (err) {
         await removeS3Files(ctx, cleanupS3);
         // throwing here will cause processSort to end.
