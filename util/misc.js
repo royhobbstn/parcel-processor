@@ -27,7 +27,7 @@ exports.initiateFreeMemoryQuery = function (ctx) {
     } catch (e) {
       ctx.log.info(`mem check failed`);
     }
-  }, 30000);
+  }, 60000);
   return interval;
 };
 

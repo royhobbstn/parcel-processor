@@ -56,3 +56,9 @@ exports.s3deleteType = {
   FILE: 'file',
   DIRECTORY: 'directory',
 };
+
+exports.messageTypes = {
+  INBOX: 'inbox',
+  SORT: 'sort',
+  PRODUCT: 'product',
+};

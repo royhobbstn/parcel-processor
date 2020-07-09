@@ -71,7 +71,7 @@ exports.queryCreateDownloadRecord = function (
   });
 };
 
-exports.queryCreateProductRecord = function (
+exports.queryCreateProductRecord = async function (
   ctx,
   downloadId,
   productRef,
@@ -82,7 +82,7 @@ exports.queryCreateProductRecord = function (
   productKey,
   transactionId,
 ) {
-  return slsAuroraClient.query({
+  const query = await slsAuroraClient.query({
     sql:
       'INSERT INTO products(download_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key) VALUES (:downloadId, :productRef, :individualRef, :productType, :productOrigin, :geoid, :productKey);',
     parameters: {
@@ -93,6 +93,32 @@ exports.queryCreateProductRecord = function (
       productOrigin,
       geoid,
       productKey,
+    },
+    transactionId,
+  });
+
+  const product_id = query.records[0].product_id;
+  ctx.log.info('ProductId of created record: ' + product_id);
+
+  return product_id;
+};
+
+exports.createLogfileRecord = function (
+  ctx,
+  productId,
+  messageId,
+  messagePayload,
+  messageType,
+  transactionId,
+) {
+  return slsAuroraClient.query({
+    sql:
+      'INSERT INTO logfiles(product_id, message_id, message_body, message_type) VALUES (:productId, :messageId, :messagePayload, :messageType);',
+    parameters: {
+      productId,
+      messageId,
+      messagePayload,
+      messageType,
     },
     transactionId,
   });
