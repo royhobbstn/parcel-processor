@@ -43,7 +43,7 @@ function readMessages(ctx, queueUrl, numberOfMessages) {
         ctx.log.error('Unable to receive SQS message(s)', { err: err.message, stack: err.stack });
         return reject(new Error('Unable to receive SQS message(s)'));
       } else if (data.Messages) {
-        ctx.log.info('sqsResponse', { data });
+        ctx.log.info('sqsResponse', { messages: JSON.stringify(data) });
 
         ctx.log.info('Received message: ' + queueUrl);
         return resolve(data);
@@ -76,16 +76,18 @@ exports.initiateVisibilityHeartbeat = function (ctx, deleteParams, intervalMS, h
   };
 
   // set off Initial so we dont have to wait for first interval
+  ctx.log.info('attempting to update initial visibility timeout...');
   sqs.changeMessageVisibility(params, function (err, data) {
     if (err) {
       ctx.log.error('Error updating Visibility Timeout', { error: err, stack: err.stack });
     } else {
-      ctx.log.info('Refreshing Visibility Timeout', { data });
+      ctx.log.info('Refreshing Visibility Timeout - Initial', { data });
     }
   });
 
   let interval = setInterval(() => {
     // meant to be non-blocking
+    ctx.log.info('attempting to update visibility timeout...');
     sqs.changeMessageVisibility(params, function (err, data) {
       if (err) {
         ctx.log.error('Error updating Visibility Timeout', { error: err, stack: err.stack });

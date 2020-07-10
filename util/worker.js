@@ -26,9 +26,10 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
   };
 
   let errorFlag = false;
-  const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 90000, 120);
+  const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 60000, 180);
 
   try {
+    ctx.log.info('starting message processor');
     await messageProcessor(ctx, messages);
   } catch (err) {
     ctx.log.error('Fatal Error: ', { err: err.message, stack: err.stack });

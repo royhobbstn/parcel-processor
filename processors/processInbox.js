@@ -143,7 +143,9 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
 
   // process all features and convert them to WGS84 ndgeojson
   // while gathering stats on the data.  Writes ndgeojson and stat files to output.
+  ctx.log.info('before parse file');
   await parseFile(ctx, dataset, chosenLayer, fileName, outputPath);
+  ctx.log.info('after parse file');
 
   const productRef = generateRef(ctx, referenceIdLength);
   const individualRef = generateRef(ctx, referenceIdLength);

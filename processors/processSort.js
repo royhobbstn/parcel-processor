@@ -7,6 +7,7 @@ const fs = require('fs');
 const ndjson = require('ndjson');
 const { generateRef } = require('../util/crypto');
 const { StatContext } = require('../util/StatContext');
+const { sleep } = require('../util/misc');
 const {
   directories,
   fileFormats,
@@ -337,11 +338,12 @@ function countStats(ctx, path) {
 
     fs.createReadStream(path)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         statCounter.countStats(obj);
 
         transformed++;
         if (transformed % 10000 === 0) {
+          await sleep(50);
           ctx.log.info(transformed + ' records processed');
         }
       })

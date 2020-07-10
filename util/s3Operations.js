@@ -149,9 +149,10 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
 
     const proc = spawn(application, args);
 
-    proc.stdout.on('data', data => {
-      ctx.log.info(data.toString());
-    });
+    // dont need this in logs or console TODO maybe delete
+    // proc.stdout.on('data', data => {
+    //   ctx.log.info(data.toString());
+    // });
 
     proc.stderr.on('data', data => {
       console.log(data.toString());
