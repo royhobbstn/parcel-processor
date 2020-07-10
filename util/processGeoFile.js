@@ -8,6 +8,7 @@ var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
 const { directories, tileInfoPrefix, idPrefix, clusterPrefix } = require('./constants');
 const { clustersKmeans } = require('./modKmeans');
+const { sleep } = require('./misc');
 
 exports.inspectFile = function (ctx, fileName, fileType) {
   ctx.log.info(`Found file: ${fileName}`);
@@ -78,7 +79,7 @@ exports.inspectFile = function (ctx, fileName, fileType) {
 };
 
 exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     let layer;
     let transform;
     try {
@@ -128,6 +129,7 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
           const parsedFeature = getGeoJsonFromGdalFeature(ctx, feat, transform);
           if (counter % 10000 === 0) {
             ctx.log.info(counter + ' records processed');
+            await sleep(50);
           }
           counter++;
           parsedFeature.properties[idPrefix] = counter;
@@ -318,7 +320,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         const copy = { ...obj.properties };
         delete copy[clusterPrefix]; // filter out clusterID property in stringified JSON
         fs.appendFileSync(
@@ -329,6 +331,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 
         transformed++;
         if (transformed % 10000 === 0) {
+          await sleep(50);
           ctx.log.info(transformed + ' records processed');
         }
       })
@@ -355,7 +358,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         // create a point feature
         const pt = createPointFeature(ctx, obj);
         if (pt) {
@@ -367,6 +370,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
           // may as well do this here (it will happen on feature 0 at the least)
           propertyCount = Object.keys(obj.properties).length;
           ctx.log.info(transformed + ' records processed');
+          await sleep(50);
         }
       })
       .on('error', err => {
@@ -391,7 +395,7 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         // add clusterId
         obj.properties = { ...obj.properties, [clusterPrefix]: lookup[obj.properties[idPrefix]] };
 
@@ -399,6 +403,7 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
 
         transformed++;
         if (transformed % 10000 === 0) {
+          await sleep(50);
           ctx.log.info(transformed + ' records processed');
         }
       })

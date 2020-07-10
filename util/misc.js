@@ -63,3 +63,7 @@ exports.getStatus = async function (ctx) {
 
   return status;
 };
+
+exports.sleep = function (ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};

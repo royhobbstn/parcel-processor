@@ -206,11 +206,25 @@ function ViewLogs({ env }) {
       >
         {records.length ? (
           <Table selectable celled size="small">
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>Created</Table.HeaderCell>
+                <Table.HeaderCell>M.Type</Table.HeaderCell>
+                <Table.HeaderCell>Body</Table.HeaderCell>
+                <Table.HeaderCell>Geoid</Table.HeaderCell>
+                <Table.HeaderCell>P.Type</Table.HeaderCell>
+                <Table.HeaderCell>Origin</Table.HeaderCell>
+                <Table.HeaderCell>M.Id</Table.HeaderCell>
+                <Table.HeaderCell>Ind.Ref</Table.HeaderCell>
+                <Table.HeaderCell>P.Ref</Table.HeaderCell>
+                <Table.HeaderCell>Dl.Ref</Table.HeaderCell>
+              </Table.Row>
+            </Table.Header>
             <Table.Body>
               {records.map(record => {
                 return (
                   <Table.Row
-                    key={record.message_id}
+                    key={record.individual_ref}
                     onDoubleClick={() => {
                       loadLogData(record);
                     }}

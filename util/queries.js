@@ -97,7 +97,8 @@ exports.queryCreateProductRecord = async function (
     transactionId,
   });
 
-  const product_id = query.records[0].product_id;
+  ctx.log.info('product record created', { record: query });
+  const product_id = query.insertId;
   ctx.log.info('ProductId of created record: ' + product_id);
 
   return product_id;

@@ -38,6 +38,8 @@ async function pollQueues() {
     await runProcess(ctx, productQueueUrl, processProducts, productMessages);
     baseCtx.log.info('Finished handling product message.');
   }
+
+  return pollQueues();
 }
 
 getStatus(baseCtx).then(status => {

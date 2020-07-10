@@ -28,6 +28,7 @@
     "app-server-local": "NODE_ENV=test node app_run_from_npm_script.js",
     "app-server-dev": "NODE_ENV=development node app_run_from_npm_script.js",
     "app-server-prod": "NODE_ENV=production node app_run_from_npm_script.js",
+    "worker-docker": "sudo docker run -v $HOME/.aws/credentials:/root/.aws/credentials:ro -d --name test parcel-outlet",
     "worker-local": "NODE_ENV=test node worker_run_from_npm_script.js",
     "worker-dev": "NODE_ENV=development node --stack_size=4096 --max-old-space-size=4096 worker_run_from_npm_script.js",
     "worker-prod": "NODE_ENV=production node --stack_size=4096 --max-old-space-size=4096 worker_run_from_npm_script.js",
