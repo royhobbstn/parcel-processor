@@ -190,3 +190,33 @@ exports.checkForProducts = async function (ctx, geoid, downloadId) {
   });
   return query.records;
 };
+
+exports.searchLogsByType = function (ctx, type) {
+  let clause = '';
+  if (type !== 'all') {
+    clause = 'WHERE message_type = :type';
+  }
+  return slsAuroraClient.query({
+    sql:
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id ' +
+      clause +
+      ' ORDER BY logfiles.created ASC LIMIT 100;',
+    parameters: { type },
+  });
+};
+
+exports.searchLogsByGeoid = function (ctx, geoid) {
+  return slsAuroraClient.query({
+    sql:
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE geoid = :geoid ORDER BY logfiles.created ASC LIMIT 100;',
+    parameters: { geoid },
+  });
+};
+
+exports.searchLogsByReference = function (ctx, ref) {
+  return slsAuroraClient.query({
+    sql:
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE product_ref = :ref OR individual_ref = :ref OR download_ref = :ref ORDER BY logfiles.created ASC LIMIT 100;',
+    parameters: { ref },
+  });
+};
