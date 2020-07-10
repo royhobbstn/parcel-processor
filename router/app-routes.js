@@ -11,12 +11,48 @@ const {
   getCountiesByState,
   querySourceNames,
 } = require('../util/wrapQuery');
+const { searchLogsByType, searchLogsByGeoid, searchLogsByReference } = require('../util/queries');
 const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
 const { readMessages, deleteMessage, sendQueueMessage } = require('../util/sqsOperations');
 
 exports.appRouter = async app => {
   //
+  app.get('/searchLogsByType', async function (req, res) {
+    const ctx = { log };
+    const type = req.query.type;
+    try {
+      const query = await searchLogsByType(ctx, type);
+      res.json(query.records);
+    } catch (err) {
+      ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/searchLogsByGeoid', async function (req, res) {
+    const ctx = { log };
+    const geoid = req.query.geoid;
+    try {
+      const query = await searchLogsByGeoid(ctx, geoid);
+      res.json(query.records);
+    } catch (err) {
+      ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/searchLogsByReference', async function (req, res) {
+    const ctx = { log };
+    const ref = req.query.ref;
+    try {
+      const query = await searchLogsByReference(ctx, ref);
+      res.json(query.records);
+    } catch (err) {
+      ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
 
   app.get('/getLogfile', async function (req, res) {
     const ctx = { log };
@@ -245,7 +281,7 @@ async function readDlq(ctx, res, queueUrl) {
     messages: [],
   };
   try {
-    const result = await readMessages(ctx, queueUrl, 10);
+    const result = await readMessages(ctx, queueUrl, 1);
     console.log(result);
     if (result) {
       response.messages = result.Messages;
