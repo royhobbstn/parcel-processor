@@ -7,6 +7,7 @@ const path = require('path');
 const mkdirp = require('mkdirp');
 const fsExtra = require('fs-extra');
 const { directories } = require('./constants');
+const { generateRef } = require('./crypto');
 
 exports.createDirectories = async function (ctx, dirs) {
   for (let dir of dirs) {
@@ -51,7 +52,9 @@ function collapseUnzippedDir(ctx) {
       ctx.log.info(`Moving contents of folder: ${subDirectory} into base folder: ${root}`);
       const arrayOfSubDirectoryFiles = fs.readdirSync(subDirectory);
       for (let subFile of arrayOfSubDirectoryFiles) {
-        fsExtra.moveSync(`${subDirectory}/${subFile}`, `${root}/${subFile}`);
+        // add move-prefix to avoid potential filename collision with identical files (or identically named files) in the lower directory
+        const prefix = generateRef(ctx, 5);
+        fsExtra.moveSync(`${subDirectory}/${subFile}`, `${root}/${prefix}-${subFile}`);
       }
       movedFlag = true;
     }
@@ -86,8 +89,8 @@ exports.checkForFileType = function (ctx) {
     });
 
     if (shpFilenames.size > 0 && gdbFilenames.size > 0) {
-      return reject(
-        new Error('ERROR: mix of shapefiles and geodatabases in raw folder.  Exiting.'),
+      ctx.log.warn(
+        "There are both geodatabases and shapefiles in here. If something goes wrong, it's probably because I guessed and chose the wrong file.  I prefer geodatabases.",
       );
     }
 

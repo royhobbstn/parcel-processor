@@ -67,3 +67,10 @@ exports.getStatus = async function (ctx) {
 exports.sleep = function (ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 };
+
+exports.initiateProgressHeartbeat = function (ctx, seconds) {
+  const interval = setInterval(() => {
+    ctx.log.info(`still processing ${console.trace()}...`);
+  }, seconds * 1000);
+  return interval;
+};

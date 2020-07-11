@@ -170,7 +170,7 @@ exports.commitTransaction = function (ctx, transactionId) {
   return slsAuroraClient.commitTransaction({ transactionId });
 };
 
-exports.rollbackTransaction = async function (ctx, transactionId) {
+exports.rollbackTransaction = function (ctx, transactionId) {
   return slsAuroraClient.rollbackTransaction({ transactionId });
 };
 

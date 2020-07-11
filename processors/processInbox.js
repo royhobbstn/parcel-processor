@@ -103,7 +103,6 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
   const computedHash = await computeHash(ctx, filePath);
 
   // call database and find out if hash is already in DB
-  await acquireConnection(ctx);
   const hashExists = await doesHashExist(ctx, computedHash);
 
   if (hashExists) {
