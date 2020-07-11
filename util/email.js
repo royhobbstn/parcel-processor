@@ -20,10 +20,10 @@ exports.sendAlertMail = function (subject, content) {
       (err, info) => {
         if (err) {
           console.log(err);
-          reject(err);
+          return reject(err);
         } else {
           console.log('Sent Email');
-          resolve();
+          return resolve();
         }
       },
     );

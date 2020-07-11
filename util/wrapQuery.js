@@ -36,9 +36,6 @@ exports.DBWrites = async function (
   individualRef,
   messagePayload,
 ) {
-  // refresh connection just in case the upload /parse took a long time
-  await acquireConnection(ctx);
-
   let sourceLine;
   const transactionId = await startTransaction(ctx);
   ctx.log.info('Transaction started.', { transactionId });
@@ -118,15 +115,21 @@ async function acquireConnection(ctx) {
   const seconds = 10;
   let attempts = 5;
   let connected = false;
-  do {
-    attempts++;
+
+  for (let i = 0; i < attempts; i++) {
     ctx.log.info('attempting to connect to database');
     connected = await checkHealth(ctx);
     if (!connected) {
       ctx.log.info(`attempt failed.  trying again in ${seconds} seconds...`);
       await setPause(ctx, seconds * 1000);
+    } else {
+      break;
     }
-  } while (!connected && attempts <= 5);
+  }
+
+  if (!connected) {
+    throw new Error('unable to establish database connection');
+  }
 
   ctx.log.info('connected');
 }
@@ -313,4 +316,14 @@ exports.querySourceNames = async function (ctx, sourceName) {
     throw new Error(`Problem running querySourceNames Query`);
   }
   return query.records;
+};
+
+exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
+  let interval = setInterval(() => {
+    // meant to be non-blocking
+    ctx.log.info('database keepalive initiated...');
+    acquireConnection(ctx);
+  }, seconds * 1000);
+
+  return interval;
 };

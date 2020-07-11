@@ -61,7 +61,17 @@ exports.inspectFile = function (ctx, fileName, fileType) {
       };
     })
     .filter(d => {
-      return d.type === 'Multi Polygon' || d.type === 'Polygon';
+      // 3D Measured Multi Polygon?  Really, West Virginia?
+      return [
+        '3D Measured Polygon',
+        '3D Polygon',
+        'Measured Polygon',
+        'Polygon',
+        '3D Measured Multi Polygon',
+        '3D Multi Polygon',
+        'Measured Multi Polygon',
+        'Multi Polygon',
+      ].includes(d.type);
     })
     .sort((a, b) => {
       return b.count - a.count;
@@ -253,12 +263,12 @@ exports.convertToFormat = function (ctx, format, outputPath) {
 
     proc.on('error', err => {
       ctx.log.error('Error', { err: err.message, stack: err.stack });
-      reject(err);
+      return reject(err);
     });
 
     proc.on('close', code => {
       ctx.log.info(`completed creating format: ${format.driver}.`);
-      resolve({ command });
+      return resolve({ command });
     });
   });
 };

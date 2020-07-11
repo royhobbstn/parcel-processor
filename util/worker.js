@@ -9,6 +9,8 @@ const { createInstanceLogger, getUniqueLogfileName } = require('./logger');
 const { sendAlertMail } = require('./email');
 const { directories, directoryIdLength } = require('./constants');
 const { generateRef } = require('./crypto');
+const { initiateDatabaseHeartbeat } = require('./wrapQuery');
+const { initiateProgressHeartbeat } = require('./misc');
 
 exports.createContext = function (processor) {
   const processorShort = processor.replace('process', '').toLowerCase();
@@ -27,6 +29,8 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
 
   let errorFlag = false;
   const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 60000, 180);
+  const databaseInterval = initiateDatabaseHeartbeat(ctx, 180);
+  const progressInterval = initiateProgressHeartbeat(ctx, 30);
 
   try {
     ctx.log.info('starting message processor');
@@ -37,6 +41,8 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
   } finally {
     // discontinue updating visibility timeout
     clearInterval(interval);
+    clearInterval(databaseInterval);
+    clearInterval(progressInterval);
 
     if (!errorFlag) {
       await deleteMessage(ctx, deleteParams);
