@@ -35,6 +35,8 @@ const {
 exports.processInbox = processInbox;
 
 async function processInbox(ctx, data) {
+  ctx.process.push = ['processInbox'];
+
   await acquireConnection(ctx);
   await createDirectories(ctx, [
     directories.logDir,
@@ -98,6 +100,8 @@ async function processInbox(ctx, data) {
 }
 
 async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
+  ctx.process.push = ['runMain'];
+
   const sourceNameInput = messagePayload.sourceVal;
 
   const computedHash = await computeHash(ctx, filePath);
@@ -204,6 +208,8 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
 // todo move
 // https://stackoverflow.com/a/61269447/8896489
 async function downloadFile(ctx, fileUrl, outputLocationPath) {
+  ctx.process.push = ['downloadFile'];
+
   const writer = fs.createWriteStream(outputLocationPath);
 
   return axios({

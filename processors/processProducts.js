@@ -30,6 +30,8 @@ const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, getMaxDirectoryLevel, createDirectories } = require('../util/filesystemUtil');
 
 exports.processProducts = async function (ctx, data) {
+  ctx.process.push = ['processProducts'];
+
   await acquireConnection(ctx);
 
   await createDirectories(ctx, [

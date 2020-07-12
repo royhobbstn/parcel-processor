@@ -8,6 +8,8 @@ const spawn = require('child_process').spawn;
 const S3 = new AWS.S3({ apiVersion: '2006-03-01' });
 
 exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, useGzip) {
+  ctx.process.push = ['putTextToS3'];
+
   return new Promise((resolve, reject) => {
     const objectParams = {
       Bucket: bucketName,
@@ -42,6 +44,8 @@ exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, use
 };
 
 exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType, useGzip) {
+  ctx.process.push = ['putFileToS3'];
+
   return new Promise((resolve, reject) => {
     ctx.log.info(
       `uploading file to s3 (${filePathToUpload} as s3://${bucket}/${key}), please wait...`,
@@ -95,6 +99,8 @@ exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType,
 };
 
 exports.getObject = function (ctx, bucket, key) {
+  ctx.process.push = ['getObject'];
+
   ctx.log.info('getting s3 object', { bucket, key });
   return new Promise((resolve, reject) => {
     S3.getObject(
@@ -134,6 +140,8 @@ exports.getObject = function (ctx, bucket, key) {
 };
 
 exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFolder) {
+  ctx.process.push = ['s3Sync'];
+
   return new Promise((resolve, reject) => {
     const application = 'aws';
     const args = [
@@ -172,6 +180,8 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
 exports.emptyS3Directory = emptyDirectory;
 
 async function emptyDirectory(ctx, bucket, dir) {
+  ctx.process.push = ['emptyDirectory'];
+
   const listParams = {
     Bucket: bucket,
     Prefix: dir,
@@ -203,6 +213,8 @@ async function emptyDirectory(ctx, bucket, dir) {
 // streams a download to the filesystem.
 // optionally un-gzips the file to a new location
 exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3UnzippedFile = null) {
+  ctx.process.push = ['streamS3toFileSystem'];
+
   return new Promise((resolve, reject) => {
     const gunzip = zlib.createGunzip();
     const file = fs.createWriteStream(s3DestFile);

@@ -36,6 +36,8 @@ exports.DBWrites = async function (
   individualRef,
   messagePayload,
 ) {
+  ctx.process.push = ['DBWrites'];
+
   let sourceLine;
   const transactionId = await startTransaction(ctx);
   ctx.log.info('Transaction started.', { transactionId });
@@ -110,8 +112,8 @@ exports.DBWrites = async function (
 exports.acquireConnection = acquireConnection;
 
 async function acquireConnection(ctx) {
-  // ping the database to make sure its up / get it ready
-  // after that, keep-alives from data-api-client should do the rest
+  ctx.process.push = ['acquireConnection'];
+
   const seconds = 10;
   let attempts = 5;
   let connected = false;
@@ -154,6 +156,8 @@ async function checkHealth(ctx) {
 exports.recordSourceCheck = recordSourceCheck;
 
 async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
+  ctx.process.push = ['recordSourceCheck'];
+
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
   }
@@ -168,6 +172,8 @@ async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
 exports.fetchSourceIdIfExists = fetchSourceIdIfExists;
 
 async function fetchSourceIdIfExists(ctx, pageName) {
+  ctx.process.push = ['fetchSourceIdIfExists'];
+
   const query = await querySource(ctx, pageName);
   if (query.records.length) {
     return [query.records[0].source_id, query.records[0].source_type];
@@ -178,6 +184,8 @@ async function fetchSourceIdIfExists(ctx, pageName) {
 exports.createSource = createSource;
 
 async function createSource(ctx, sourceName, sourceType, transactionId) {
+  ctx.process.push = ['createSource'];
+
   const query = await queryWriteSource(ctx, sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
     return query.insertId;
@@ -186,6 +194,8 @@ async function createSource(ctx, sourceName, sourceType, transactionId) {
 }
 
 exports.doesHashExist = async function (ctx, computedHash) {
+  ctx.process.push = ['doesHashExist'];
+
   const query = await queryHash(ctx, computedHash);
   if (query.records.length) {
     ctx.log.info('Hash exists in database.  File has already been processed.');
@@ -207,6 +217,8 @@ async function constructDownloadRecord(
   filePath,
   transactionId,
 ) {
+  ctx.process.push = ['constructDownloadRecord'];
+
   const originalFilename = path.parse(filePath).base;
 
   const query = await queryCreateDownloadRecord(
@@ -233,6 +245,8 @@ function makeS3Key(ctx, str) {
 }
 
 exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
+  ctx.process.push = ['lookupCleanGeoName'];
+
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 
   let geoid;
@@ -268,6 +282,8 @@ exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
 };
 
 exports.getSplittableDownloads = async function (ctx, geoid) {
+  ctx.process.push = ['getSplittableDownloads'];
+
   let query;
 
   if (geoid) {
@@ -284,6 +300,8 @@ exports.getSplittableDownloads = async function (ctx, geoid) {
 };
 
 exports.getCountiesByState = async function (ctx, geoid) {
+  ctx.process.push = ['getCountiesByState'];
+
   const query = await queryAllCountiesFromState(ctx, geoid);
   if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
@@ -292,6 +310,8 @@ exports.getCountiesByState = async function (ctx, geoid) {
 };
 
 exports.querySourceNames = async function (ctx, sourceName) {
+  ctx.process.push = ['querySourceNames'];
+
   // take root of http source, or domain of email sources
 
   // figure if email or webpage
@@ -319,6 +339,8 @@ exports.querySourceNames = async function (ctx, sourceName) {
 };
 
 exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
+  ctx.process.push = ['initiateDatabaseHeartbeat'];
+
   let interval = setInterval(() => {
     // meant to be non-blocking
     ctx.log.info('database keepalive initiated...');
