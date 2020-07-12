@@ -13,7 +13,7 @@ const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
 const sortQueueUrl = config.get('SQS.sortQueueUrl');
 const productQueueUrl = config.get('SQS.productQueueUrl');
 
-const baseCtx = { log: console };
+const baseCtx = { log: console, process: [] };
 
 initiateFreeMemoryQuery(baseCtx);
 

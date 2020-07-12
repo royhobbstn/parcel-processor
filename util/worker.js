@@ -14,7 +14,7 @@ const { initiateProgressHeartbeat } = require('./misc');
 
 exports.createContext = function (processor) {
   const processorShort = processor.replace('process', '').toLowerCase();
-  const directoryId = generateRef({ log: console }, directoryIdLength);
+  const directoryId = generateRef({ log: console, process: [] }, directoryIdLength);
   const logfile = getUniqueLogfileName(processorShort);
   const logpath = `${directories.logDir + directoryId}/${logfile}`;
   const log = createInstanceLogger(logpath);
@@ -53,7 +53,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     if (!ctx.isDryRun) {
       console.log('\n\nUploading logfile to S3.');
       await putFileToS3(
-        { log: console },
+        { log: console, process: [] },
         config.get('Buckets.logfilesBucket'),
         `${ctx.messageId}-${ctx.type}.log`,
         ctx.logpath,

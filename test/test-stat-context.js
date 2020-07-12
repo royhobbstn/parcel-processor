@@ -1,7 +1,7 @@
 const ndjson = require('ndjson');
 const fs = require('fs');
 const { StatContext } = require('../util/StatContext');
-const statCounter = new StatContext({ log: console });
+const statCounter = new StatContext({ log: console, process: [] });
 
 let transformed = 0;
 

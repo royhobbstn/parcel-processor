@@ -17,7 +17,7 @@ const log = createLogger({
 
 const getUniqueLogfileName = function (serviceName) {
   const ts = Math.round(new Date().getTime() / 1000);
-  const entropy = generateRef({ log: console }, logfileNameLength);
+  const entropy = generateRef({ log: console, process: [] }, logfileNameLength);
   return `${ts}-${serviceName}-${entropy}.log`;
 };
 
