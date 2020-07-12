@@ -7,7 +7,7 @@ const zlib = require('zlib');
 const { tileInfoPrefix } = require('./constants');
 
 exports.generateRef = function (ctx, digits) {
-  ctx.process.push = ['generateRef'];
+  ctx.process.push('generateRef');
   const uuid = uuidv4();
   // @ts-ignore
   const plainString = uuid.replace(/-,/g);
@@ -15,7 +15,7 @@ exports.generateRef = function (ctx, digits) {
 };
 
 exports.computeHash = function (ctx, filePath) {
-  ctx.process.push = ['computeHash'];
+  ctx.process.push('computeHash');
 
   return new Promise((resolve, reject) => {
     ctx.log.info('processing file...');
@@ -42,7 +42,7 @@ exports.computeHash = function (ctx, filePath) {
 };
 
 exports.gzipTileAttributes = async function (ctx, directory) {
-  ctx.process.push = ['gzipTileAttributes'];
+  ctx.process.push('gzipTileAttributes');
 
   const arrayOfFiles = fs.readdirSync(directory);
 
@@ -64,7 +64,7 @@ exports.gzipTileAttributes = async function (ctx, directory) {
 };
 
 function convertToGzip(ctx, oldPath, newPath) {
-  ctx.process.push = ['convertToGzip'];
+  ctx.process.push('convertToGzip');
 
   return new Promise((resolve, reject) => {
     var readStream = fs.createReadStream(oldPath);

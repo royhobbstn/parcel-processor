@@ -22,7 +22,7 @@ exports.createContext = function (processor) {
 };
 
 exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) {
-  ctx.process.push = ['runProcess'];
+  ctx.process.push('runProcess');
 
   const deleteParams = {
     QueueUrl: queueUrl,

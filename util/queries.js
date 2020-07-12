@@ -13,7 +13,7 @@ exports.queryHealth = function (ctx) {
 };
 
 exports.queryHash = function (ctx, computedHash) {
-  ctx.process.push = ['queryHash'];
+  ctx.process.push('queryHash');
 
   // queries the database for a given hash
   // (if found, than we already have the most recent download)
@@ -23,7 +23,7 @@ exports.queryHash = function (ctx, computedHash) {
 };
 
 exports.querySource = function (ctx, sourceName) {
-  ctx.process.push = ['querySource'];
+  ctx.process.push('querySource');
 
   // queries if a source exists in the source table
   return slsAuroraClient.query('SELECT * FROM sources WHERE source_name = :sourceName;', {
@@ -32,7 +32,7 @@ exports.querySource = function (ctx, sourceName) {
 };
 
 exports.queryWriteSource = function (ctx, sourceName, sourceType, transactionId) {
-  ctx.process.push = ['queryWriteSource'];
+  ctx.process.push('queryWriteSource');
 
   // writes a new source record in the source table
   return slsAuroraClient.query({
@@ -46,7 +46,7 @@ exports.queryWriteSource = function (ctx, sourceName, sourceType, transactionId)
 };
 
 exports.queryWriteSourceCheck = function (ctx, sourceId, disposition, transactionId) {
-  ctx.process.push = ['queryWriteSourceCheck'];
+  ctx.process.push('queryWriteSourceCheck');
 
   // write a 'sourceCheck' record to the database
   // it's a record that a source was checked for a more recent download version
@@ -70,7 +70,7 @@ exports.queryCreateDownloadRecord = function (
   originalFilename,
   transactionId,
 ) {
-  ctx.process.push = ['queryCreateDownloadRecord'];
+  ctx.process.push('queryCreateDownloadRecord');
 
   // write a download record to unique identify a downloaded file.
   return slsAuroraClient.query({
@@ -92,7 +92,7 @@ exports.queryCreateProductRecord = async function (
   productKey,
   transactionId,
 ) {
-  ctx.process.push = ['queryCreateProductRecord'];
+  ctx.process.push('queryCreateProductRecord');
 
   const query = await slsAuroraClient.query({
     sql:
@@ -124,7 +124,7 @@ exports.createLogfileRecord = function (
   messageType,
   transactionId,
 ) {
-  ctx.process.push = ['createLogfileRecord'];
+  ctx.process.push('createLogfileRecord');
 
   return slsAuroraClient.query({
     sql:
@@ -140,7 +140,7 @@ exports.createLogfileRecord = function (
 };
 
 exports.queryGeographicIdentifier = function (ctx, geoid) {
-  ctx.process.push = ['queryGeographicIdentifier'];
+  ctx.process.push('queryGeographicIdentifier');
 
   return slsAuroraClient.query('SELECT * FROM geographic_identifiers WHERE geoid = :geoid;', {
     geoid,
@@ -148,7 +148,7 @@ exports.queryGeographicIdentifier = function (ctx, geoid) {
 };
 
 exports.queryAllCountiesFromState = function (ctx, geoid) {
-  ctx.process.push = ['queryAllCountiesFromState'];
+  ctx.process.push('queryAllCountiesFromState');
 
   return slsAuroraClient.query({
     sql: `SELECT geoid, geoname FROM geographic_identifiers WHERE LEFT(geoid, 2) = :geoid and sumlev = "050" order by geoname asc;`,
@@ -159,7 +159,7 @@ exports.queryAllCountiesFromState = function (ctx, geoid) {
 };
 
 exports.queryAllOriginalRecentDownloads = function (ctx) {
-  ctx.process.push = ['queryAllOriginalRecentDownloads'];
+  ctx.process.push('queryAllOriginalRecentDownloads');
 
   return slsAuroraClient.query(
     'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original"',
@@ -167,7 +167,7 @@ exports.queryAllOriginalRecentDownloads = function (ctx) {
 };
 
 exports.queryAllOriginalRecentDownloadsWithGeoid = function (ctx, geoid) {
-  ctx.process.push = ['queryAllOriginalRecentDownloadsWithGeoid'];
+  ctx.process.push('queryAllOriginalRecentDownloadsWithGeoid');
 
   return slsAuroraClient.query({
     sql:
@@ -177,7 +177,7 @@ exports.queryAllOriginalRecentDownloadsWithGeoid = function (ctx, geoid) {
 };
 
 exports.querySourceNamesLike = function (ctx, sourceName) {
-  ctx.process.push = ['querySourceNamesLike'];
+  ctx.process.push('querySourceNamesLike');
 
   return slsAuroraClient.query({
     sql: 'SELECT * from sources WHERE source_name LIKE :sourceName',
@@ -186,26 +186,26 @@ exports.querySourceNamesLike = function (ctx, sourceName) {
 };
 
 exports.startTransaction = async function (ctx) {
-  ctx.process.push = ['startTransaction'];
+  ctx.process.push('startTransaction');
 
   const query = await slsAuroraClient.beginTransaction();
   return query.transactionId;
 };
 
 exports.commitTransaction = function (ctx, transactionId) {
-  ctx.process.push = ['commitTransaction'];
+  ctx.process.push('commitTransaction');
 
   return slsAuroraClient.commitTransaction({ transactionId });
 };
 
 exports.rollbackTransaction = function (ctx, transactionId) {
-  ctx.process.push = ['rollbackTransaction'];
+  ctx.process.push('rollbackTransaction');
 
   return slsAuroraClient.rollbackTransaction({ transactionId });
 };
 
 exports.checkForProduct = async function (ctx, geoid, downloadId, format, returnBool) {
-  ctx.process.push = ['checkForProduct'];
+  ctx.process.push('checkForProduct');
 
   const query = await slsAuroraClient.query({
     sql:
@@ -216,7 +216,7 @@ exports.checkForProduct = async function (ctx, geoid, downloadId, format, return
 };
 
 exports.checkForProducts = async function (ctx, geoid, downloadId) {
-  ctx.process.push = ['checkForProducts'];
+  ctx.process.push('checkForProducts');
 
   const query = await slsAuroraClient.query({
     sql:
@@ -227,7 +227,7 @@ exports.checkForProducts = async function (ctx, geoid, downloadId) {
 };
 
 exports.searchLogsByType = function (ctx, type) {
-  ctx.process.push = ['searchLogsByType'];
+  ctx.process.push('searchLogsByType');
 
   let clause = '';
   if (type !== 'all') {
@@ -243,7 +243,7 @@ exports.searchLogsByType = function (ctx, type) {
 };
 
 exports.searchLogsByGeoid = function (ctx, geoid) {
-  ctx.process.push = ['searchLogsByGeoid'];
+  ctx.process.push('searchLogsByGeoid');
 
   return slsAuroraClient.query({
     sql:
@@ -253,7 +253,7 @@ exports.searchLogsByGeoid = function (ctx, geoid) {
 };
 
 exports.searchLogsByReference = function (ctx, ref) {
-  ctx.process.push = ['searchLogsByReference'];
+  ctx.process.push('searchLogsByReference');
 
   return slsAuroraClient.query({
     sql:
