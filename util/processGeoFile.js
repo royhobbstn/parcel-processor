@@ -244,6 +244,8 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
 
   geoJsonFeature.geometry = obj || [];
   geoJsonFeature.properties = feature.fields.toObject();
+
+  ctx.process.pop();
   return geoJsonFeature;
 }
 
