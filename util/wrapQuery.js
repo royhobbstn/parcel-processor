@@ -36,7 +36,7 @@ exports.DBWrites = async function (
   individualRef,
   messagePayload,
 ) {
-  ctx.process.push = ['DBWrites'];
+  ctx.process.push('DBWrites');
 
   let sourceLine;
   const transactionId = await startTransaction(ctx);
@@ -112,7 +112,7 @@ exports.DBWrites = async function (
 exports.acquireConnection = acquireConnection;
 
 async function acquireConnection(ctx) {
-  ctx.process.push = ['acquireConnection'];
+  ctx.process.push('acquireConnection');
 
   const seconds = 10;
   let attempts = 5;
@@ -156,7 +156,7 @@ async function checkHealth(ctx) {
 exports.recordSourceCheck = recordSourceCheck;
 
 async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
-  ctx.process.push = ['recordSourceCheck'];
+  ctx.process.push('recordSourceCheck');
 
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
@@ -172,7 +172,7 @@ async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
 exports.fetchSourceIdIfExists = fetchSourceIdIfExists;
 
 async function fetchSourceIdIfExists(ctx, pageName) {
-  ctx.process.push = ['fetchSourceIdIfExists'];
+  ctx.process.push('fetchSourceIdIfExists');
 
   const query = await querySource(ctx, pageName);
   if (query.records.length) {
@@ -184,7 +184,7 @@ async function fetchSourceIdIfExists(ctx, pageName) {
 exports.createSource = createSource;
 
 async function createSource(ctx, sourceName, sourceType, transactionId) {
-  ctx.process.push = ['createSource'];
+  ctx.process.push('createSource');
 
   const query = await queryWriteSource(ctx, sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
@@ -194,7 +194,7 @@ async function createSource(ctx, sourceName, sourceType, transactionId) {
 }
 
 exports.doesHashExist = async function (ctx, computedHash) {
-  ctx.process.push = ['doesHashExist'];
+  ctx.process.push('doesHashExist');
 
   const query = await queryHash(ctx, computedHash);
   if (query.records.length) {
@@ -217,7 +217,7 @@ async function constructDownloadRecord(
   filePath,
   transactionId,
 ) {
-  ctx.process.push = ['constructDownloadRecord'];
+  ctx.process.push('constructDownloadRecord');
 
   const originalFilename = path.parse(filePath).base;
 
@@ -245,7 +245,7 @@ function makeS3Key(ctx, str) {
 }
 
 exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
-  ctx.process.push = ['lookupCleanGeoName'];
+  ctx.process.push('lookupCleanGeoName');
 
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 
@@ -282,7 +282,7 @@ exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
 };
 
 exports.getSplittableDownloads = async function (ctx, geoid) {
-  ctx.process.push = ['getSplittableDownloads'];
+  ctx.process.push('getSplittableDownloads');
 
   let query;
 
@@ -300,7 +300,7 @@ exports.getSplittableDownloads = async function (ctx, geoid) {
 };
 
 exports.getCountiesByState = async function (ctx, geoid) {
-  ctx.process.push = ['getCountiesByState'];
+  ctx.process.push('getCountiesByState');
 
   const query = await queryAllCountiesFromState(ctx, geoid);
   if (!query) {
@@ -310,7 +310,7 @@ exports.getCountiesByState = async function (ctx, geoid) {
 };
 
 exports.querySourceNames = async function (ctx, sourceName) {
-  ctx.process.push = ['querySourceNames'];
+  ctx.process.push('querySourceNames');
 
   // take root of http source, or domain of email sources
 
@@ -339,7 +339,7 @@ exports.querySourceNames = async function (ctx, sourceName) {
 };
 
 exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
-  ctx.process.push = ['initiateDatabaseHeartbeat'];
+  ctx.process.push('initiateDatabaseHeartbeat');
 
   let interval = setInterval(() => {
     // meant to be non-blocking

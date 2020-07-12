@@ -11,7 +11,7 @@ const { clustersKmeans } = require('./modKmeans');
 const { sleep } = require('./misc');
 
 exports.inspectFile = function (ctx, fileName, fileType) {
-  ctx.process.push = ['inspectFile'];
+  ctx.process.push('inspectFile');
 
   ctx.log.info(`Found file: ${fileName}`);
 
@@ -91,7 +91,7 @@ exports.inspectFile = function (ctx, fileName, fileType) {
 };
 
 exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
-  ctx.process.push = ['parseFile'];
+  ctx.process.push('parseFile');
 
   return new Promise(async (resolve, reject) => {
     let layer;
@@ -159,7 +159,7 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
 };
 
 exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
-  ctx.process.push = ['addClusterIdToGeoData'];
+  ctx.process.push('addClusterIdToGeoData');
 
   // write cluster-*(.ndgeojson) with a cluster id (to be used for making tiles)
 
@@ -178,8 +178,6 @@ exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
 };
 
 function createPointFeature(ctx, parsedFeature) {
-  ctx.process.push = ['createPointFeature'];
-
   try {
     const center = turf.center(parsedFeature);
     center.properties[idPrefix] = parsedFeature.properties[idPrefix];
@@ -191,7 +189,7 @@ function createPointFeature(ctx, parsedFeature) {
 }
 
 exports.parseOutputPath = function (ctx, fileName, fileType) {
-  ctx.process.push = ['parseOutputPath'];
+  ctx.process.push('parseOutputPath');
 
   const SPLITTER = fileType === 'shapefile' ? '.shp' : '.gdb';
   const splitFileName = fileName.split(SPLITTER)[0];
@@ -200,7 +198,7 @@ exports.parseOutputPath = function (ctx, fileName, fileType) {
 };
 
 function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
-  ctx.process.push = ['getGeoJsonFromGdalFeature'];
+  ctx.process.push('getGeoJsonFromGdalFeature');
 
   var geoJsonFeature = {
     type: 'Feature',
@@ -250,7 +248,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
 }
 
 exports.convertToFormat = function (ctx, format, outputPath) {
-  ctx.process.push = ['convertToFormat'];
+  ctx.process.push('convertToFormat');
 
   // convert from ndgeojson into geojson, gpkg, shp, etc
 
@@ -288,7 +286,7 @@ exports.convertToFormat = function (ctx, format, outputPath) {
 };
 
 exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
-  ctx.process.push = ['spawnTippecane'];
+  ctx.process.push('spawnTippecane');
 
   return new Promise((resolve, reject) => {
     const layername = 'parcelslayer';
@@ -336,7 +334,7 @@ exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
 };
 
 exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
-  ctx.process.push = ['writeTileAttributes'];
+  ctx.process.push('writeTileAttributes');
 
   return new Promise((resolve, reject) => {
     ctx.log.info('processing attributes...');
@@ -375,7 +373,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 };
 
 exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
-  ctx.process.push = ['extractPointsFromNdGeoJson'];
+  ctx.process.push('extractPointsFromNdGeoJson');
 
   return new Promise((resolve, reject) => {
     ctx.log.info('extracting points from ndgeojson...');
@@ -415,7 +413,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
 };
 
 exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) {
-  ctx.process.push = ['createNdGeoJsonWithClusterId'];
+  ctx.process.push('createNdGeoJsonWithClusterId');
 
   return new Promise((resolve, reject) => {
     ctx.log.info('creating derivative ndgeojson with clusterId...');

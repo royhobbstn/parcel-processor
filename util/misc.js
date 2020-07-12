@@ -3,7 +3,7 @@ const { execSync } = require('child_process');
 const { sourceTypes } = require('./constants');
 
 exports.getSourceType = function (ctx, sourceNameInput) {
-  ctx.process.push = ['getSourceType'];
+  ctx.process.push('getSourceType');
 
   if (
     sourceNameInput.includes('http://') ||
@@ -22,7 +22,7 @@ exports.getSourceType = function (ctx, sourceNameInput) {
 };
 
 exports.initiateFreeMemoryQuery = function (ctx) {
-  ctx.process.push = ['initiateFreeMemoryQuery'];
+  ctx.process.push('initiateFreeMemoryQuery');
 
   let interval = setInterval(() => {
     try {
@@ -36,7 +36,7 @@ exports.initiateFreeMemoryQuery = function (ctx) {
 };
 
 exports.getStatus = async function (ctx) {
-  ctx.process.push = ['getStatus'];
+  ctx.process.push('getStatus');
 
   const applications = ['tippecanoe', 'ogr2ogr', 'aws'];
   const status = {};
@@ -75,7 +75,7 @@ exports.sleep = function (ms) {
 };
 
 exports.initiateProgressHeartbeat = function (ctx, seconds) {
-  ctx.process.push = ['initiateProgressHeartbeat'];
+  ctx.process.push('initiateProgressHeartbeat');
 
   const interval = setInterval(() => {
     ctx.log.info(`still processing: ${ctx.process.slice(-10).reverse().join(', ')}`);

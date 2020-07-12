@@ -1,7 +1,7 @@
 // @ts-check
 
 exports.lookupState = function (ctx, fips) {
-  ctx.process.push = ['lookupState'];
+  ctx.process.push('lookupState');
 
   const codes = {
     '01': 'Alabama',

@@ -10,7 +10,7 @@ const { directories } = require('./constants');
 const { generateRef } = require('./crypto');
 
 exports.createDirectories = async function (ctx, dirs) {
-  ctx.process.push = ['createDirectories'];
+  ctx.process.push('createDirectories');
 
   for (let dir of dirs) {
     const newDir = `${dir}${ctx.directoryId}`;
@@ -21,7 +21,7 @@ exports.createDirectories = async function (ctx, dirs) {
 };
 
 exports.extractZip = function (ctx, filePath) {
-  ctx.process.push = ['extractZip'];
+  ctx.process.push('extractZip');
 
   return new Promise((resolve, reject) => {
     fs.createReadStream(filePath)
@@ -40,7 +40,7 @@ exports.extractZip = function (ctx, filePath) {
 exports.collapseUnzippedDir = collapseUnzippedDir;
 
 function collapseUnzippedDir(ctx) {
-  ctx.process.push = ['collapseUnzippedDir'];
+  ctx.process.push('collapseUnzippedDir');
 
   const root = directories.unzippedDir + ctx.directoryId;
   const arrayOfFiles = fs.readdirSync(root);
@@ -74,7 +74,7 @@ function collapseUnzippedDir(ctx) {
 // todo dont know where else to put this function
 // determine if the unzipped folder contains a shapefile or FGDB
 exports.checkForFileType = function (ctx) {
-  ctx.process.push = ['checkForFileType'];
+  ctx.process.push('checkForFileType');
 
   return new Promise((resolve, reject) => {
     const arrayOfFiles = fs.readdirSync(directories.unzippedDir + ctx.directoryId);
@@ -129,7 +129,7 @@ exports.checkForFileType = function (ctx) {
 };
 
 exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
-  ctx.process.push = ['zipShapefile'];
+  ctx.process.push('zipShapefile');
 
   return new Promise((resolve, reject) => {
     const keyBase = path.parse(productKeySHP).base;
@@ -199,7 +199,7 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
 };
 
 exports.getMaxDirectoryLevel = function (ctx, dir) {
-  ctx.process.push = ['getMaxDirectoryLevel'];
+  ctx.process.push('getMaxDirectoryLevel');
 
   const dirs = fs
     .readdirSync(dir, { withFileTypes: true })
