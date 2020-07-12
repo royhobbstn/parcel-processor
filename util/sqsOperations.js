@@ -4,6 +4,8 @@ AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
 
 exports.sendQueueMessage = function (ctx, queueUrl, payload) {
+  ctx.process.push = ['sendQueueMessage'];
+
   ctx.log.info('queueUrl', { queueUrl });
   ctx.log.info('queueMessage', { payload });
   return new Promise((resolve, reject) => {
@@ -31,6 +33,8 @@ exports.sendQueueMessage = function (ctx, queueUrl, payload) {
 exports.readMessages = readMessages;
 
 function readMessages(ctx, queueUrl, numberOfMessages) {
+  ctx.process.push = ['readMessages'];
+
   return new Promise((resolve, reject) => {
     const params = {
       MaxNumberOfMessages: numberOfMessages, // max = 10
@@ -56,6 +60,8 @@ function readMessages(ctx, queueUrl, numberOfMessages) {
 }
 
 exports.deleteMessage = function (ctx, deleteParams) {
+  ctx.process.push = ['deleteMessage'];
+
   return new Promise((resolve, reject) => {
     sqs.deleteMessage(deleteParams, function (err, data) {
       if (err) {
@@ -70,6 +76,8 @@ exports.deleteMessage = function (ctx, deleteParams) {
 };
 
 exports.initiateVisibilityHeartbeat = function (ctx, deleteParams, intervalMS, heartbeatSec) {
+  ctx.process.push = ['initiateVisibilityHeartbeat'];
+
   const params = {
     ...deleteParams,
     VisibilityTimeout: heartbeatSec,
@@ -100,6 +108,8 @@ exports.initiateVisibilityHeartbeat = function (ctx, deleteParams, intervalMS, h
 };
 
 exports.getQueueAttributes = function (ctx, queueUrl) {
+  ctx.process.push = ['getQueueAttributes'];
+
   return new Promise((resolve, reject) => {
     var params = {
       QueueUrl: queueUrl,

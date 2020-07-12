@@ -30,6 +30,8 @@ const { createDirectories } = require('../util/filesystemUtil');
 exports.processSort = processSort;
 
 async function processSort(ctx, data) {
+  ctx.process.push = ['processSort'];
+
   await acquireConnection(ctx);
 
   await createDirectories(ctx, [directories.logDir, directories.subGeographiesDir]);
@@ -102,6 +104,8 @@ async function processSort(ctx, data) {
   // ---- functions only below
 
   function sortData(ctx) {
+    ctx.process.push = ['sortData'];
+
     return new Promise((resolve, reject) => {
       const dataToProcess = [];
       let lastChunkPiece = '';
@@ -172,6 +176,8 @@ async function processSort(ctx, data) {
   }
 
   async function processFile(ctx, file) {
+    ctx.process.push = ['processFile'];
+
     ctx.log.info(`processing: ${geonameLookup[file]}`);
 
     // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
@@ -331,6 +337,8 @@ function createFipsDetailsForCounty(ctx, geoid) {
 }
 
 function countStats(ctx, path) {
+  ctx.process.push = ['countStats'];
+
   return new Promise((resolve, reject) => {
     // read each file as ndjson and create stat object
     let transformed = 0;

@@ -8,6 +8,8 @@ const { lookupState } = require('./lookupState');
 const config = require('config');
 
 exports.S3Writes = async function (ctx, cleanupS3, filePath, rawKey, productKey, outputPath) {
+  ctx.process.push = ['S3Writes'];
+
   await uploadRawFileToS3(ctx, filePath, rawKey);
   cleanupS3.push({
     bucket: config.get('Buckets.rawBucket'),
@@ -32,6 +34,8 @@ exports.S3Writes = async function (ctx, cleanupS3, filePath, rawKey, productKey,
 exports.uploadRawFileToS3 = uploadRawFileToS3;
 
 async function uploadRawFileToS3(ctx, filePath, rawKey) {
+  ctx.process.push = ['uploadRawFileToS3'];
+
   const extension = path.extname(rawKey);
 
   if (extension !== '.zip') {
@@ -52,6 +56,8 @@ async function uploadRawFileToS3(ctx, filePath, rawKey) {
 exports.uploadProductFiles = uploadProductFiles;
 
 async function uploadProductFiles(ctx, key, outputPath) {
+  ctx.process.push = ['uploadProductFiles'];
+
   const statFile = putFileToS3(
     ctx,
     config.get('Buckets.productsBucket'),
@@ -76,6 +82,8 @@ async function uploadProductFiles(ctx, key, outputPath) {
 }
 
 exports.createRawDownloadKey = function (ctx, fipsDetails, geoid, geoName, downloadRef) {
+  ctx.process.push = ['createRawDownloadKey'];
+
   const stateName = lookupState(ctx, fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
 
   let key;
@@ -102,6 +110,8 @@ exports.createProductDownloadKey = function (
   productRef,
   individualRef,
 ) {
+  ctx.process.push = ['createProductDownloadKey'];
+
   const stateName = lookupState(ctx, fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
 
   let key;
@@ -120,6 +130,8 @@ exports.createProductDownloadKey = function (
 };
 
 exports.removeS3Files = function (ctx, cleanupS3) {
+  ctx.process.push = ['removeS3Files'];
+
   const s3 = new AWS.S3();
 
   const cleaned = cleanupS3.map(item => {

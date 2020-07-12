@@ -6,6 +6,8 @@ var meta = require('@turf/meta');
 var skmeans = require('skmeans');
 
 exports.clustersKmeans = function (ctx, points, options) {
+  ctx.process.push = ['clustersKmeans'];
+
   // Optional parameters
   options = options || {};
   if (typeof options !== 'object') throw new Error('options is invalid');

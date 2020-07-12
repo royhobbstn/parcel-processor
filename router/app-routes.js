@@ -19,7 +19,7 @@ const { readMessages, deleteMessage, sendQueueMessage } = require('../util/sqsOp
 exports.appRouter = async app => {
   //
   app.get('/searchLogsByType', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const type = req.query.type;
     try {
       const query = await searchLogsByType(ctx, type);
@@ -31,7 +31,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/searchLogsByGeoid', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const geoid = req.query.geoid;
     try {
       const query = await searchLogsByGeoid(ctx, geoid);
@@ -43,7 +43,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/searchLogsByReference', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const ref = req.query.ref;
     try {
       const query = await searchLogsByReference(ctx, ref);
@@ -55,7 +55,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getLogfile', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const messageId = req.query.messageId;
     const messageType = req.query.messageType;
     const s3Key = `${messageId}-${messageType}.log`;
@@ -72,67 +72,67 @@ exports.appRouter = async app => {
   });
 
   app.post('/replay/viewInboxDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.inboxQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.post('/replay/viewSortDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.sortQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.post('/replay/viewProductDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.productQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.get('/viewInboxDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.get('/viewSortDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.get('/viewProductDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.post('/delete/viewInboxDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.post('/delete/viewSortDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.post('/delete/viewProductDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.get('/queryStatFiles', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const geoid = req.query.geoid;
     try {
       await acquireConnection(ctx);
@@ -144,7 +144,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/proxyS3File', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const key = decodeURIComponent(req.query.key);
     const bucket = decodeURIComponent(req.query.bucket);
     try {
@@ -156,7 +156,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getSubGeographies', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const geoid = req.query.geoid;
     try {
       await acquireConnection(ctx);
@@ -168,7 +168,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/querySources', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const sourceName = decodeURIComponent(req.query.name);
     try {
       await acquireConnection(ctx);
@@ -180,7 +180,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/proxyHeadRequest', function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const url = decodeURIComponent(req.query.url);
     axios
       .head(url)
@@ -203,21 +203,21 @@ exports.appRouter = async app => {
   });
 
   app.post('/sendInboxSQS', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
     const payload = req.body;
     return sendSQS(ctx, res, inboxQueueUrl, payload);
   });
 
   app.post('/sendSortSQS', (req, res) => {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const sortQueueUrl = config.get('SQS.sortQueueUrl');
     const payload = req.body;
     return sendSQS(ctx, res, sortQueueUrl, payload);
   });
 
   app.post('/sendProductSQS', (req, res) => {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const productsQueueUrl = config.get('SQS.productQueueUrl');
     const payload = req.body;
     return sendSQS(ctx, res, productsQueueUrl, payload);

@@ -18,10 +18,12 @@ exports.createContext = function (processor) {
   const logfile = getUniqueLogfileName(processorShort);
   const logpath = `${directories.logDir + directoryId}/${logfile}`;
   const log = createInstanceLogger(logpath);
-  return { log, logfile, logpath, processor, directoryId };
+  return { log, logfile, logpath, processor, directoryId, process: [] };
 };
 
 exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) {
+  ctx.process.push = ['runProcess'];
+
   const deleteParams = {
     QueueUrl: queueUrl,
     ReceiptHandle: messages.Messages[0].ReceiptHandle,
