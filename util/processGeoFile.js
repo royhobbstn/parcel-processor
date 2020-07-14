@@ -8,7 +8,7 @@ var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
 const { directories, tileInfoPrefix, idPrefix, clusterPrefix } = require('./constants');
 const { clustersKmeans } = require('./modKmeans');
-const { sleep } = require('./misc');
+const { sleep, unwindStack } = require('./misc');
 
 exports.inspectFile = function (ctx, fileName, fileType) {
   ctx.process.push('inspectFile');
@@ -87,6 +87,7 @@ exports.inspectFile = function (ctx, fileName, fileType) {
 
   const chosenLayer = layerSelection[0].index;
 
+  ctx.process.pop();
   return [dataset, chosenLayer];
 };
 
@@ -114,14 +115,20 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
     let writeStream = fs.createWriteStream(`${outputPath}.ndgeojson`);
     let counter = 0; // assign as parcel-outlet unique id
     let errored = 0;
-
+    const geometryErrors = {
+      'Unable to .getGeometry() from feature': 0,
+      'Unable to .clone() geometry': 0,
+      'Unable to .transform() geometry': 0,
+      'Unable to convert geometry .toObject()': 0,
+    };
     // the finish event is emitted when all data has been flushed from the stream
-    writeStream.on('finish', async () => {
+    writeStream.on('finish', () => {
       fs.writeFileSync(`${outputPath}.json`, JSON.stringify(statCounter.export()), 'utf8');
       ctx.log.info(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson`);
-
       ctx.log.info(`processed ${counter} features`);
       ctx.log.info(`found ${errored} feature errors`);
+      ctx.log.info(`geometry error breakdown: `, { geometryErrors });
+      unwindStack(ctx.process, 'parseFile');
       return resolve();
     });
 
@@ -140,10 +147,10 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
           cont = false;
           writeStream.end();
         } else {
-          const parsedFeature = getGeoJsonFromGdalFeature(ctx, feat, transform);
+          const parsedFeature = getGeoJsonFromGdalFeature(ctx, feat, transform, geometryErrors);
           if (counter % 10000 === 0) {
             ctx.log.info(counter + ' records processed');
-            await sleep(50);
+            await sleep(100);
           }
           counter++;
           parsedFeature.properties[idPrefix] = counter;
@@ -174,6 +181,9 @@ exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
     lookup[feature.properties[idPrefix]] = feature.properties.cluster;
   });
 
+  ctx.process.pop();
+
+  unwindStack(ctx.process, 'addClusterIdToGeoData');
   return lookup;
 };
 
@@ -189,17 +199,13 @@ function createPointFeature(ctx, parsedFeature) {
 }
 
 exports.parseOutputPath = function (ctx, fileName, fileType) {
-  ctx.process.push('parseOutputPath');
-
   const SPLITTER = fileType === 'shapefile' ? '.shp' : '.gdb';
   const splitFileName = fileName.split(SPLITTER)[0];
   const outputPath = `${directories.outputDir + ctx.directoryId}/${splitFileName}`;
   return outputPath;
 };
 
-function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
-  ctx.process.push('getGeoJsonFromGdalFeature');
-
+function getGeoJsonFromGdalFeature(ctx, feature, coordTransform, geometryErrors) {
   var geoJsonFeature = {
     type: 'Feature',
     properties: {},
@@ -209,7 +215,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
   try {
     geometry = feature.getGeometry();
   } catch (err) {
-    ctx.log.error('Unable to .getGeometry() from feature', { err: err.message, stack: err.stack });
+    geometryErrors['Unable to .getGeometry() from feature'] += 1;
   }
 
   var clone;
@@ -217,7 +223,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
     try {
       clone = geometry.clone();
     } catch (err) {
-      ctx.log.error('Unable to .clone() geometry', { err: err.message, stack: err.stack });
+      geometryErrors['Unable to .clone() geometry'] += 1;
     }
   }
 
@@ -225,7 +231,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
     try {
       clone.transform(coordTransform);
     } catch (err) {
-      ctx.log.error('Unable to .transform() geometry', { err: err.message, stack: err.stack });
+      geometryErrors['Unable to .transform() geometry'] += 1;
     }
   }
 
@@ -235,17 +241,13 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
       clone.swapXY(); // ugh, you would think .toObject would take care of this
       obj = clone.toObject();
     } catch (err) {
-      ctx.log.error('Unable to convert geometry .toObject()', {
-        err: err.message,
-        stack: err.stack,
-      });
+      geometryErrors['Unable to convert geometry .toObject()'] += 1;
     }
   }
 
   geoJsonFeature.geometry = obj || [];
   geoJsonFeature.properties = feature.fields.toObject();
 
-  ctx.process.pop();
   return geoJsonFeature;
 }
 
@@ -277,11 +279,13 @@ exports.convertToFormat = function (ctx, format, outputPath) {
 
     proc.on('error', err => {
       ctx.log.error('Error', { err: err.message, stack: err.stack });
+      unwindStack(ctx.process, 'convertToFormat');
       return reject(err);
     });
 
     proc.on('close', code => {
       ctx.log.info(`completed creating format: ${format.driver}.`);
+      ctx.process.pop();
       return resolve({ command });
     });
   });
@@ -330,6 +334,7 @@ exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
 
     proc.on('close', code => {
       ctx.log.info(`completed creating tiles. code ${code}`);
+      unwindStack(ctx.process, 'spawnTippecane');
       resolve({ command, layername });
     });
   });
@@ -369,6 +374,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
+        unwindStack(ctx.process, 'writeTileAttributes');
         resolve('end');
       });
   });
@@ -409,6 +415,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
+        unwindStack(ctx.process, 'extractPointsFromNdGeoJson');
         return resolve([points, propertyCount]);
       });
   });
@@ -445,6 +452,7 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
+        unwindStack(ctx.process, 'createNdGeoJsonWithClusterId');
         resolve(derivativePath);
       });
   });

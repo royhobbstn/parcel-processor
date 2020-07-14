@@ -8,6 +8,7 @@ const mkdirp = require('mkdirp');
 const fsExtra = require('fs-extra');
 const { directories } = require('./constants');
 const { generateRef } = require('./crypto');
+const { unwindStack } = require('./misc');
 
 exports.createDirectories = async function (ctx, dirs) {
   ctx.process.push('createDirectories');
@@ -18,6 +19,7 @@ exports.createDirectories = async function (ctx, dirs) {
     ctx.log.info(`Created directory: ${newDir}`);
   }
   ctx.log.info('Done creating staging directories.');
+  unwindStack(ctx.process, 'createDirectories');
 };
 
 exports.extractZip = function (ctx, filePath) {
@@ -32,6 +34,7 @@ exports.extractZip = function (ctx, filePath) {
       })
       .on('close', () => {
         ctx.log.info(`Finished unzipping file: ${filePath}`);
+        unwindStack(ctx.process, 'extractZip');
         return resolve();
       });
   });
@@ -67,8 +70,11 @@ function collapseUnzippedDir(ctx) {
   }
 
   if (movedFlag) {
+    unwindStack(ctx.process, 'collapseUnzippedDir');
     return collapseUnzippedDir;
   }
+
+  unwindStack(ctx.process, 'collapseUnzippedDir');
 }
 
 // todo dont know where else to put this function
@@ -103,6 +109,7 @@ exports.checkForFileType = function (ctx) {
     }
 
     if (gdbFilenames.size === 1) {
+      unwindStack(ctx.process, 'checkForFileType');
       return resolve([Array.from(gdbFilenames)[0], 'geodatabase']);
     }
 
@@ -112,6 +119,7 @@ exports.checkForFileType = function (ctx) {
     }
 
     if (shpFilenames.size === 1) {
+      unwindStack(ctx.process, 'checkForFileType');
       return resolve([Array.from(shpFilenames)[0], 'shapefile']);
     }
 
@@ -146,6 +154,7 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
     output.on('close', function () {
       ctx.log.info(archive.pointer() + ' total bytes');
       ctx.log.info('archiver has been finalized and the output file descriptor has closed.');
+      unwindStack(ctx.process, 'zipShapefile');
       resolve();
     });
 
@@ -209,5 +218,7 @@ exports.getMaxDirectoryLevel = function (ctx, dir) {
   ctx.log.info('Directories', { dirs });
 
   ctx.log.info(Math.max(...dirs));
+
+  unwindStack(ctx.process, 'zipShapefile');
   return Math.max(...dirs);
 };

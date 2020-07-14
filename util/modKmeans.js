@@ -4,6 +4,7 @@ var clone = require('@turf/clone');
 var invariant = require('@turf/invariant');
 var meta = require('@turf/meta');
 var skmeans = require('skmeans');
+const { unwindStack } = require('./misc');
 
 exports.clustersKmeans = function (ctx, points, options) {
   ctx.process.push('clustersKmeans');
@@ -47,5 +48,6 @@ exports.clustersKmeans = function (ctx, points, options) {
     point.properties.centroid = centroids[clusterId];
   });
 
+  unwindStack(ctx.process, 'clustersKmeans');
   return points;
 };

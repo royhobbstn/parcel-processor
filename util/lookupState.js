@@ -1,4 +1,5 @@
 // @ts-check
+const { unwindStack } = require('./misc');
 
 exports.lookupState = function (ctx, fips) {
   ctx.process.push('lookupState');
@@ -57,5 +58,6 @@ exports.lookupState = function (ctx, fips) {
     '56': 'Wyoming',
   };
 
+  unwindStack(ctx.process, 'lookupState');
   return codes[fips] || '';
 };

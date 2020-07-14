@@ -63,7 +63,6 @@ exports.appRouter = async app => {
     res.set('Content-Type', 'text/plain');
     try {
       const data = await getObject(ctx, bucket, s3Key);
-      console.log(data);
       return res.send(data);
     } catch (err) {
       ctx.log.error('Error: ', { error: err.message, stack: err.stack });

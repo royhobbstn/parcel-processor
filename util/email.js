@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const nodemailer = require('nodemailer');
+const { unwindStack } = require('./misc');
 
 const transporter = nodemailer.createTransport({
   SES: new AWS.SES({
@@ -25,6 +26,7 @@ exports.sendAlertMail = function (subject, content) {
           return reject(err);
         } else {
           console.log('Sent Email');
+          unwindStack(ctx.process, 'sendAlertMail');
           return resolve();
         }
       },

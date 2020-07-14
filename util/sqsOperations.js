@@ -2,6 +2,7 @@
 const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
+const { unwindStack } = require('./misc');
 
 exports.sendQueueMessage = function (ctx, queueUrl, payload) {
   ctx.process.push('sendQueueMessage');
@@ -24,6 +25,7 @@ exports.sendQueueMessage = function (ctx, queueUrl, payload) {
         return reject(err);
       } else {
         ctx.log.info(`Successfully sent message to queue: ${queueUrl}`);
+        unwindStack(ctx.process, 'sendQueueMessage');
         return resolve();
       }
     });
@@ -50,9 +52,11 @@ function readMessages(ctx, queueUrl, numberOfMessages) {
         ctx.log.info('sqsResponse', { messages: JSON.stringify(data) });
 
         ctx.log.info('Received message: ' + queueUrl);
+        unwindStack(ctx.process, 'readMessages');
         return resolve(data);
       } else {
         ctx.log.info('Found no message: ' + queueUrl);
+        unwindStack(ctx.process, 'readMessages');
         return resolve(null);
       }
     });
@@ -69,6 +73,7 @@ exports.deleteMessage = function (ctx, deleteParams) {
         return reject(new Error('Unable to delete SQS message'));
       } else {
         ctx.log.info('Message Deleted', { deleteParams });
+        unwindStack(ctx.process, 'deleteMessage');
         return resolve({ success: 'Successfully deleted SQS message' });
       }
     });
@@ -104,6 +109,8 @@ exports.initiateVisibilityHeartbeat = function (ctx, deleteParams, intervalMS, h
       }
     });
   }, intervalMS);
+
+  unwindStack(ctx.process, 'initiateVisibilityHeartbeat');
   return interval;
 };
 
@@ -119,6 +126,7 @@ exports.getQueueAttributes = function (ctx, queueUrl) {
       if (err) {
         return reject(err);
       }
+      unwindStack(ctx.process, 'getQueueAttributes');
       return resolve(data);
     });
   });

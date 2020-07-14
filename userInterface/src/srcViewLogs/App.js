@@ -31,7 +31,6 @@ function ViewLogs({ env }) {
     fetch(fetchUrl)
       .then(response => response.json())
       .then(response => {
-        console.log(response);
         updateRecords(response);
         updateLogText('');
       })

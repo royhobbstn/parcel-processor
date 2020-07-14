@@ -7,7 +7,7 @@ const fs = require('fs');
 const ndjson = require('ndjson');
 const { generateRef } = require('../util/crypto');
 const { StatContext } = require('../util/StatContext');
-const { sleep } = require('../util/misc');
+const { unwindStack } = require('../util/misc');
 const {
   directories,
   fileFormats,
@@ -23,7 +23,7 @@ const {
 } = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
-const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
+const { putFileToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const { createDirectories } = require('../util/filesystemUtil');
 
@@ -100,6 +100,7 @@ async function processSort(ctx, data) {
   }
 
   ctx.log.info('done with processSort');
+  unwindStack(ctx.process, 'processSort');
 
   // ---- functions only below
 
@@ -145,7 +146,7 @@ async function processSort(ctx, data) {
           ctx.log.info('done reading remote file.');
           await Promise.all(fileWrites);
           ctx.log.info(`processed ${counter} lines`);
-
+          unwindStack(ctx.process, 'sortData');
           return resolve();
         });
       });
@@ -193,13 +194,16 @@ async function processSort(ctx, data) {
       ctx.log.info(
         `Product ${fileFormats.NDGEOJSON.extension} has already been created for geoid: ${file}.  Skipping.`,
       );
+      unwindStack(ctx.process, 'processFile');
       return;
     }
 
-    // file is a plain geoid with no file extension
+    // ndgeojson file is a plain geoid with no file extension
     const path = `${directories.subGeographiesDir + ctx.directoryId}/${file}`;
+    const statPath = `${directories.subGeographiesDir + ctx.directoryId}/${file}.json`;
 
     const statExport = await countStats(ctx, path);
+    fs.writeFileSync(statPath, JSON.stringify(statExport), 'utf8');
 
     // create product ref
     const productRef = generateRef(ctx, referenceIdLength);
@@ -223,11 +227,11 @@ async function processSort(ctx, data) {
 
       try {
         // upload stat file
-        await putTextToS3(
+        await putFileToS3(
           ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}-stat.json`,
-          JSON.stringify(statExport),
+          statPath,
           'application/json',
           true,
         );
@@ -303,6 +307,8 @@ async function processSort(ctx, data) {
       };
       await sendQueueMessage(ctx, productsQueueUrl, payload);
     }
+
+    unwindStack(ctx.process, 'processFile');
   }
 }
 
@@ -346,12 +352,11 @@ function countStats(ctx, path) {
 
     fs.createReadStream(path)
       .pipe(ndjson.parse())
-      .on('data', async function (obj) {
+      .on('data', function (obj) {
         statCounter.countStats(obj);
 
         transformed++;
         if (transformed % 10000 === 0) {
-          await sleep(50);
           ctx.log.info(transformed + ' records processed');
         }
       })
@@ -361,7 +366,7 @@ function countStats(ctx, path) {
       })
       .on('end', async () => {
         ctx.log.info(transformed + ' records processed');
-
+        unwindStack(ctx.process, 'countStats');
         return resolve(statCounter.export());
       });
   });

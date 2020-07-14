@@ -28,6 +28,7 @@ const {
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, getMaxDirectoryLevel, createDirectories } = require('../util/filesystemUtil');
+const { unwindStack } = require('../util/misc');
 
 exports.processProducts = async function (ctx, data) {
   ctx.process.push('processProducts');
@@ -448,4 +449,6 @@ exports.processProducts = async function (ctx, data) {
   if (caughtError) {
     throw new Error('There were issues with one or more products.  See logs.');
   }
+
+  unwindStack(ctx.process, 'processProducts');
 };

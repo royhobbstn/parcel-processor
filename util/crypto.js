@@ -5,12 +5,14 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const zlib = require('zlib');
 const { tileInfoPrefix } = require('./constants');
+const { unwindStack } = require('./misc');
 
 exports.generateRef = function (ctx, digits) {
   ctx.process.push('generateRef');
   const uuid = uuidv4();
   // @ts-ignore
   const plainString = uuid.replace(/-,/g);
+  unwindStack(ctx.process, 'generateRef');
   return plainString.slice(0, digits);
 };
 
@@ -36,6 +38,7 @@ exports.computeHash = function (ctx, filePath) {
     stream.on('end', () => {
       const computedHash = hash.digest('hex');
       ctx.log.info(`Computed Hash: ${computedHash}`);
+      unwindStack(ctx.process, 'computeHash');
       return resolve(computedHash);
     });
   });
@@ -61,6 +64,7 @@ exports.gzipTileAttributes = async function (ctx, directory) {
   await Promise.all(copiedFiles);
 
   ctx.log.info('All tile information files have been gzipped');
+  unwindStack(ctx.process, 'gzipTileAttributes');
 };
 
 function convertToGzip(ctx, oldPath, newPath) {
@@ -83,6 +87,7 @@ function convertToGzip(ctx, oldPath, newPath) {
       fs.unlink(oldPath, () => {});
     });
     writeStream.on('close', function () {
+      unwindStack(ctx.process, 'convertToGzip');
       return resolve();
     });
 
