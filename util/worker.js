@@ -10,7 +10,7 @@ const { sendAlertMail } = require('./email');
 const { directories, directoryIdLength } = require('./constants');
 const { generateRef } = require('./crypto');
 const { initiateDatabaseHeartbeat } = require('./wrapQuery');
-const { initiateProgressHeartbeat } = require('./misc');
+const { initiateProgressHeartbeat, initiateDiskHeartbeat, unwindStack } = require('./misc');
 
 exports.createContext = function (processor) {
   const processorShort = processor.replace('process', '').toLowerCase();
@@ -33,7 +33,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
   const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 60000, 180);
   const databaseInterval = initiateDatabaseHeartbeat(ctx, 180);
   const progressInterval = initiateProgressHeartbeat(ctx, 30);
-
+  const diskInterval = initiateDiskHeartbeat(ctx, 65);
   try {
     ctx.log.info('starting message processor');
     await messageProcessor(ctx, messages);
@@ -45,6 +45,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     clearInterval(interval);
     clearInterval(databaseInterval);
     clearInterval(progressInterval);
+    clearInterval(diskInterval);
 
     if (!errorFlag) {
       await deleteMessage(ctx, deleteParams);
@@ -68,6 +69,8 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     } else {
       console.log('This is a DryRun so no email will be sent, and no logfile uploaded to S3.');
     }
+
+    unwindStack(ctx.process, 'runProcess');
     console.log('\nAll complete!\n\n');
   }
 };

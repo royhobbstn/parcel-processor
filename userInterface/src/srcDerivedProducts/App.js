@@ -30,9 +30,7 @@ function App({ env }) {
     <div>
       {attributeChosen === false ? (
         <div>
-          <Label pointing="right">
-            Enter FIPS or leave blank for all downloads missing derived products
-          </Label>
+          <Label pointing="right">Enter FIPS or leave blank for all state downloads:</Label>
           <Input
             style={{ padding: '10px' }}
             action={{

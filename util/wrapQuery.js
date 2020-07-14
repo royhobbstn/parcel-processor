@@ -20,7 +20,7 @@ const {
   rollbackTransaction,
   createLogfileRecord,
 } = require('./queries');
-const { getSourceType } = require('./misc');
+const { getSourceType, unwindStack } = require('./misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
 
 exports.DBWrites = async function (
@@ -100,6 +100,7 @@ exports.DBWrites = async function (
     ctx.log.info(`Recorded source check as disposition: 'viewed'`);
     ctx.log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
     ctx.log.info(`wrote NDgeoJSON product record.  ref: ${productRef}`);
+    unwindStack(ctx.process, 'DBWrites');
     return downloadId;
   } catch (err) {
     ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -133,6 +134,7 @@ async function acquireConnection(ctx) {
     throw new Error('unable to establish database connection');
   }
 
+  unwindStack(ctx.process, 'acquireConnection');
   ctx.log.info('connected');
 }
 
@@ -166,6 +168,7 @@ async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
   const query = await queryWriteSourceCheck(ctx, sourceId, disposition, transactionId);
 
+  unwindStack(ctx.process, 'recordSourceCheck');
   return query.insertId;
 }
 
@@ -175,6 +178,9 @@ async function fetchSourceIdIfExists(ctx, pageName) {
   ctx.process.push('fetchSourceIdIfExists');
 
   const query = await querySource(ctx, pageName);
+
+  unwindStack(ctx.process, 'fetchSourceIdIfExists');
+
   if (query.records.length) {
     return [query.records[0].source_id, query.records[0].source_type];
   }
@@ -188,6 +194,7 @@ async function createSource(ctx, sourceName, sourceType, transactionId) {
 
   const query = await queryWriteSource(ctx, sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
+    unwindStack(ctx.process, 'createSource');
     return query.insertId;
   }
   throw new Error(`unable to create page record for: ${sourceName}`);
@@ -199,9 +206,11 @@ exports.doesHashExist = async function (ctx, computedHash) {
   const query = await queryHash(ctx, computedHash);
   if (query.records.length) {
     ctx.log.info('Hash exists in database.  File has already been processed.');
+    unwindStack(ctx.process, 'doesHashExist');
     return true;
   }
   ctx.log.info('Hash is unique.  Processing new download.');
+  unwindStack(ctx.process, 'doesHashExist');
   return false;
 };
 
@@ -235,6 +244,8 @@ async function constructDownloadRecord(
   if (!query || !query.insertId) {
     throw new Error('unexpected result from create download request');
   }
+
+  unwindStack(ctx.process, 'constructDownloadRecord');
   return query.insertId;
 }
 
@@ -278,6 +289,7 @@ exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
   // Alter geo name to be s3 key friendly (all non alphanumeric become -)
   const geoName = makeS3Key(ctx, rawGeoName);
 
+  unwindStack(ctx.process, 'lookupCleanGeoName');
   return { geoid, geoName };
 };
 
@@ -296,6 +308,7 @@ exports.getSplittableDownloads = async function (ctx, geoid) {
     throw new Error(`Problem running getSplittableDownlods Query`);
   }
 
+  unwindStack(ctx.process, 'getSplittableDownloads');
   return { rows: query.records };
 };
 
@@ -306,6 +319,8 @@ exports.getCountiesByState = async function (ctx, geoid) {
   if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
   }
+
+  unwindStack(ctx.process, 'getCountiesByState');
   return query.records;
 };
 
@@ -335,6 +350,8 @@ exports.querySourceNames = async function (ctx, sourceName) {
   if (!query) {
     throw new Error(`Problem running querySourceNames Query`);
   }
+
+  unwindStack(ctx.process, 'querySourceNames');
   return query.records;
 };
 
@@ -347,5 +364,6 @@ exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
     acquireConnection(ctx);
   }, seconds * 1000);
 
+  unwindStack(ctx.process, 'initiateDatabaseHeartbeat');
   return interval;
 };

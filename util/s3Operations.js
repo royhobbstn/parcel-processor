@@ -6,6 +6,7 @@ const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
 const S3 = new AWS.S3({ apiVersion: '2006-03-01' });
+const { unwindStack } = require('./misc');
 
 exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, useGzip) {
   ctx.process.push('putTextToS3');
@@ -34,6 +35,7 @@ exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, use
       .then(data => {
         ctx.log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
         ctx.log.info('upload response', { data });
+        unwindStack(ctx.process, 'putTextToS3');
         return resolve();
       })
       .catch(err => {
@@ -86,6 +88,7 @@ exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType,
           `uploading (${filePathToUpload} as s3://${bucket}/${key}) completed successfully.`,
         );
         ctx.log.info('result', result);
+        unwindStack(ctx.process, 'putFileToS3');
         return resolve();
       })
       .catch(err => {
@@ -124,14 +127,18 @@ exports.getObject = function (ctx, bucket, key) {
               return reject(err);
             }
             if (data.ContentType === 'text/plain') {
+              unwindStack(ctx.process, 'getObject');
               return resolve(fileBuffer.toString('utf-8'));
             }
+            unwindStack(ctx.process, 'getObject');
             return resolve(JSON.parse(fileBuffer.toString('utf-8')));
           });
         } else {
           if (data.ContentType === 'text/plain') {
+            unwindStack(ctx.process, 'getObject');
             return resolve(data.Body.toString('utf-8'));
           }
+          unwindStack(ctx.process, 'getObject');
           return resolve(JSON.parse(data.Body.toString('utf-8')));
         }
       },
@@ -172,6 +179,7 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
 
     proc.on('close', code => {
       ctx.log.info(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
+      unwindStack(ctx.process, 's3Sync');
       resolve({ command });
     });
   });
@@ -190,6 +198,7 @@ async function emptyDirectory(ctx, bucket, dir) {
   const listedObjects = await S3.listObjectsV2(listParams).promise();
 
   if (listedObjects.Contents.length === 0) {
+    unwindStack(ctx.process, 'emptyDirectory');
     return;
   }
 
@@ -208,6 +217,8 @@ async function emptyDirectory(ctx, bucket, dir) {
   if (listedObjects.IsTruncated) {
     await emptyDirectory(ctx, bucket, dir);
   }
+
+  unwindStack(ctx.process, 'emptyDirectory');
 }
 
 // streams a download to the filesystem.
@@ -239,6 +250,7 @@ exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3Unzippe
             })
             .on('end', () => {
               ctx.log.info('deflated to ' + s3UnzippedFile);
+              unwindStack(ctx.process, 'streamS3toFileSystem');
               return resolve();
             })
             .pipe(gunzip)

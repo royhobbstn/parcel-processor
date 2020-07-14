@@ -1,5 +1,6 @@
 // @ts-check
 const config = require('config');
+const { unwindStack } = require('./misc');
 
 const slsAuroraClient = require('data-api-client')({
   secretArn: config.get('RDS.secretArn'),
@@ -13,8 +14,6 @@ exports.queryHealth = function (ctx) {
 };
 
 exports.queryHash = function (ctx, computedHash) {
-  ctx.process.push('queryHash');
-
   // queries the database for a given hash
   // (if found, than we already have the most recent download)
   return slsAuroraClient.query(`SELECT * FROM downloads where checksum = :computedHash;`, {
@@ -23,8 +22,6 @@ exports.queryHash = function (ctx, computedHash) {
 };
 
 exports.querySource = function (ctx, sourceName) {
-  ctx.process.push('querySource');
-
   // queries if a source exists in the source table
   return slsAuroraClient.query('SELECT * FROM sources WHERE source_name = :sourceName;', {
     sourceName,
@@ -32,8 +29,6 @@ exports.querySource = function (ctx, sourceName) {
 };
 
 exports.queryWriteSource = function (ctx, sourceName, sourceType, transactionId) {
-  ctx.process.push('queryWriteSource');
-
   // writes a new source record in the source table
   return slsAuroraClient.query({
     sql: 'INSERT INTO sources(source_name, source_type) VALUES (:sourceName, :sourceType);',
@@ -46,8 +41,6 @@ exports.queryWriteSource = function (ctx, sourceName, sourceType, transactionId)
 };
 
 exports.queryWriteSourceCheck = function (ctx, sourceId, disposition, transactionId) {
-  ctx.process.push('queryWriteSourceCheck');
-
   // write a 'sourceCheck' record to the database
   // it's a record that a source was checked for a more recent download version
   // it is written whether or not a more recent version was found
@@ -70,8 +63,6 @@ exports.queryCreateDownloadRecord = function (
   originalFilename,
   transactionId,
 ) {
-  ctx.process.push('queryCreateDownloadRecord');
-
   // write a download record to unique identify a downloaded file.
   return slsAuroraClient.query({
     sql:
@@ -113,6 +104,7 @@ exports.queryCreateProductRecord = async function (
   const product_id = query.insertId;
   ctx.log.info('ProductId of created record: ' + product_id);
 
+  unwindStack(ctx.process, 'queryCreateProductRecord');
   return product_id;
 };
 
@@ -124,8 +116,6 @@ exports.createLogfileRecord = function (
   messageType,
   transactionId,
 ) {
-  ctx.process.push('createLogfileRecord');
-
   return slsAuroraClient.query({
     sql:
       'INSERT INTO logfiles(product_id, message_id, message_body, message_type) VALUES (:productId, :messageId, :messagePayload, :messageType);',
@@ -140,16 +130,12 @@ exports.createLogfileRecord = function (
 };
 
 exports.queryGeographicIdentifier = function (ctx, geoid) {
-  ctx.process.push('queryGeographicIdentifier');
-
   return slsAuroraClient.query('SELECT * FROM geographic_identifiers WHERE geoid = :geoid;', {
     geoid,
   });
 };
 
 exports.queryAllCountiesFromState = function (ctx, geoid) {
-  ctx.process.push('queryAllCountiesFromState');
-
   return slsAuroraClient.query({
     sql: `SELECT geoid, geoname FROM geographic_identifiers WHERE LEFT(geoid, 2) = :geoid and sumlev = "050" order by geoname asc;`,
     parameters: {
@@ -159,26 +145,20 @@ exports.queryAllCountiesFromState = function (ctx, geoid) {
 };
 
 exports.queryAllOriginalRecentDownloads = function (ctx) {
-  ctx.process.push('queryAllOriginalRecentDownloads');
-
   return slsAuroraClient.query(
-    'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original"',
+    'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original" AND geographic_identifiers.sumlev = "040" ORDER BY products.created DESC LIMIT 10',
   );
 };
 
 exports.queryAllOriginalRecentDownloadsWithGeoid = function (ctx, geoid) {
-  ctx.process.push('queryAllOriginalRecentDownloadsWithGeoid');
-
   return slsAuroraClient.query({
     sql:
-      'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original" and geographic_identifiers.geoid = :geoid',
+      'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original" and geographic_identifiers.geoid = :geoid  AND geographic_identifiers.sumlev = "040" ORDER BY products.created DESC LIMIT 10',
     parameters: { geoid },
   });
 };
 
 exports.querySourceNamesLike = function (ctx, sourceName) {
-  ctx.process.push('querySourceNamesLike');
-
   return slsAuroraClient.query({
     sql: 'SELECT * from sources WHERE source_name LIKE :sourceName',
     parameters: { sourceName: `%${sourceName}%` },
@@ -186,21 +166,15 @@ exports.querySourceNamesLike = function (ctx, sourceName) {
 };
 
 exports.startTransaction = async function (ctx) {
-  ctx.process.push('startTransaction');
-
   const query = await slsAuroraClient.beginTransaction();
   return query.transactionId;
 };
 
 exports.commitTransaction = function (ctx, transactionId) {
-  ctx.process.push('commitTransaction');
-
   return slsAuroraClient.commitTransaction({ transactionId });
 };
 
 exports.rollbackTransaction = function (ctx, transactionId) {
-  ctx.process.push('rollbackTransaction');
-
   return slsAuroraClient.rollbackTransaction({ transactionId });
 };
 
@@ -212,6 +186,9 @@ exports.checkForProduct = async function (ctx, geoid, downloadId, format, return
       'select * from products where products.geoid = :geoid and products.download_id = :downloadId and products.product_type = :format',
     parameters: { geoid, downloadId, format },
   });
+
+  unwindStack(ctx.process, 'checkForProduct');
+
   return query.records.length > 0;
 };
 
@@ -223,12 +200,13 @@ exports.checkForProducts = async function (ctx, geoid, downloadId) {
       'select * from products where products.geoid = :geoid and products.download_id = :downloadId',
     parameters: { geoid, downloadId },
   });
+
+  unwindStack(ctx.process, 'checkForProducts');
+
   return query.records;
 };
 
 exports.searchLogsByType = function (ctx, type) {
-  ctx.process.push('searchLogsByType');
-
   let clause = '';
   if (type !== 'all') {
     clause = 'WHERE message_type = :type';
@@ -237,27 +215,23 @@ exports.searchLogsByType = function (ctx, type) {
     sql:
       'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id ' +
       clause +
-      ' ORDER BY logfiles.created ASC LIMIT 100;',
+      ' ORDER BY logfiles.created DESC LIMIT 100;',
     parameters: { type },
   });
 };
 
 exports.searchLogsByGeoid = function (ctx, geoid) {
-  ctx.process.push('searchLogsByGeoid');
-
   return slsAuroraClient.query({
     sql:
-      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE geoid = :geoid ORDER BY logfiles.created ASC LIMIT 100;',
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE geoid = :geoid ORDER BY logfiles.created DESC LIMIT 100;',
     parameters: { geoid },
   });
 };
 
 exports.searchLogsByReference = function (ctx, ref) {
-  ctx.process.push('searchLogsByReference');
-
   return slsAuroraClient.query({
     sql:
-      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE product_ref = :ref OR individual_ref = :ref OR download_ref = :ref ORDER BY logfiles.created ASC LIMIT 100;',
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE product_ref = :ref OR individual_ref = :ref OR download_ref = :ref ORDER BY logfiles.created DESC LIMIT 100;',
     parameters: { ref },
   });
 };

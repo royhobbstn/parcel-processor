@@ -31,6 +31,7 @@ const {
   lookupCleanGeoName,
   DBWrites,
 } = require('../util/wrapQuery');
+const { unwindStack } = require('../util/misc');
 
 exports.processInbox = processInbox;
 
@@ -97,6 +98,7 @@ async function processInbox(ctx, data) {
     // rethrow to send email
     throw new Error('Error in main function.  See logs.');
   }
+  unwindStack(ctx.process, 'processInbox');
 }
 
 async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
@@ -146,9 +148,7 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
 
   // process all features and convert them to WGS84 ndgeojson
   // while gathering stats on the data.  Writes ndgeojson and stat files to output.
-  ctx.log.info('before parse file');
   await parseFile(ctx, dataset, chosenLayer, fileName, outputPath);
-  ctx.log.info('after parse file');
 
   const productRef = generateRef(ctx, referenceIdLength);
   const individualRef = generateRef(ctx, referenceIdLength);
@@ -202,6 +202,8 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
     productSqsPayload.products.push(fileFormats.TILES.label);
   }
 
+  unwindStack(ctx.process, 'runMain');
+
   return productSqsPayload;
 }
 
@@ -217,8 +219,8 @@ async function downloadFile(ctx, fileUrl, outputLocationPath) {
     url: fileUrl,
     responseType: 'stream',
   }).then(response => {
-    //ensure that the user can call `then()` only when the file has
-    //been downloaded entirely.
+    // ensure that the user can call `then()` only when the file has
+    // been downloaded entirely.
 
     return new Promise((resolve, reject) => {
       response.data.pipe(writer);
@@ -230,9 +232,10 @@ async function downloadFile(ctx, fileUrl, outputLocationPath) {
       });
       writer.on('close', () => {
         if (!error) {
+          unwindStack(ctx.process, 'downloadFile');
           resolve(true);
         }
-        //no need to call the reject here, as it will have been called in the
+        // no need to call the reject here, as it will have been called in the
         //'error' stream;
       });
     });

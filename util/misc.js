@@ -2,6 +2,13 @@
 const { execSync } = require('child_process');
 const { sourceTypes } = require('./constants');
 
+exports.unwindStack = unwindStack;
+
+function unwindStack(arr, itemToRemove) {
+  const index = arr.lastIndexOf(itemToRemove);
+  arr.splice(index, 1); // mutation in place
+}
+
 exports.getSourceType = function (ctx, sourceNameInput) {
   ctx.process.push('getSourceType');
 
@@ -11,10 +18,12 @@ exports.getSourceType = function (ctx, sourceNameInput) {
     sourceNameInput.includes('ftp://')
   ) {
     ctx.log.info('Determined to be a WEBPAGE source');
+    unwindStack(ctx.process, 'getSourceType');
     return sourceTypes.WEBPAGE;
   } else if (sourceNameInput.includes('@') && sourceNameInput.includes('.')) {
     // can probably validate better than this
     ctx.log.info('Determined to be an EMAIL source');
+    unwindStack(ctx.process, 'getSourceType');
     return sourceTypes.EMAIL;
   } else {
     throw new Error('Could not determine source type');
@@ -27,11 +36,12 @@ exports.initiateFreeMemoryQuery = function (ctx) {
   let interval = setInterval(() => {
     try {
       const output = execSync('free -mh');
-      ctx.log.info('Mem: ', { output: output.toString() });
+      ctx.log.info('Mem: ' + output.toString());
     } catch (e) {
       ctx.log.info(`mem check failed`);
     }
   }, 60000);
+  unwindStack(ctx.process, 'initiateFreeMemoryQuery');
   return interval;
 };
 
@@ -67,6 +77,7 @@ exports.getStatus = async function (ctx) {
     ctx.log.info(`disk check failed`);
   }
 
+  unwindStack(ctx.process, 'getStatus');
   return status;
 };
 
@@ -80,5 +91,29 @@ exports.initiateProgressHeartbeat = function (ctx, seconds) {
   const interval = setInterval(() => {
     ctx.log.info(`still processing: ${ctx.process.slice(-10).reverse().join(', ')}`);
   }, seconds * 1000);
+
+  unwindStack(ctx.process, 'initiateProgressHeartbeat');
+  return interval;
+};
+
+exports.initiateDiskHeartbeat = function (ctx, seconds) {
+  ctx.process.push('initiateDiskHeartbeat');
+
+  const interval = setInterval(() => {
+    try {
+      const output = execSync(`df -h . | tr -s ' ' ',' | jq -nR '[ 
+        ( input | split(",") ) as $keys | 
+        ( inputs | split(",") ) as $vals | 
+        [ [$keys, $vals] | 
+        transpose[] | 
+        {key:.[0],value:.[1]} ] | 
+        from_entries ]'`);
+      ctx.log.info(`disk check: `, { disk: JSON.parse(output.toString()) });
+    } catch (e) {
+      ctx.log.info(`disk check failed`);
+    }
+  }, seconds * 1000);
+
+  unwindStack(ctx.process, 'initiateDiskHeartbeat');
   return interval;
 };
