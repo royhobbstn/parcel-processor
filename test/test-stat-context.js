@@ -5,13 +5,14 @@ const statCounter = new StatContext({ log: console, process: [] });
 
 let transformed = 0;
 
-fs.createReadStream(`./5fe3a581-65aa145b-15-Hawaii.ndgeojson`)
+fs.createReadStream(`./fileV12.nd`)
   .pipe(ndjson.parse())
   .on('data', function (obj) {
-    statCounter.countStats(obj);
+    // statCounter.countStats(obj);
 
     transformed++;
-    if (transformed % 10000 === 0) {
+    if (transformed % 500000 === 0) {
+      console.log(obj);
       console.log(transformed + ' records processed');
     }
   })
@@ -20,5 +21,5 @@ fs.createReadStream(`./5fe3a581-65aa145b-15-Hawaii.ndgeojson`)
   })
   .on('end', end => {
     console.log(transformed + ' records processed');
-    fs.writeFileSync(`stat-context-test.json`, JSON.stringify(statCounter.export()), 'utf8');
+    // fs.writeFileSync(`stat-context-test.json`, JSON.stringify(statCounter.export()), 'utf8');
   });

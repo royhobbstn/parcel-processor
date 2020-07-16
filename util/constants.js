@@ -1,13 +1,14 @@
 // @ts-check
 
 exports.directories = {
-  outputDir: './staging/output-',
-  rawDir: './staging/raw-',
-  unzippedDir: './staging/unzipped-',
-  tilesDir: './staging/tiles-',
-  subGeographiesDir: './staging/subGeographies-',
-  productTempDir: './staging/productTemp-',
-  logDir: './staging/logs-',
+  root: '/files/staging',
+  outputDir: '/files/staging/output-',
+  rawDir: '/files/staging/raw-',
+  unzippedDir: '/files/staging/unzipped-',
+  tilesDir: '/files/staging/tiles-',
+  subGeographiesDir: '/files/staging/subGeographies-',
+  productTempDir: '/files/staging/productTemp-',
+  logDir: '/files/staging/logs-',
 };
 
 // length of refs for products / downloads table

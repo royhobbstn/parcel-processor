@@ -11,6 +11,7 @@
     "chalk": "^4.0.0",
     "config": "^3.3.1",
     "data-api-client": "^1.0.1",
+    "del": "^5.1.0",
     "express": "^4.17.1",
     "forever": "^3.0.0",
     "fs-extra": "^9.0.1",

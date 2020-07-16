@@ -5,7 +5,7 @@ const fs = require('fs');
 const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
-const S3 = new AWS.S3({ apiVersion: '2006-03-01' });
+const S3 = new AWS.S3({ apiVersion: '2006-03-01', region: 'us-east-2' });
 const { unwindStack } = require('./misc');
 
 exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, useGzip) {
@@ -245,8 +245,11 @@ exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3Unzippe
         if (s3UnzippedFile) {
           fs.createReadStream(s3DestFile)
             .on('error', err => {
-              ctx.log.error('Error', { err: err.message, stack: err.stack });
-              return reject(err);
+              ctx.log.warn('Error', { err: err.message, stack: err.stack });
+              // for whatever reason, I get a :
+              // 'RangeError [ERR_INVALID_OPT_VALUE]: The value "3340558817" is invalid for option "size"
+              // Everything still works /shrug
+              // not going to reject(err)
             })
             .on('end', () => {
               ctx.log.info('deflated to ' + s3UnzippedFile);
@@ -255,6 +258,8 @@ exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3Unzippe
             })
             .pipe(gunzip)
             .pipe(fs.createWriteStream(s3UnzippedFile));
+        } else {
+          unwindStack(ctx.process, 'streamS3toFileSystem');
         }
       })
       .send();

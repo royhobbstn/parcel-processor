@@ -6,7 +6,13 @@ const gdal = require('gdal-next');
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
-const { directories, tileInfoPrefix, idPrefix, clusterPrefix } = require('./constants');
+const {
+  directories,
+  tileInfoPrefix,
+  idPrefix,
+  clusterPrefix,
+  fileFormats,
+} = require('./constants');
 const { clustersKmeans } = require('./modKmeans');
 const { sleep, unwindStack } = require('./misc');
 
@@ -253,6 +259,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform, geometryErrors)
 
 exports.convertToFormat = function (ctx, format, outputPath) {
   ctx.process.push('convertToFormat');
+  ctx.process.push(format.extension);
 
   // convert from ndgeojson into geojson, gpkg, shp, etc
 
@@ -264,6 +271,12 @@ exports.convertToFormat = function (ctx, format, outputPath) {
       `${outputPath}.${format.extension}`,
       `${outputPath}.ndgeojson`,
     ];
+
+    // geojson needs RFC option specified
+    if (format.extension === fileFormats.GEOJSON.extension) {
+      args.push('-lco', 'RFC7946=YES');
+    }
+
     const command = `${application} ${args.join(' ')}`;
     ctx.log.info(`running: ${command}`);
 
@@ -279,13 +292,14 @@ exports.convertToFormat = function (ctx, format, outputPath) {
 
     proc.on('error', err => {
       ctx.log.error('Error', { err: err.message, stack: err.stack });
-      unwindStack(ctx.process, 'convertToFormat');
       return reject(err);
     });
 
     proc.on('close', code => {
       ctx.log.info(`completed creating format: ${format.driver}.`);
       ctx.process.pop();
+      unwindStack(ctx.process, format.extension);
+      unwindStack(ctx.process, 'convertToFormat');
       return resolve({ command });
     });
   });

@@ -6,6 +6,7 @@ const archiver = require('archiver');
 const path = require('path');
 const mkdirp = require('mkdirp');
 const fsExtra = require('fs-extra');
+const del = require('del');
 const { directories } = require('./constants');
 const { generateRef } = require('./crypto');
 const { unwindStack } = require('./misc');
@@ -221,4 +222,31 @@ exports.getMaxDirectoryLevel = function (ctx, dir) {
 
   unwindStack(ctx.process, 'zipShapefile');
   return Math.max(...dirs);
+};
+
+exports.cleanEFS = async function (ctx) {
+  ctx.process.push('cleanEFS');
+
+  const contents = fs.readdirSync(directories.root);
+
+  for (let entry of contents) {
+    const dir = path.join(directories.root, entry);
+    const stats = fs.statSync(dir);
+
+    const birthTime = stats.birthtimeMs;
+    const currentTime = new Date().getTime();
+    const duration = (currentTime - birthTime) / 1000 / 60 / 60;
+
+    // if older than a day
+    if (duration > 24) {
+      try {
+        await del(dir, { force: true });
+        ctx.log.info(`${dir} was old and is now deleted!`);
+      } catch (err) {
+        ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
+      }
+    }
+  }
+
+  unwindStack(ctx.process, 'cleanEFS');
 };
