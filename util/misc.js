@@ -95,25 +95,3 @@ exports.initiateProgressHeartbeat = function (ctx, seconds) {
   unwindStack(ctx.process, 'initiateProgressHeartbeat');
   return interval;
 };
-
-exports.initiateDiskHeartbeat = function (ctx, seconds) {
-  ctx.process.push('initiateDiskHeartbeat');
-
-  const interval = setInterval(() => {
-    try {
-      const output = execSync(`df -h . | tr -s ' ' ',' | jq -nR '[ 
-        ( input | split(",") ) as $keys | 
-        ( inputs | split(",") ) as $vals | 
-        [ [$keys, $vals] | 
-        transpose[] | 
-        {key:.[0],value:.[1]} ] | 
-        from_entries ]'`);
-      ctx.log.info(`disk check: `, { disk: JSON.parse(output.toString()) });
-    } catch (e) {
-      ctx.log.info(`disk check failed`);
-    }
-  }, seconds * 1000);
-
-  unwindStack(ctx.process, 'initiateDiskHeartbeat');
-  return interval;
-};

@@ -76,11 +76,16 @@ async function processInbox(ctx, data) {
     const payload = await runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload);
 
     if (!isDryRun) {
-      // Send SQS message to create products
-      const productsQueueUrl = config.get('SQS.productQueueUrl');
-      await sendQueueMessage(ctx, productsQueueUrl, payload);
+      // payload may be null if state-level dataset.  no derivative products for state.
+      if (payload) {
+        // Send SQS message to create products
+        const productsQueueUrl = config.get('SQS.productQueueUrl');
+        await sendQueueMessage(ctx, productsQueueUrl, payload);
+      }
     } else {
-      ctx.log.info(`Because this was a dryRun no database records or S3 files have been written`);
+      ctx.log.info(
+        `Because this was a dryRun no database records or S3 files have been written, and no derivative SQS messages have been sent.`,
+      );
     }
 
     ctx.log.info('Completed successfully.');
@@ -186,7 +191,12 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
 
   const productSqsPayload = {
     dryRun: false,
-    products: [fileFormats.GEOJSON.label, fileFormats.GPKG.label, fileFormats.SHP.label],
+    products: [
+      fileFormats.GEOJSON.label,
+      fileFormats.GPKG.label,
+      fileFormats.SHP.label,
+      fileFormats.TILES.label,
+    ],
     productRef,
     productOrigin: productOrigins.ORIGINAL,
     fipsDetails,
@@ -197,12 +207,12 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
     productKey,
   };
 
-  // dont generate tiles for state-level datasets
-  if (fipsDetails.SUMLEV !== '040') {
-    productSqsPayload.products.push(fileFormats.TILES.label);
-  }
-
   unwindStack(ctx.process, 'runMain');
+
+  // dont create derivative products for state-level datasets
+  if (fipsDetails.SUMLEV === '040') {
+    return null;
+  }
 
   return productSqsPayload;
 }
