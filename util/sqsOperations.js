@@ -4,6 +4,20 @@ AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
 const { unwindStack } = require('./misc');
 
+exports.listQueues = function (ctx) {
+  ctx.process.push('listQueues');
+
+  return new Promise((resolve, reject) => {
+    sqs.listQueues({}, function (err, data) {
+      if (err) {
+        return reject(err);
+      }
+      unwindStack(ctx.process, 'listQueues');
+      return resolve(data);
+    });
+  });
+};
+
 exports.sendQueueMessage = function (ctx, queueUrl, payload) {
   ctx.process.push('sendQueueMessage');
 

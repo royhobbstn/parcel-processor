@@ -7,6 +7,7 @@ import SqsQueuesApp from './srcSendSQS/App';
 import InboxApp from './srcInbox/App';
 import DlqReplayApp from './srcDlqReplay/App';
 import ViewLogsApp from './srcViewLogs/App';
+import LaunchApp from './srcLaunch/App';
 
 import { Button } from 'semantic-ui-react';
 
@@ -115,6 +116,16 @@ function AppSwitcher() {
           >
             View Logs
           </Button>
+          <br />
+          <br />
+          <Button
+            style={{ width: '200px' }}
+            onClick={() => {
+              updateApp('launch');
+            }}
+          >
+            Launch
+          </Button>
         </div>
       ) : null}
 
@@ -123,6 +134,7 @@ function AppSwitcher() {
       {app === 'sqs' ? <SqsQueuesApp env={env} /> : null}
       {app === 'dlq' ? <DlqReplayApp env={env} /> : null}
       {app === 'logs' ? <ViewLogsApp env={env} /> : null}
+      {app === 'launch' ? <LaunchApp env={env} /> : null}
     </div>
   );
 }
