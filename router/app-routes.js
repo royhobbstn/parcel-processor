@@ -14,10 +14,54 @@ const {
 const { searchLogsByType, searchLogsByGeoid, searchLogsByReference } = require('../util/queries');
 const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
-const { readMessages, deleteMessage, sendQueueMessage } = require('../util/sqsOperations');
+const {
+  readMessages,
+  deleteMessage,
+  sendQueueMessage,
+  listQueues,
+  getQueueAttributes,
+} = require('../util/sqsOperations');
 
 exports.appRouter = async app => {
   //
+  app.get('/getQueueStats', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    const URL_ROOT = 'https://sqs.us-east-2.amazonaws.com/000009394762/';
+    const queueStructure = ['inbox', 'sortByGeography', 'createProducts'];
+    const envAbbrev =
+      process.env.NODE_ENV === 'development'
+        ? '-dev'
+        : process.env.NODE_ENV === 'test'
+        ? '-test'
+        : '';
+    const queuesWithEnvs = queueStructure.map(queue => `${queue}${envAbbrev}`);
+    queuesWithEnvs.forEach(queue => {
+      queuesWithEnvs.push(`${queue}-dlq`);
+    });
+
+    const details = await Promise.all(
+      queuesWithEnvs.map(queue => getQueueAttributes(ctx, URL_ROOT + queue)),
+    );
+
+    const structure = {};
+
+    details.forEach(queueDetails => {
+      const attributes = queueDetails.Attributes;
+      const queue = attributes.QueueArn.split(':')
+        .slice(-1)[0]
+        .replace('-test', '')
+        .replace('-dev', '');
+
+      structure[queue] = {
+        available: attributes.ApproximateNumberOfMessages,
+        inFlight: attributes.ApproximateNumberOfMessagesNotVisible,
+      };
+    });
+
+    return res.json(structure);
+  });
+
   app.get('/searchLogsByType', async function (req, res) {
     const ctx = { log, process: [] };
     const type = req.query.type;
