@@ -63,7 +63,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
       // send email to myself if there was an error
       if (errorFlag) {
         const fileData = fs.readFileSync(ctx.logpath);
-        await sendAlertMail(`${ctx.processor} error`, fileData);
+        await sendAlertMail({ log: console, process: [] }, `${ctx.processor} error`, fileData);
       }
     } else {
       console.log('This is a DryRun so no email will be sent, and no logfile uploaded to S3.');

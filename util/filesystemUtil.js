@@ -61,12 +61,13 @@ function collapseUnzippedDir(ctx) {
       const subDirectory = `${directories.unzippedDir + ctx.directoryId}/${file}`;
       ctx.log.info(`Moving contents of folder: ${subDirectory} into base folder: ${root}`);
       const arrayOfSubDirectoryFiles = fs.readdirSync(subDirectory);
+
+      // add move-prefix to avoid potential filename collision with identical files (or identically named files) in the lower directory
+      const prefix = generateRef(ctx, 5);
       for (let subFile of arrayOfSubDirectoryFiles) {
-        // add move-prefix to avoid potential filename collision with identical files (or identically named files) in the lower directory
-        const prefix = generateRef(ctx, 5);
         fsExtra.moveSync(`${subDirectory}/${subFile}`, `${root}/${prefix}-${subFile}`);
+        movedFlag = true;
       }
-      movedFlag = true;
     }
   }
 
@@ -94,11 +95,11 @@ exports.checkForFileType = function (ctx) {
     const gdbFilenames = new Set();
 
     arrayOfFiles.forEach(file => {
-      if (file.includes('.shp')) {
+      if (file.endsWith('.shp')) {
         const filename = file.split('.shp')[0];
         shpFilenames.add(filename);
       }
-      if (file.includes('.gdb')) {
+      if (file.endsWith('.gdb')) {
         gdbFilenames.add(file);
       }
     });
