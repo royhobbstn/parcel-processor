@@ -11,7 +11,7 @@ function App({ env }) {
   const [sumlevVal, updateSumlevVal] = useState('');
   const [geoidVal, updateGeoidVal] = useState('');
   const [geoidStatus, updateGeoidStatus] = useState(false);
-  const [dryRun, updateDryRun] = useState(true);
+  const [dryRun, updateDryRun] = useState(false);
   const [sourceVal, updateSourceVal] = useState('');
   const [sourceStatus, updateSourceStatus] = useState(false);
   const [sourceList, updateSourceList] = useState(null);
@@ -110,6 +110,7 @@ function App({ env }) {
         options={summaryLevels}
         onChange={(evt, data) => {
           console.log(data);
+          // @ts-ignore
           updateSumlevVal(data.value);
           updateSumlevStatus(true);
           updateGeoidVal('');
@@ -172,7 +173,7 @@ function App({ env }) {
           onClick: handleSourceInquiry,
         }}
         label="Source Name"
-        placeholder="Url or Email Address"
+        placeholder="Working Full Url of Landing Page (not file download link) or Email Address"
         value={sourceVal}
         onChange={(evt, data) => {
           updateSourceVal(data.value);

@@ -1,4 +1,8 @@
 {
+  "ECS": {
+    "taskDefinition": "",
+    "logGroupName": ""
+  },
   "SQS": {
     "sortQueueUrl": "",
     "productQueueUrl": "",

@@ -18,12 +18,38 @@ const {
   readMessages,
   deleteMessage,
   sendQueueMessage,
-  listQueues,
   getQueueAttributes,
 } = require('../util/sqsOperations');
-const { getTaskInfo } = require('../util/ecsOperations');
+const { getTaskInfo, runProcessorTask } = require('../util/ecsOperations');
+const { getTaskLogs } = require('../util/cloudwatchOps');
 
 exports.appRouter = async app => {
+  app.get('/getTaskLogs', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    const taskId = req.query.id;
+
+    try {
+      const logInfo = await getTaskLogs(ctx, taskId);
+      return res.json(logInfo);
+    } catch (err) {
+      ctx.log.error('Unable to retrieve log information', { error: err.message, stack: err.stack });
+      return res.json([{ time: '-----', message: err.message, eventId: '1' }]);
+    }
+  });
+
+  app.get('/runProcessorTask', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    try {
+      const taskInfo = await runProcessorTask(ctx);
+      return res.json(taskInfo);
+    } catch (err) {
+      ctx.log.error('Error launching task', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
   app.get('/getTaskInfo', async function (req, res) {
     const ctx = { log, process: [] };
 

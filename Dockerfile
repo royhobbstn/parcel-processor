@@ -24,4 +24,4 @@ COPY . /home/app
 
 RUN npm install
 
-CMD npm run worker-local 
+CMD npm run worker-test 
