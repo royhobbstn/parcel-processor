@@ -21,9 +21,21 @@ const {
   listQueues,
   getQueueAttributes,
 } = require('../util/sqsOperations');
+const { getTaskInfo } = require('../util/ecsOperations');
 
 exports.appRouter = async app => {
-  //
+  app.get('/getTaskInfo', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    try {
+      const taskInfo = await getTaskInfo(ctx);
+      return res.json(taskInfo);
+    } catch (err) {
+      ctx.log.error('Error fetching task information', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
   app.get('/getQueueStats', async function (req, res) {
     const ctx = { log, process: [] };
 
