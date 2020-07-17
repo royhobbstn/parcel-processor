@@ -5,7 +5,7 @@ const { processInbox } = require('./processors/processInbox');
 const { processSort } = require('./processors/processSort');
 const { processProducts } = require('./processors/processProducts');
 const { runProcess, createContext } = require('./util/worker');
-const { getStatus, initiateFreeMemoryQuery } = require('./util/misc');
+const { getStatus } = require('./util/misc');
 const { cleanEFS } = require('./util/filesystemUtil');
 
 console.log('Environment: ' + process.env.NODE_ENV);
@@ -15,8 +15,6 @@ const sortQueueUrl = config.get('SQS.sortQueueUrl');
 const productQueueUrl = config.get('SQS.productQueueUrl');
 
 const baseCtx = { log: console, process: [] };
-
-const interval = initiateFreeMemoryQuery(baseCtx);
 
 let tries = 0;
 
@@ -75,7 +73,6 @@ getStatus(baseCtx)
     baseCtx.log.error('Unexpected error: ', { error: err.message, stack: err.stack });
   })
   .finally(() => {
-    clearInterval(interval);
     setTimeout(() => {
       process.exit();
     }, 1000);

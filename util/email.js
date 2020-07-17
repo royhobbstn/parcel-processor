@@ -9,7 +9,7 @@ const transporter = nodemailer.createTransport({
   }),
 });
 
-exports.sendAlertMail = function (subject, content) {
+exports.sendAlertMail = function (ctx, subject, content) {
   ctx.process.push('sendAlertMail');
 
   return new Promise((resolve, reject) => {

@@ -252,20 +252,28 @@ function Launch({ env }) {
       </Grid>
       <Modal open={popupVisible}>
         <Modal.Header>Task Logs</Modal.Header>
-        <Modal.Content scrolling>
-          <Table style={{ fontFamily: 'monospace', fontSize: '11px' }}>
-            <Table.Body>
-              {logInfo.map(entry => {
-                return (
-                  <Table.Row key={entry.eventId}>
-                    <Table.Cell>{entry.time}</Table.Cell>
-                    <Table.Cell>{entry.message}</Table.Cell>
-                  </Table.Row>
-                );
-              })}
-            </Table.Body>
-          </Table>
-        </Modal.Content>
+        <div style={{ maxWidth: '800px', maxHeight: '500px', overflowY: 'scroll', margin: 'auto' }}>
+          <Modal.Content>
+            <Table style={{ fontFamily: 'monospace', fontSize: '11px' }}>
+              <Table.Header>
+                <Table.Row>
+                  <Table.HeaderCell width="4">Time</Table.HeaderCell>
+                  <Table.HeaderCell width="12">Message</Table.HeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {logInfo.map(entry => {
+                  return (
+                    <Table.Row key={entry.eventId}>
+                      <Table.Cell width="4">{entry.time}</Table.Cell>
+                      <Table.Cell width="12">{entry.message}</Table.Cell>
+                    </Table.Row>
+                  );
+                })}
+              </Table.Body>
+            </Table>
+          </Modal.Content>
+        </div>
         <Modal.Actions>
           <Button
             primary

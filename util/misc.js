@@ -62,21 +62,6 @@ exports.getStatus = async function (ctx) {
     }
   }
 
-  try {
-    const output = execSync(`df -h . | tr -s ' ' ',' | jq -nR '[ 
-      ( input | split(",") ) as $keys | 
-      ( inputs | split(",") ) as $vals | 
-      [ [$keys, $vals] | 
-      transpose[] | 
-      {key:.[0],value:.[1]} ] | 
-      from_entries ]'`);
-    const parsed = JSON.parse(output.toString());
-    status['disk'] = parsed;
-    ctx.log.info(`disk check passed`);
-  } catch (e) {
-    ctx.log.info(`disk check failed`);
-  }
-
   unwindStack(ctx.process, 'getStatus');
   return status;
 };

@@ -124,7 +124,6 @@ function App({ env }) {
         placeholder="Enter a Geoid"
         value={geoidVal}
         onChange={(evt, data) => {
-          console.log(data);
           updateGeoidVal(data.value);
 
           // status
