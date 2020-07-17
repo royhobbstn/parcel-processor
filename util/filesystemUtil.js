@@ -6,18 +6,26 @@ const archiver = require('archiver');
 const path = require('path');
 const mkdirp = require('mkdirp');
 const fsExtra = require('fs-extra');
+const del = require('del');
 const { directories } = require('./constants');
+const { generateRef } = require('./crypto');
+const { unwindStack } = require('./misc');
 
 exports.createDirectories = async function (ctx, dirs) {
+  ctx.process.push('createDirectories');
+
   for (let dir of dirs) {
     const newDir = `${dir}${ctx.directoryId}`;
     mkdirp.sync(newDir);
     ctx.log.info(`Created directory: ${newDir}`);
   }
   ctx.log.info('Done creating staging directories.');
+  unwindStack(ctx.process, 'createDirectories');
 };
 
 exports.extractZip = function (ctx, filePath) {
+  ctx.process.push('extractZip');
+
   return new Promise((resolve, reject) => {
     fs.createReadStream(filePath)
       .pipe(unzipper.Extract({ path: directories.unzippedDir + ctx.directoryId }))
@@ -27,6 +35,7 @@ exports.extractZip = function (ctx, filePath) {
       })
       .on('close', () => {
         ctx.log.info(`Finished unzipping file: ${filePath}`);
+        unwindStack(ctx.process, 'extractZip');
         return resolve();
       });
   });
@@ -35,6 +44,8 @@ exports.extractZip = function (ctx, filePath) {
 exports.collapseUnzippedDir = collapseUnzippedDir;
 
 function collapseUnzippedDir(ctx) {
+  ctx.process.push('collapseUnzippedDir');
+
   const root = directories.unzippedDir + ctx.directoryId;
   const arrayOfFiles = fs.readdirSync(root);
   let movedFlag = false;
@@ -51,20 +62,27 @@ function collapseUnzippedDir(ctx) {
       ctx.log.info(`Moving contents of folder: ${subDirectory} into base folder: ${root}`);
       const arrayOfSubDirectoryFiles = fs.readdirSync(subDirectory);
       for (let subFile of arrayOfSubDirectoryFiles) {
-        fsExtra.moveSync(`${subDirectory}/${subFile}`, `${root}/${subFile}`);
+        // add move-prefix to avoid potential filename collision with identical files (or identically named files) in the lower directory
+        const prefix = generateRef(ctx, 5);
+        fsExtra.moveSync(`${subDirectory}/${subFile}`, `${root}/${prefix}-${subFile}`);
       }
       movedFlag = true;
     }
   }
 
   if (movedFlag) {
+    unwindStack(ctx.process, 'collapseUnzippedDir');
     return collapseUnzippedDir;
   }
+
+  unwindStack(ctx.process, 'collapseUnzippedDir');
 }
 
 // todo dont know where else to put this function
 // determine if the unzipped folder contains a shapefile or FGDB
 exports.checkForFileType = function (ctx) {
+  ctx.process.push('checkForFileType');
+
   return new Promise((resolve, reject) => {
     const arrayOfFiles = fs.readdirSync(directories.unzippedDir + ctx.directoryId);
 
@@ -86,12 +104,13 @@ exports.checkForFileType = function (ctx) {
     });
 
     if (shpFilenames.size > 0 && gdbFilenames.size > 0) {
-      return reject(
-        new Error('ERROR: mix of shapefiles and geodatabases in raw folder.  Exiting.'),
+      ctx.log.warn(
+        "There are both geodatabases and shapefiles in here. If something goes wrong, it's probably because I guessed and chose the wrong file.  I prefer geodatabases.",
       );
     }
 
     if (gdbFilenames.size === 1) {
+      unwindStack(ctx.process, 'checkForFileType');
       return resolve([Array.from(gdbFilenames)[0], 'geodatabase']);
     }
 
@@ -101,6 +120,7 @@ exports.checkForFileType = function (ctx) {
     }
 
     if (shpFilenames.size === 1) {
+      unwindStack(ctx.process, 'checkForFileType');
       return resolve([Array.from(shpFilenames)[0], 'shapefile']);
     }
 
@@ -118,6 +138,8 @@ exports.checkForFileType = function (ctx) {
 };
 
 exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
+  ctx.process.push('zipShapefile');
+
   return new Promise((resolve, reject) => {
     const keyBase = path.parse(productKeySHP).base;
     // create a file to stream archive data to.
@@ -133,6 +155,7 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
     output.on('close', function () {
       ctx.log.info(archive.pointer() + ' total bytes');
       ctx.log.info('archiver has been finalized and the output file descriptor has closed.');
+      unwindStack(ctx.process, 'zipShapefile');
       resolve();
     });
 
@@ -186,6 +209,8 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
 };
 
 exports.getMaxDirectoryLevel = function (ctx, dir) {
+  ctx.process.push('getMaxDirectoryLevel');
+
   const dirs = fs
     .readdirSync(dir, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
@@ -194,5 +219,34 @@ exports.getMaxDirectoryLevel = function (ctx, dir) {
   ctx.log.info('Directories', { dirs });
 
   ctx.log.info(Math.max(...dirs));
+
+  unwindStack(ctx.process, 'zipShapefile');
   return Math.max(...dirs);
+};
+
+exports.cleanEFS = async function (ctx) {
+  ctx.process.push('cleanEFS');
+
+  const contents = fs.readdirSync(directories.root);
+
+  for (let entry of contents) {
+    const dir = path.join(directories.root, entry);
+    const stats = fs.statSync(dir);
+
+    const birthTime = stats.birthtimeMs;
+    const currentTime = new Date().getTime();
+    const duration = (currentTime - birthTime) / 1000 / 60 / 60;
+
+    // if older than a day
+    if (duration > 24) {
+      try {
+        await del(dir, { force: true });
+        ctx.log.info(`${dir} was old and is now deleted!`);
+      } catch (err) {
+        ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
+      }
+    }
+  }
+
+  unwindStack(ctx.process, 'cleanEFS');
 };

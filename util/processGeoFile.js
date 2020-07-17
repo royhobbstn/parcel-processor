@@ -6,10 +6,19 @@ const gdal = require('gdal-next');
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
-const { directories, tileInfoPrefix, idPrefix, clusterPrefix } = require('./constants');
+const {
+  directories,
+  tileInfoPrefix,
+  idPrefix,
+  clusterPrefix,
+  fileFormats,
+} = require('./constants');
 const { clustersKmeans } = require('./modKmeans');
+const { sleep, unwindStack } = require('./misc');
 
 exports.inspectFile = function (ctx, fileName, fileType) {
+  ctx.process.push('inspectFile');
+
   ctx.log.info(`Found file: ${fileName}`);
 
   ctx.log.info(
@@ -60,7 +69,17 @@ exports.inspectFile = function (ctx, fileName, fileType) {
       };
     })
     .filter(d => {
-      return d.type === 'Multi Polygon' || d.type === 'Polygon';
+      // 3D Measured Multi Polygon?  Really, West Virginia?
+      return [
+        '3D Measured Polygon',
+        '3D Polygon',
+        'Measured Polygon',
+        'Polygon',
+        '3D Measured Multi Polygon',
+        '3D Multi Polygon',
+        'Measured Multi Polygon',
+        'Multi Polygon',
+      ].includes(d.type);
     })
     .sort((a, b) => {
       return b.count - a.count;
@@ -74,11 +93,14 @@ exports.inspectFile = function (ctx, fileName, fileType) {
 
   const chosenLayer = layerSelection[0].index;
 
+  ctx.process.pop();
   return [dataset, chosenLayer];
 };
 
 exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
-  return new Promise((resolve, reject) => {
+  ctx.process.push('parseFile');
+
+  return new Promise(async (resolve, reject) => {
     let layer;
     let transform;
     try {
@@ -99,14 +121,20 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
     let writeStream = fs.createWriteStream(`${outputPath}.ndgeojson`);
     let counter = 0; // assign as parcel-outlet unique id
     let errored = 0;
-
+    const geometryErrors = {
+      'Unable to .getGeometry() from feature': 0,
+      'Unable to .clone() geometry': 0,
+      'Unable to .transform() geometry': 0,
+      'Unable to convert geometry .toObject()': 0,
+    };
     // the finish event is emitted when all data has been flushed from the stream
-    writeStream.on('finish', async () => {
+    writeStream.on('finish', () => {
       fs.writeFileSync(`${outputPath}.json`, JSON.stringify(statCounter.export()), 'utf8');
       ctx.log.info(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson`);
-
       ctx.log.info(`processed ${counter} features`);
       ctx.log.info(`found ${errored} feature errors`);
+      ctx.log.info(`geometry error breakdown: `, { geometryErrors });
+      unwindStack(ctx.process, 'parseFile');
       return resolve();
     });
 
@@ -125,9 +153,10 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
           cont = false;
           writeStream.end();
         } else {
-          const parsedFeature = getGeoJsonFromGdalFeature(ctx, feat, transform);
+          const parsedFeature = getGeoJsonFromGdalFeature(ctx, feat, transform, geometryErrors);
           if (counter % 10000 === 0) {
             ctx.log.info(counter + ' records processed');
+            await sleep(100);
           }
           counter++;
           parsedFeature.properties[idPrefix] = counter;
@@ -143,6 +172,8 @@ exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
 };
 
 exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
+  ctx.process.push('addClusterIdToGeoData');
+
   // write cluster-*(.ndgeojson) with a cluster id (to be used for making tiles)
 
   const featureCount = points.length;
@@ -156,6 +187,9 @@ exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
     lookup[feature.properties[idPrefix]] = feature.properties.cluster;
   });
 
+  ctx.process.pop();
+
+  unwindStack(ctx.process, 'addClusterIdToGeoData');
   return lookup;
 };
 
@@ -177,7 +211,7 @@ exports.parseOutputPath = function (ctx, fileName, fileType) {
   return outputPath;
 };
 
-function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
+function getGeoJsonFromGdalFeature(ctx, feature, coordTransform, geometryErrors) {
   var geoJsonFeature = {
     type: 'Feature',
     properties: {},
@@ -187,7 +221,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
   try {
     geometry = feature.getGeometry();
   } catch (err) {
-    ctx.log.error('Unable to .getGeometry() from feature', { err: err.message, stack: err.stack });
+    geometryErrors['Unable to .getGeometry() from feature'] += 1;
   }
 
   var clone;
@@ -195,7 +229,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
     try {
       clone = geometry.clone();
     } catch (err) {
-      ctx.log.error('Unable to .clone() geometry', { err: err.message, stack: err.stack });
+      geometryErrors['Unable to .clone() geometry'] += 1;
     }
   }
 
@@ -203,7 +237,7 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
     try {
       clone.transform(coordTransform);
     } catch (err) {
-      ctx.log.error('Unable to .transform() geometry', { err: err.message, stack: err.stack });
+      geometryErrors['Unable to .transform() geometry'] += 1;
     }
   }
 
@@ -213,19 +247,20 @@ function getGeoJsonFromGdalFeature(ctx, feature, coordTransform) {
       clone.swapXY(); // ugh, you would think .toObject would take care of this
       obj = clone.toObject();
     } catch (err) {
-      ctx.log.error('Unable to convert geometry .toObject()', {
-        err: err.message,
-        stack: err.stack,
-      });
+      geometryErrors['Unable to convert geometry .toObject()'] += 1;
     }
   }
 
   geoJsonFeature.geometry = obj || [];
   geoJsonFeature.properties = feature.fields.toObject();
+
   return geoJsonFeature;
 }
 
 exports.convertToFormat = function (ctx, format, outputPath) {
+  ctx.process.push('convertToFormat');
+  ctx.process.push(format.extension);
+
   // convert from ndgeojson into geojson, gpkg, shp, etc
 
   return new Promise((resolve, reject) => {
@@ -236,6 +271,12 @@ exports.convertToFormat = function (ctx, format, outputPath) {
       `${outputPath}.${format.extension}`,
       `${outputPath}.ndgeojson`,
     ];
+
+    // geojson needs RFC option specified
+    if (format.extension === fileFormats.GEOJSON.extension) {
+      args.push('-lco', 'RFC7946=YES');
+    }
+
     const command = `${application} ${args.join(' ')}`;
     ctx.log.info(`running: ${command}`);
 
@@ -251,17 +292,22 @@ exports.convertToFormat = function (ctx, format, outputPath) {
 
     proc.on('error', err => {
       ctx.log.error('Error', { err: err.message, stack: err.stack });
-      reject(err);
+      return reject(err);
     });
 
     proc.on('close', code => {
       ctx.log.info(`completed creating format: ${format.driver}.`);
-      resolve({ command });
+      ctx.process.pop();
+      unwindStack(ctx.process, format.extension);
+      unwindStack(ctx.process, 'convertToFormat');
+      return resolve({ command });
     });
   });
 };
 
 exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
+  ctx.process.push('spawnTippecane');
+
   return new Promise((resolve, reject) => {
     const layername = 'parcelslayer';
     const application = 'tippecanoe';
@@ -302,12 +348,15 @@ exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
 
     proc.on('close', code => {
       ctx.log.info(`completed creating tiles. code ${code}`);
+      unwindStack(ctx.process, 'spawnTippecane');
       resolve({ command, layername });
     });
   });
 };
 
 exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
+  ctx.process.push('writeTileAttributes');
+
   return new Promise((resolve, reject) => {
     ctx.log.info('processing attributes...');
 
@@ -318,7 +367,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         const copy = { ...obj.properties };
         delete copy[clusterPrefix]; // filter out clusterID property in stringified JSON
         fs.appendFileSync(
@@ -329,6 +378,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 
         transformed++;
         if (transformed % 10000 === 0) {
+          await sleep(50);
           ctx.log.info(transformed + ' records processed');
         }
       })
@@ -338,12 +388,15 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
+        unwindStack(ctx.process, 'writeTileAttributes');
         resolve('end');
       });
   });
 };
 
 exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
+  ctx.process.push('extractPointsFromNdGeoJson');
+
   return new Promise((resolve, reject) => {
     ctx.log.info('extracting points from ndgeojson...');
 
@@ -355,7 +408,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         // create a point feature
         const pt = createPointFeature(ctx, obj);
         if (pt) {
@@ -367,6 +420,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
           // may as well do this here (it will happen on feature 0 at the least)
           propertyCount = Object.keys(obj.properties).length;
           ctx.log.info(transformed + ' records processed');
+          await sleep(50);
         }
       })
       .on('error', err => {
@@ -375,12 +429,15 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
+        unwindStack(ctx.process, 'extractPointsFromNdGeoJson');
         return resolve([points, propertyCount]);
       });
   });
 };
 
 exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) {
+  ctx.process.push('createNdGeoJsonWithClusterId');
+
   return new Promise((resolve, reject) => {
     ctx.log.info('creating derivative ndgeojson with clusterId...');
 
@@ -391,7 +448,7 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         // add clusterId
         obj.properties = { ...obj.properties, [clusterPrefix]: lookup[obj.properties[idPrefix]] };
 
@@ -399,6 +456,7 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
 
         transformed++;
         if (transformed % 10000 === 0) {
+          await sleep(50);
           ctx.log.info(transformed + ' records processed');
         }
       })
@@ -408,6 +466,7 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
+        unwindStack(ctx.process, 'createNdGeoJsonWithClusterId');
         resolve(derivativePath);
       });
   });

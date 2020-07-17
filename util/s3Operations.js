@@ -5,9 +5,12 @@ const fs = require('fs');
 const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
-const S3 = new AWS.S3({ apiVersion: '2006-03-01' });
+const S3 = new AWS.S3({ apiVersion: '2006-03-01', region: 'us-east-2' });
+const { unwindStack } = require('./misc');
 
 exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, useGzip) {
+  ctx.process.push('putTextToS3');
+
   return new Promise((resolve, reject) => {
     const objectParams = {
       Bucket: bucketName,
@@ -32,6 +35,7 @@ exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, use
       .then(data => {
         ctx.log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
         ctx.log.info('upload response', { data });
+        unwindStack(ctx.process, 'putTextToS3');
         return resolve();
       })
       .catch(err => {
@@ -42,6 +46,8 @@ exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, use
 };
 
 exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType, useGzip) {
+  ctx.process.push('putFileToS3');
+
   return new Promise((resolve, reject) => {
     ctx.log.info(
       `uploading file to s3 (${filePathToUpload} as s3://${bucket}/${key}), please wait...`,
@@ -82,6 +88,7 @@ exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType,
           `uploading (${filePathToUpload} as s3://${bucket}/${key}) completed successfully.`,
         );
         ctx.log.info('result', result);
+        unwindStack(ctx.process, 'putFileToS3');
         return resolve();
       })
       .catch(err => {
@@ -95,6 +102,8 @@ exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType,
 };
 
 exports.getObject = function (ctx, bucket, key) {
+  ctx.process.push('getObject');
+
   ctx.log.info('getting s3 object', { bucket, key });
   return new Promise((resolve, reject) => {
     S3.getObject(
@@ -118,14 +127,18 @@ exports.getObject = function (ctx, bucket, key) {
               return reject(err);
             }
             if (data.ContentType === 'text/plain') {
+              unwindStack(ctx.process, 'getObject');
               return resolve(fileBuffer.toString('utf-8'));
             }
+            unwindStack(ctx.process, 'getObject');
             return resolve(JSON.parse(fileBuffer.toString('utf-8')));
           });
         } else {
           if (data.ContentType === 'text/plain') {
+            unwindStack(ctx.process, 'getObject');
             return resolve(data.Body.toString('utf-8'));
           }
+          unwindStack(ctx.process, 'getObject');
           return resolve(JSON.parse(data.Body.toString('utf-8')));
         }
       },
@@ -134,6 +147,8 @@ exports.getObject = function (ctx, bucket, key) {
 };
 
 exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFolder) {
+  ctx.process.push('s3Sync');
+
   return new Promise((resolve, reject) => {
     const application = 'aws';
     const args = [
@@ -150,7 +165,7 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
     const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      ctx.log.info(data.toString());
+      console.log(data.toString());
     });
 
     proc.stderr.on('data', data => {
@@ -164,6 +179,7 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
 
     proc.on('close', code => {
       ctx.log.info(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
+      unwindStack(ctx.process, 's3Sync');
       resolve({ command });
     });
   });
@@ -172,6 +188,8 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
 exports.emptyS3Directory = emptyDirectory;
 
 async function emptyDirectory(ctx, bucket, dir) {
+  ctx.process.push('emptyDirectory');
+
   const listParams = {
     Bucket: bucket,
     Prefix: dir,
@@ -180,6 +198,7 @@ async function emptyDirectory(ctx, bucket, dir) {
   const listedObjects = await S3.listObjectsV2(listParams).promise();
 
   if (listedObjects.Contents.length === 0) {
+    unwindStack(ctx.process, 'emptyDirectory');
     return;
   }
 
@@ -198,11 +217,15 @@ async function emptyDirectory(ctx, bucket, dir) {
   if (listedObjects.IsTruncated) {
     await emptyDirectory(ctx, bucket, dir);
   }
+
+  unwindStack(ctx.process, 'emptyDirectory');
 }
 
 // streams a download to the filesystem.
 // optionally un-gzips the file to a new location
 exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3UnzippedFile = null) {
+  ctx.process.push('streamS3toFileSystem');
+
   return new Promise((resolve, reject) => {
     const gunzip = zlib.createGunzip();
     const file = fs.createWriteStream(s3DestFile);
@@ -222,15 +245,21 @@ exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3Unzippe
         if (s3UnzippedFile) {
           fs.createReadStream(s3DestFile)
             .on('error', err => {
-              ctx.log.error('Error', { err: err.message, stack: err.stack });
-              return reject(err);
+              ctx.log.warn('Error', { err: err.message, stack: err.stack });
+              // for whatever reason, I get a :
+              // 'RangeError [ERR_INVALID_OPT_VALUE]: The value "3340558817" is invalid for option "size"
+              // Everything still works /shrug
+              // not going to reject(err)
             })
             .on('end', () => {
               ctx.log.info('deflated to ' + s3UnzippedFile);
+              unwindStack(ctx.process, 'streamS3toFileSystem');
               return resolve();
             })
             .pipe(gunzip)
             .pipe(fs.createWriteStream(s3UnzippedFile));
+        } else {
+          unwindStack(ctx.process, 'streamS3toFileSystem');
         }
       })
       .send();

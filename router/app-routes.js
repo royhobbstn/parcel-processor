@@ -11,15 +11,107 @@ const {
   getCountiesByState,
   querySourceNames,
 } = require('../util/wrapQuery');
+const { searchLogsByType, searchLogsByGeoid, searchLogsByReference } = require('../util/queries');
 const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
-const { readMessages, deleteMessage, sendQueueMessage } = require('../util/sqsOperations');
+const {
+  readMessages,
+  deleteMessage,
+  sendQueueMessage,
+  listQueues,
+  getQueueAttributes,
+} = require('../util/sqsOperations');
+const { getTaskInfo } = require('../util/ecsOperations');
 
 exports.appRouter = async app => {
-  //
+  app.get('/getTaskInfo', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    try {
+      const taskInfo = await getTaskInfo(ctx);
+      return res.json(taskInfo);
+    } catch (err) {
+      ctx.log.error('Error fetching task information', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/getQueueStats', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    const URL_ROOT = 'https://sqs.us-east-2.amazonaws.com/000009394762/';
+    const queueStructure = ['inbox', 'sortByGeography', 'createProducts'];
+    const envAbbrev =
+      process.env.NODE_ENV === 'development'
+        ? '-dev'
+        : process.env.NODE_ENV === 'test'
+        ? '-test'
+        : '';
+    const queuesWithEnvs = queueStructure.map(queue => `${queue}${envAbbrev}`);
+    queuesWithEnvs.forEach(queue => {
+      queuesWithEnvs.push(`${queue}-dlq`);
+    });
+
+    const details = await Promise.all(
+      queuesWithEnvs.map(queue => getQueueAttributes(ctx, URL_ROOT + queue)),
+    );
+
+    const structure = {};
+
+    details.forEach(queueDetails => {
+      const attributes = queueDetails.Attributes;
+      const queue = attributes.QueueArn.split(':')
+        .slice(-1)[0]
+        .replace('-test', '')
+        .replace('-dev', '');
+
+      structure[queue] = {
+        available: attributes.ApproximateNumberOfMessages,
+        inFlight: attributes.ApproximateNumberOfMessagesNotVisible,
+      };
+    });
+
+    return res.json(structure);
+  });
+
+  app.get('/searchLogsByType', async function (req, res) {
+    const ctx = { log, process: [] };
+    const type = req.query.type;
+    try {
+      const query = await searchLogsByType(ctx, type);
+      res.json(query.records);
+    } catch (err) {
+      ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/searchLogsByGeoid', async function (req, res) {
+    const ctx = { log, process: [] };
+    const geoid = req.query.geoid;
+    try {
+      const query = await searchLogsByGeoid(ctx, geoid);
+      res.json(query.records);
+    } catch (err) {
+      ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/searchLogsByReference', async function (req, res) {
+    const ctx = { log, process: [] };
+    const ref = req.query.ref;
+    try {
+      const query = await searchLogsByReference(ctx, ref);
+      res.json(query.records);
+    } catch (err) {
+      ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
 
   app.get('/getLogfile', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const messageId = req.query.messageId;
     const messageType = req.query.messageType;
     const s3Key = `${messageId}-${messageType}.log`;
@@ -27,7 +119,6 @@ exports.appRouter = async app => {
     res.set('Content-Type', 'text/plain');
     try {
       const data = await getObject(ctx, bucket, s3Key);
-      console.log(data);
       return res.send(data);
     } catch (err) {
       ctx.log.error('Error: ', { error: err.message, stack: err.stack });
@@ -36,67 +127,67 @@ exports.appRouter = async app => {
   });
 
   app.post('/replay/viewInboxDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.inboxQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.post('/replay/viewSortDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.sortQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.post('/replay/viewProductDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.productQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.get('/viewInboxDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.get('/viewSortDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.get('/viewProductDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.post('/delete/viewInboxDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.post('/delete/viewSortDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.post('/delete/viewProductDlq', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.get('/queryStatFiles', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const geoid = req.query.geoid;
     try {
       await acquireConnection(ctx);
@@ -108,7 +199,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/proxyS3File', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const key = decodeURIComponent(req.query.key);
     const bucket = decodeURIComponent(req.query.bucket);
     try {
@@ -120,7 +211,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getSubGeographies', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const geoid = req.query.geoid;
     try {
       await acquireConnection(ctx);
@@ -132,7 +223,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/querySources', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const sourceName = decodeURIComponent(req.query.name);
     try {
       await acquireConnection(ctx);
@@ -144,7 +235,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/proxyHeadRequest', function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const url = decodeURIComponent(req.query.url);
     axios
       .head(url)
@@ -167,21 +258,21 @@ exports.appRouter = async app => {
   });
 
   app.post('/sendInboxSQS', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
     const payload = req.body;
     return sendSQS(ctx, res, inboxQueueUrl, payload);
   });
 
   app.post('/sendSortSQS', (req, res) => {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const sortQueueUrl = config.get('SQS.sortQueueUrl');
     const payload = req.body;
     return sendSQS(ctx, res, sortQueueUrl, payload);
   });
 
   app.post('/sendProductSQS', (req, res) => {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const productsQueueUrl = config.get('SQS.productQueueUrl');
     const payload = req.body;
     return sendSQS(ctx, res, productsQueueUrl, payload);
@@ -245,7 +336,7 @@ async function readDlq(ctx, res, queueUrl) {
     messages: [],
   };
   try {
-    const result = await readMessages(ctx, queueUrl, 10);
+    const result = await readMessages(ctx, queueUrl, 1);
     console.log(result);
     if (result) {
       response.messages = result.Messages;

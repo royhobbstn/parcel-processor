@@ -8,6 +8,7 @@ const {
   referenceIdLength,
   productOrigins,
   fileFormats,
+  messageTypes,
 } = require('../util/constants');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const {
@@ -30,10 +31,13 @@ const {
   lookupCleanGeoName,
   DBWrites,
 } = require('../util/wrapQuery');
+const { unwindStack } = require('../util/misc');
 
 exports.processInbox = processInbox;
 
 async function processInbox(ctx, data) {
+  ctx.process.push('processInbox');
+
   await acquireConnection(ctx);
   await createDirectories(ctx, [
     directories.logDir,
@@ -55,7 +59,7 @@ async function processInbox(ctx, data) {
   // };
 
   ctx.messageId = data.Messages[0].MessageId;
-  ctx.type = 'inbox';
+  ctx.type = messageTypes.INBOX;
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 
@@ -72,11 +76,16 @@ async function processInbox(ctx, data) {
     const payload = await runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload);
 
     if (!isDryRun) {
-      // Send SQS message to create products
-      const productsQueueUrl = config.get('SQS.productQueueUrl');
-      await sendQueueMessage(ctx, productsQueueUrl, payload);
+      // payload may be null if state-level dataset.  no derivative products for state.
+      if (payload) {
+        // Send SQS message to create products
+        const productsQueueUrl = config.get('SQS.productQueueUrl');
+        await sendQueueMessage(ctx, productsQueueUrl, payload);
+      }
     } else {
-      ctx.log.info(`Because this was a dryRun no database records or S3 files have been written`);
+      ctx.log.info(
+        `Because this was a dryRun no database records or S3 files have been written, and no derivative SQS messages have been sent.`,
+      );
     }
 
     ctx.log.info('Completed successfully.');
@@ -94,15 +103,17 @@ async function processInbox(ctx, data) {
     // rethrow to send email
     throw new Error('Error in main function.  See logs.');
   }
+  unwindStack(ctx.process, 'processInbox');
 }
 
 async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
+  ctx.process.push('runMain');
+
   const sourceNameInput = messagePayload.sourceVal;
 
   const computedHash = await computeHash(ctx, filePath);
 
   // call database and find out if hash is already in DB
-  await acquireConnection(ctx);
   const hashExists = await doesHashExist(ctx, computedHash);
 
   if (hashExists) {
@@ -174,12 +185,18 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
       geoid,
       productKey,
       individualRef,
+      messagePayload,
     );
   }
 
   const productSqsPayload = {
     dryRun: false,
-    products: [fileFormats.GEOJSON.label, fileFormats.GPKG.label, fileFormats.SHP.label],
+    products: [
+      fileFormats.GEOJSON.label,
+      fileFormats.GPKG.label,
+      fileFormats.SHP.label,
+      fileFormats.TILES.label,
+    ],
     productRef,
     productOrigin: productOrigins.ORIGINAL,
     fipsDetails,
@@ -190,9 +207,11 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
     productKey,
   };
 
-  // dont generate tiles for state-level datasets
-  if (fipsDetails.SUMLEV !== '040') {
-    productSqsPayload.products.push(fileFormats.TILES.label);
+  unwindStack(ctx.process, 'runMain');
+
+  // dont create derivative products for state-level datasets
+  if (fipsDetails.SUMLEV === '040') {
+    return null;
   }
 
   return productSqsPayload;
@@ -201,6 +220,8 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
 // todo move
 // https://stackoverflow.com/a/61269447/8896489
 async function downloadFile(ctx, fileUrl, outputLocationPath) {
+  ctx.process.push('downloadFile');
+
   const writer = fs.createWriteStream(outputLocationPath);
 
   return axios({
@@ -208,8 +229,8 @@ async function downloadFile(ctx, fileUrl, outputLocationPath) {
     url: fileUrl,
     responseType: 'stream',
   }).then(response => {
-    //ensure that the user can call `then()` only when the file has
-    //been downloaded entirely.
+    // ensure that the user can call `then()` only when the file has
+    // been downloaded entirely.
 
     return new Promise((resolve, reject) => {
       response.data.pipe(writer);
@@ -221,9 +242,10 @@ async function downloadFile(ctx, fileUrl, outputLocationPath) {
       });
       writer.on('close', () => {
         if (!error) {
+          unwindStack(ctx.process, 'downloadFile');
           resolve(true);
         }
-        //no need to call the reject here, as it will have been called in the
+        // no need to call the reject here, as it will have been called in the
         //'error' stream;
       });
     });

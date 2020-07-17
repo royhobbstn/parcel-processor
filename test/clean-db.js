@@ -31,6 +31,7 @@ async function init() {
   } while (!connected);
 
   console.log('connected');
+  await truncateTable('logfiles');
   await truncateTable('products');
   await truncateTable('downloads');
   await truncateTable('source_checks');

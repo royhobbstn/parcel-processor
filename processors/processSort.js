@@ -7,23 +7,31 @@ const fs = require('fs');
 const ndjson = require('ndjson');
 const { generateRef } = require('../util/crypto');
 const { StatContext } = require('../util/StatContext');
+const { unwindStack } = require('../util/misc');
 const {
   directories,
   fileFormats,
   productOrigins,
   referenceIdLength,
   s3deleteType,
+  messageTypes,
 } = require('../util/constants');
-const { queryCreateProductRecord, checkForProduct } = require('../util/queries');
+const {
+  queryCreateProductRecord,
+  checkForProduct,
+  createLogfileRecord,
+} = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
-const { putFileToS3, putTextToS3 } = require('../util/s3Operations');
+const { putFileToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const { createDirectories } = require('../util/filesystemUtil');
 
 exports.processSort = processSort;
 
 async function processSort(ctx, data) {
+  ctx.process.push('processSort');
+
   await acquireConnection(ctx);
 
   await createDirectories(ctx, [directories.logDir, directories.subGeographiesDir]);
@@ -67,7 +75,7 @@ async function processSort(ctx, data) {
   // };
 
   ctx.messageId = data.Messages[0].MessageId;
-  ctx.type = 'sort';
+  ctx.type = messageTypes.SORT;
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
 
@@ -92,10 +100,13 @@ async function processSort(ctx, data) {
   }
 
   ctx.log.info('done with processSort');
+  unwindStack(ctx.process, 'processSort');
 
   // ---- functions only below
 
   function sortData(ctx) {
+    ctx.process.push('sortData');
+
     return new Promise((resolve, reject) => {
       const dataToProcess = [];
       let lastChunkPiece = '';
@@ -135,7 +146,7 @@ async function processSort(ctx, data) {
           ctx.log.info('done reading remote file.');
           await Promise.all(fileWrites);
           ctx.log.info(`processed ${counter} lines`);
-
+          unwindStack(ctx.process, 'sortData');
           return resolve();
         });
       });
@@ -166,6 +177,8 @@ async function processSort(ctx, data) {
   }
 
   async function processFile(ctx, file) {
+    ctx.process.push('processFile');
+
     ctx.log.info(`processing: ${geonameLookup[file]}`);
 
     // before processing, do a check to make sure there is not already a product with same geoid / downloadRef, productRef combination.
@@ -181,13 +194,16 @@ async function processSort(ctx, data) {
       ctx.log.info(
         `Product ${fileFormats.NDGEOJSON.extension} has already been created for geoid: ${file}.  Skipping.`,
       );
+      unwindStack(ctx.process, 'processFile');
       return;
     }
 
-    // file is a plain geoid with no file extension
+    // ndgeojson file is a plain geoid with no file extension
     const path = `${directories.subGeographiesDir + ctx.directoryId}/${file}`;
+    const statPath = `${directories.subGeographiesDir + ctx.directoryId}/${file}.json`;
 
     const statExport = await countStats(ctx, path);
+    fs.writeFileSync(statPath, JSON.stringify(statExport), 'utf8');
 
     // create product ref
     const productRef = generateRef(ctx, referenceIdLength);
@@ -211,11 +227,11 @@ async function processSort(ctx, data) {
 
       try {
         // upload stat file
-        await putTextToS3(
+        await putFileToS3(
           ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}-stat.json`,
-          JSON.stringify(statExport),
+          statPath,
           'application/json',
           true,
         );
@@ -243,7 +259,7 @@ async function processSort(ctx, data) {
         });
 
         // writes just one record.  no transaction needed.  it works or it doesnt
-        await queryCreateProductRecord(
+        const product_id = await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -253,6 +269,15 @@ async function processSort(ctx, data) {
           file,
           `${productKey}.ndgeojson`,
         );
+
+        await createLogfileRecord(
+          ctx,
+          product_id,
+          ctx.messageId,
+          JSON.stringify(messagePayload),
+          ctx.type,
+        );
+        ctx.log.info('Logfile reference record was created.');
       } catch (err) {
         await removeS3Files(ctx, cleanupS3);
         // throwing here will cause processSort to end.
@@ -282,6 +307,8 @@ async function processSort(ctx, data) {
       };
       await sendQueueMessage(ctx, productsQueueUrl, payload);
     }
+
+    unwindStack(ctx.process, 'processFile');
   }
 }
 
@@ -316,6 +343,8 @@ function createFipsDetailsForCounty(ctx, geoid) {
 }
 
 function countStats(ctx, path) {
+  ctx.process.push('countStats');
+
   return new Promise((resolve, reject) => {
     // read each file as ndjson and create stat object
     let transformed = 0;
@@ -337,7 +366,7 @@ function countStats(ctx, path) {
       })
       .on('end', async () => {
         ctx.log.info(transformed + ' records processed');
-
+        unwindStack(ctx.process, 'countStats');
         return resolve(statCounter.export());
       });
   });

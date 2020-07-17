@@ -1,10 +1,13 @@
 // @ts-check
 
 const { idPrefix } = require('./constants');
+const { unwindStack } = require('./misc');
 
 // gather field statistics for a dataset
 
 exports.StatContext = function (ctx, uniquesMax = 500) {
+  ctx.process.push('StatContext');
+
   this.rowCount = 0;
   this.fields = null;
 
@@ -28,6 +31,7 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
       }
     });
 
+    unwindStack(ctx.process, 'StatContext');
     return {
       rowCount: this.rowCount,
       fields: this.fields,

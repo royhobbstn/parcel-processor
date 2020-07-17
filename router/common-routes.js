@@ -10,13 +10,25 @@ const { log } = require('../util/logger');
 exports.commonRouter = async app => {
   //
   app.get('/health', function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     ctx.log.info('Health ok');
     return res.json({ status: 'ok' });
   });
 
+  app.get('/acquireConnection', async function (req, res) {
+    const ctx = { log, process: [] };
+    try {
+      await acquireConnection(ctx);
+      ctx.log.info('connected to database');
+      return res.json({ status: 'connected' });
+    } catch (e) {
+      ctx.log.info('database health check failed');
+      return res.status(500).json({ status: 'failed to connect' });
+    }
+  });
+
   app.get('/databaseHealth', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     try {
       await queryHealth(ctx);
       ctx.log.info('database health check passed');
@@ -27,18 +39,12 @@ exports.commonRouter = async app => {
     }
   });
 
-  app.get('/fetchEnv', async function (req, res) {
-    const ctx = { log };
-    try {
-      await acquireConnection(ctx);
-      return res.json({ env: process.env.NODE_ENV });
-    } catch (err) {
-      return res.status(500).send(err.message);
-    }
+  app.get('/fetchEnv', function (req, res) {
+    return res.json({ env: process.env.NODE_ENV });
   });
 
   app.get('/status', async function (req, res) {
-    const ctx = { log };
+    const ctx = { log, process: [] };
     const status = await getStatus(ctx);
     return res.json(status);
   });

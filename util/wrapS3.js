@@ -6,8 +6,11 @@ const { s3deleteType } = require('./constants');
 const { putFileToS3, emptyS3Directory } = require('./s3Operations');
 const { lookupState } = require('./lookupState');
 const config = require('config');
+const { unwindStack } = require('./misc');
 
 exports.S3Writes = async function (ctx, cleanupS3, filePath, rawKey, productKey, outputPath) {
+  ctx.process.push('S3Writes');
+
   await uploadRawFileToS3(ctx, filePath, rawKey);
   cleanupS3.push({
     bucket: config.get('Buckets.rawBucket'),
@@ -27,11 +30,14 @@ exports.S3Writes = async function (ctx, cleanupS3, filePath, rawKey, productKey,
     type: s3deleteType.FILE,
   });
   ctx.log.info(`uploaded NDgeoJSON and '-stat.json' files to S3.  key: ${productKey}`);
+  unwindStack(ctx.process, 'S3Writes');
 };
 
 exports.uploadRawFileToS3 = uploadRawFileToS3;
 
 async function uploadRawFileToS3(ctx, filePath, rawKey) {
+  ctx.process.push('uploadRawFileToS3');
+
   const extension = path.extname(rawKey);
 
   if (extension !== '.zip') {
@@ -47,11 +53,14 @@ async function uploadRawFileToS3(ctx, filePath, rawKey) {
     'application/zip',
     false,
   );
+  unwindStack(ctx.process, 'uploadRawFileToS3');
 }
 
 exports.uploadProductFiles = uploadProductFiles;
 
 async function uploadProductFiles(ctx, key, outputPath) {
+  ctx.process.push('uploadProductFiles');
+
   const statFile = putFileToS3(
     ctx,
     config.get('Buckets.productsBucket'),
@@ -72,10 +81,12 @@ async function uploadProductFiles(ctx, key, outputPath) {
   await Promise.all([statFile, ndgeojsonFile]);
   ctx.log.info('Output files were successfully loaded to S3');
 
-  return;
+  unwindStack(ctx.process, 'uploadProductFiles');
 }
 
 exports.createRawDownloadKey = function (ctx, fipsDetails, geoid, geoName, downloadRef) {
+  ctx.process.push('createRawDownloadKey');
+
   const stateName = lookupState(ctx, fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
 
   let key;
@@ -90,6 +101,7 @@ exports.createRawDownloadKey = function (ctx, fipsDetails, geoid, geoName, downl
     throw new Error('unexpected sumlev.');
   }
 
+  unwindStack(ctx.process, 'createRawDownloadKey');
   return `${key}.zip`;
 };
 
@@ -102,6 +114,8 @@ exports.createProductDownloadKey = function (
   productRef,
   individualRef,
 ) {
+  ctx.process.push('createProductDownloadKey');
+
   const stateName = lookupState(ctx, fipsDetails.STATEFIPS).replace(/[^a-z0-9]+/gi, '-');
 
   let key;
@@ -116,10 +130,14 @@ exports.createProductDownloadKey = function (
     throw new Error('unexpected sumlev.');
   }
 
+  unwindStack(ctx.process, 'createProductDownloadKey');
+
   return key;
 };
 
 exports.removeS3Files = function (ctx, cleanupS3) {
+  ctx.process.push('removeS3Files');
+
   const s3 = new AWS.S3();
 
   const cleaned = cleanupS3.map(item => {
@@ -136,6 +154,8 @@ exports.removeS3Files = function (ctx, cleanupS3) {
       throw new Error(`unexpected type: ${item.type} in removeS3Files`);
     }
   });
+
+  unwindStack(ctx.process, 'removeS3Files');
 
   return Promise.all(cleaned);
 };

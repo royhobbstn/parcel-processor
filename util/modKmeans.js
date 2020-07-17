@@ -4,8 +4,11 @@ var clone = require('@turf/clone');
 var invariant = require('@turf/invariant');
 var meta = require('@turf/meta');
 var skmeans = require('skmeans');
+const { unwindStack } = require('./misc');
 
 exports.clustersKmeans = function (ctx, points, options) {
+  ctx.process.push('clustersKmeans');
+
   // Optional parameters
   options = options || {};
   if (typeof options !== 'object') throw new Error('options is invalid');
@@ -45,5 +48,6 @@ exports.clustersKmeans = function (ctx, points, options) {
     point.properties.centroid = centroids[clusterId];
   });
 
+  unwindStack(ctx.process, 'clustersKmeans');
   return points;
 };

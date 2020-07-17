@@ -9,26 +9,33 @@ const { createInstanceLogger, getUniqueLogfileName } = require('./logger');
 const { sendAlertMail } = require('./email');
 const { directories, directoryIdLength } = require('./constants');
 const { generateRef } = require('./crypto');
+const { initiateDatabaseHeartbeat } = require('./wrapQuery');
+const { initiateProgressHeartbeat, unwindStack } = require('./misc');
 
 exports.createContext = function (processor) {
   const processorShort = processor.replace('process', '').toLowerCase();
-  const directoryId = generateRef({ log: console }, directoryIdLength);
+  const directoryId = generateRef({ log: console, process: [] }, directoryIdLength);
   const logfile = getUniqueLogfileName(processorShort);
   const logpath = `${directories.logDir + directoryId}/${logfile}`;
   const log = createInstanceLogger(logpath);
-  return { log, logfile, logpath, processor, directoryId };
+  return { log, logfile, logpath, processor, directoryId, process: [] };
 };
 
 exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) {
+  ctx.process.push('runProcess');
+
   const deleteParams = {
     QueueUrl: queueUrl,
     ReceiptHandle: messages.Messages[0].ReceiptHandle,
   };
 
   let errorFlag = false;
-  const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 90000, 120);
+  const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 60000, 180);
+  const databaseInterval = initiateDatabaseHeartbeat(ctx, 180);
+  const progressInterval = initiateProgressHeartbeat(ctx, 30);
 
   try {
+    ctx.log.info('starting message processor');
     await messageProcessor(ctx, messages);
   } catch (err) {
     ctx.log.error('Fatal Error: ', { err: err.message, stack: err.stack });
@@ -36,6 +43,8 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
   } finally {
     // discontinue updating visibility timeout
     clearInterval(interval);
+    clearInterval(databaseInterval);
+    clearInterval(progressInterval);
 
     if (!errorFlag) {
       await deleteMessage(ctx, deleteParams);
@@ -44,7 +53,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     if (!ctx.isDryRun) {
       console.log('\n\nUploading logfile to S3.');
       await putFileToS3(
-        { log: console },
+        { log: console, process: [] },
         config.get('Buckets.logfilesBucket'),
         `${ctx.messageId}-${ctx.type}.log`,
         ctx.logpath,
@@ -59,6 +68,8 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     } else {
       console.log('This is a DryRun so no email will be sent, and no logfile uploaded to S3.');
     }
+
+    unwindStack(ctx.process, 'runProcess');
     console.log('\nAll complete!\n\n');
   }
 };

@@ -18,8 +18,9 @@ const {
   startTransaction,
   commitTransaction,
   rollbackTransaction,
+  createLogfileRecord,
 } = require('./queries');
-const { getSourceType } = require('./misc');
+const { getSourceType, unwindStack } = require('./misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
 
 exports.DBWrites = async function (
@@ -33,9 +34,9 @@ exports.DBWrites = async function (
   geoid,
   productKey,
   individualRef,
+  messagePayload,
 ) {
-  // refresh connection just in case the upload /parse took a long time
-  await acquireConnection(ctx);
+  ctx.process.push('DBWrites');
 
   let sourceLine;
   const transactionId = await startTransaction(ctx);
@@ -69,7 +70,7 @@ exports.DBWrites = async function (
     );
     ctx.log.info(`Created download record.`, { downloadId });
 
-    await queryCreateProductRecord(
+    const product_id = await queryCreateProductRecord(
       ctx,
       downloadId,
       productRef,
@@ -82,6 +83,16 @@ exports.DBWrites = async function (
     );
     ctx.log.info('NdGeoJson product record was created.');
 
+    await createLogfileRecord(
+      ctx,
+      product_id,
+      ctx.messageId,
+      JSON.stringify(messagePayload),
+      ctx.type,
+      transactionId,
+    );
+    ctx.log.info('Logfile reference record was created.');
+
     await commitTransaction(ctx, transactionId);
     ctx.log.info('Transaction Committed');
 
@@ -89,6 +100,7 @@ exports.DBWrites = async function (
     ctx.log.info(`Recorded source check as disposition: 'viewed'`);
     ctx.log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
     ctx.log.info(`wrote NDgeoJSON product record.  ref: ${productRef}`);
+    unwindStack(ctx.process, 'DBWrites');
     return downloadId;
   } catch (err) {
     ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -101,21 +113,28 @@ exports.DBWrites = async function (
 exports.acquireConnection = acquireConnection;
 
 async function acquireConnection(ctx) {
-  // ping the database to make sure its up / get it ready
-  // after that, keep-alives from data-api-client should do the rest
+  ctx.process.push('acquireConnection');
+
   const seconds = 10;
   let attempts = 5;
   let connected = false;
-  do {
-    attempts++;
+
+  for (let i = 0; i < attempts; i++) {
     ctx.log.info('attempting to connect to database');
     connected = await checkHealth(ctx);
     if (!connected) {
       ctx.log.info(`attempt failed.  trying again in ${seconds} seconds...`);
       await setPause(ctx, seconds * 1000);
+    } else {
+      break;
     }
-  } while (!connected && attempts <= 5);
+  }
 
+  if (!connected) {
+    throw new Error('unable to establish database connection');
+  }
+
+  unwindStack(ctx.process, 'acquireConnection');
   ctx.log.info('connected');
 }
 
@@ -139,6 +158,8 @@ async function checkHealth(ctx) {
 exports.recordSourceCheck = recordSourceCheck;
 
 async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
+  ctx.process.push('recordSourceCheck');
+
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
   }
@@ -147,13 +168,19 @@ async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
   const query = await queryWriteSourceCheck(ctx, sourceId, disposition, transactionId);
 
+  unwindStack(ctx.process, 'recordSourceCheck');
   return query.insertId;
 }
 
 exports.fetchSourceIdIfExists = fetchSourceIdIfExists;
 
 async function fetchSourceIdIfExists(ctx, pageName) {
+  ctx.process.push('fetchSourceIdIfExists');
+
   const query = await querySource(ctx, pageName);
+
+  unwindStack(ctx.process, 'fetchSourceIdIfExists');
+
   if (query.records.length) {
     return [query.records[0].source_id, query.records[0].source_type];
   }
@@ -163,20 +190,27 @@ async function fetchSourceIdIfExists(ctx, pageName) {
 exports.createSource = createSource;
 
 async function createSource(ctx, sourceName, sourceType, transactionId) {
+  ctx.process.push('createSource');
+
   const query = await queryWriteSource(ctx, sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
+    unwindStack(ctx.process, 'createSource');
     return query.insertId;
   }
   throw new Error(`unable to create page record for: ${sourceName}`);
 }
 
 exports.doesHashExist = async function (ctx, computedHash) {
+  ctx.process.push('doesHashExist');
+
   const query = await queryHash(ctx, computedHash);
   if (query.records.length) {
     ctx.log.info('Hash exists in database.  File has already been processed.');
+    unwindStack(ctx.process, 'doesHashExist');
     return true;
   }
   ctx.log.info('Hash is unique.  Processing new download.');
+  unwindStack(ctx.process, 'doesHashExist');
   return false;
 };
 
@@ -192,6 +226,8 @@ async function constructDownloadRecord(
   filePath,
   transactionId,
 ) {
+  ctx.process.push('constructDownloadRecord');
+
   const originalFilename = path.parse(filePath).base;
 
   const query = await queryCreateDownloadRecord(
@@ -208,6 +244,8 @@ async function constructDownloadRecord(
   if (!query || !query.insertId) {
     throw new Error('unexpected result from create download request');
   }
+
+  unwindStack(ctx.process, 'constructDownloadRecord');
   return query.insertId;
 }
 
@@ -218,6 +256,8 @@ function makeS3Key(ctx, str) {
 }
 
 exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
+  ctx.process.push('lookupCleanGeoName');
+
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 
   let geoid;
@@ -249,10 +289,13 @@ exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
   // Alter geo name to be s3 key friendly (all non alphanumeric become -)
   const geoName = makeS3Key(ctx, rawGeoName);
 
+  unwindStack(ctx.process, 'lookupCleanGeoName');
   return { geoid, geoName };
 };
 
 exports.getSplittableDownloads = async function (ctx, geoid) {
+  ctx.process.push('getSplittableDownloads');
+
   let query;
 
   if (geoid) {
@@ -265,18 +308,25 @@ exports.getSplittableDownloads = async function (ctx, geoid) {
     throw new Error(`Problem running getSplittableDownlods Query`);
   }
 
+  unwindStack(ctx.process, 'getSplittableDownloads');
   return { rows: query.records };
 };
 
 exports.getCountiesByState = async function (ctx, geoid) {
+  ctx.process.push('getCountiesByState');
+
   const query = await queryAllCountiesFromState(ctx, geoid);
   if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
   }
+
+  unwindStack(ctx.process, 'getCountiesByState');
   return query.records;
 };
 
 exports.querySourceNames = async function (ctx, sourceName) {
+  ctx.process.push('querySourceNames');
+
   // take root of http source, or domain of email sources
 
   // figure if email or webpage
@@ -300,5 +350,20 @@ exports.querySourceNames = async function (ctx, sourceName) {
   if (!query) {
     throw new Error(`Problem running querySourceNames Query`);
   }
+
+  unwindStack(ctx.process, 'querySourceNames');
   return query.records;
+};
+
+exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
+  ctx.process.push('initiateDatabaseHeartbeat');
+
+  let interval = setInterval(() => {
+    // meant to be non-blocking
+    ctx.log.info('database keepalive initiated...');
+    acquireConnection(ctx);
+  }, seconds * 1000);
+
+  unwindStack(ctx.process, 'initiateDatabaseHeartbeat');
+  return interval;
 };

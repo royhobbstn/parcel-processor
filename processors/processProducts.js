@@ -8,11 +8,16 @@ const {
   referenceIdLength,
   productOrigins,
   s3deleteType,
+  messageTypes,
 } = require('../util/constants');
 const { acquireConnection } = require('../util/wrapQuery');
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
 const { putFileToS3, streamS3toFileSystem, putTextToS3, s3Sync } = require('../util/s3Operations');
-const { queryCreateProductRecord, checkForProducts } = require('../util/queries');
+const {
+  queryCreateProductRecord,
+  checkForProducts,
+  createLogfileRecord,
+} = require('../util/queries');
 const {
   convertToFormat,
   spawnTippecane,
@@ -23,8 +28,11 @@ const {
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, getMaxDirectoryLevel, createDirectories } = require('../util/filesystemUtil');
+const { unwindStack } = require('../util/misc');
 
 exports.processProducts = async function (ctx, data) {
+  ctx.process.push('processProducts');
+
   await acquireConnection(ctx);
 
   await createDirectories(ctx, [
@@ -58,7 +66,7 @@ exports.processProducts = async function (ctx, data) {
   // };
 
   ctx.messageId = data.Messages[0].MessageId;
-  ctx.type = 'product';
+  ctx.type = messageTypes.PRODUCT;
   const messagePayload = JSON.parse(data.Messages[0].Body);
   ctx.log.info('Processing Message', { messagePayload });
   ctx.isDryRun = messagePayload.dryRun;
@@ -161,7 +169,7 @@ exports.processProducts = async function (ctx, data) {
         });
         ctx.log.info(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
 
-        await queryCreateProductRecord(
+        const product_id = await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -172,6 +180,15 @@ exports.processProducts = async function (ctx, data) {
           `${productKeyGeoJSON}.geojson`,
         );
         ctx.log.info(`created geoJSON product record.  ref: ${individualRefGeoJson}`);
+
+        await createLogfileRecord(
+          ctx,
+          product_id,
+          ctx.messageId,
+          JSON.stringify(messagePayload),
+          ctx.type,
+        );
+        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       // unlike in processSort, we won't let a failure in a product creation
@@ -227,7 +244,7 @@ exports.processProducts = async function (ctx, data) {
         });
         ctx.log.info(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
 
-        await queryCreateProductRecord(
+        const product_id = await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -238,6 +255,15 @@ exports.processProducts = async function (ctx, data) {
           `${productKeyGPKG}.gpkg`,
         );
         ctx.log.info(`created GPKG product record.  ref: ${individualRefGPKG}`);
+
+        await createLogfileRecord(
+          ctx,
+          product_id,
+          ctx.messageId,
+          JSON.stringify(messagePayload),
+          ctx.type,
+        );
+        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       await removeS3Files(ctx, cleanupS3);
@@ -288,7 +314,7 @@ exports.processProducts = async function (ctx, data) {
         });
         ctx.log.info(`uploaded SHP file to S3  key: ${productKeySHP}`);
 
-        await queryCreateProductRecord(
+        const product_id = await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -299,6 +325,15 @@ exports.processProducts = async function (ctx, data) {
           `${productKeySHP}-shp.zip`,
         );
         ctx.log.info(`created SHP product record.  ref: ${individualRefSHP}`);
+
+        await createLogfileRecord(
+          ctx,
+          product_id,
+          ctx.messageId,
+          JSON.stringify(messagePayload),
+          ctx.type,
+        );
+        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       await removeS3Files(ctx, cleanupS3);
@@ -378,7 +413,7 @@ exports.processProducts = async function (ctx, data) {
         );
         ctx.log.info(`uploaded TILES meta file to S3.  Dir: ${dirName}/info.json`);
 
-        await queryCreateProductRecord(
+        const product_id = await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -389,6 +424,15 @@ exports.processProducts = async function (ctx, data) {
           dirName,
         );
         ctx.log.info(`created TILES product record.  ref: ${productRefTiles}`);
+
+        await createLogfileRecord(
+          ctx,
+          product_id,
+          ctx.messageId,
+          JSON.stringify(messagePayload),
+          ctx.type,
+        );
+        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       await removeS3Files(ctx, cleanupS3);
@@ -405,4 +449,6 @@ exports.processProducts = async function (ctx, data) {
   if (caughtError) {
     throw new Error('There were issues with one or more products.  See logs.');
   }
+
+  unwindStack(ctx.process, 'processProducts');
 };
