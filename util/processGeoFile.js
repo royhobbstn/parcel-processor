@@ -396,12 +396,6 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
         }
         writeStreams[prefix].write(JSON.stringify(copy) + '\n', 'utf8');
 
-        fs.appendFileSync(
-          `${tilesDir}/attributes/${tileInfoPrefix}cl_${prefix}.ndjson`,
-          JSON.stringify(copy) + '\n',
-          'utf8',
-        );
-
         transformed++;
         if (transformed % 10000 === 0) {
           await sleep(50);
