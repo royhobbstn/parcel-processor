@@ -368,13 +368,36 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 
     let transformed = 0;
 
+    const writeStreams = {};
+    const writePromises = [];
+
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
         const copy = { ...obj.properties };
         delete copy[clusterPrefix]; // filter out clusterID property in stringified JSON
+        const prefix = obj.properties[clusterPrefix];
+
+        if (!writeStreams[prefix]) {
+          writeStreams[prefix] = fs.createWriteStream(
+            `${tilesDir}/attributes/${tileInfoPrefix}cl_${prefix}.ndjson`,
+          );
+          writePromises.push(
+            new Promise((resolve, reject) => {
+              writeStreams[prefix].on('error', err => {
+                ctx.log.error(`error writing stream`, { error: err.message, stack: err.stack });
+                return reject(err);
+              });
+              writeStreams[prefix].on('finish', () => {
+                return resolve();
+              });
+            }),
+          );
+        }
+        writeStreams[prefix].write(JSON.stringify(copy) + '\n', 'utf8');
+
         fs.appendFileSync(
-          `${tilesDir}/attributes/${tileInfoPrefix}cl_${obj.properties[clusterPrefix]}.ndjson`,
+          `${tilesDir}/attributes/${tileInfoPrefix}cl_${prefix}.ndjson`,
           JSON.stringify(copy) + '\n',
           'utf8',
         );
@@ -389,10 +412,28 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
         reject(err);
       })
-      .on('end', end => {
+      .on('end', async end => {
         ctx.log.info(transformed + ' records processed');
-        unwindStack(ctx.process, 'writeTileAttributes');
-        resolve('end');
+
+        ctx.log.info('waiting for streams to finish writing');
+
+        // for each stream, close it.
+
+        ctx.log.info('writeStream keys: ', { keys: Object.keys(writeStreams) });
+
+        Object.keys(writeStreams).forEach(key => {
+          writeStreams[key].end();
+        });
+
+        await Promise.all(writePromises)
+          .then(() => {
+            ctx.log.info('write streams have all closed successfully');
+            unwindStack(ctx.process, 'writeTileAttributes');
+            resolve('end');
+          })
+          .catch(err => {
+            reject(err);
+          });
       });
   });
 };
