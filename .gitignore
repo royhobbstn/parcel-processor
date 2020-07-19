@@ -29,3 +29,5 @@ staging
 
 test/*.ndgeojson
 test/*.json
+
+database_data.json

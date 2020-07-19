@@ -234,9 +234,11 @@ exports.cleanEFS = async function (ctx) {
     const dir = path.join(directories.root, entry);
     const stats = fs.statSync(dir);
 
-    const birthTime = stats.birthtimeMs;
+    const modifiedTime = stats.mtimeMs;
     const currentTime = new Date().getTime();
-    const duration = (currentTime - birthTime) / 1000 / 60 / 60;
+    const duration = (currentTime - modifiedTime) / 1000 / 60 / 60;
+
+    ctx.log.info('clean efs dir check: ', { modifiedTime, currentTime, duration });
 
     // if older than a day
     if (duration > 24) {

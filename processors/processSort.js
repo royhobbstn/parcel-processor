@@ -162,7 +162,7 @@ async function processSort(ctx, data) {
   async function processLine(ctx, obj) {
     counter++;
 
-    if (counter % 1000 === 0) {
+    if (counter % 10000 === 0) {
       ctx.log.info(counter);
     }
 

@@ -67,6 +67,22 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
       .forEach(f => {
         const value = row.properties[f];
         const type = typeof value;
+
+        if (!this.fields[f]) {
+          // a field was missed previous because it was null or undefined
+          this.fields[f] = {
+            types: [],
+            uniques: {},
+            mean: 0,
+            max: -Infinity,
+            min: Infinity,
+            numCount: 0,
+            strCount: 0,
+            IDField: false,
+            IDSample: [],
+          };
+        }
+
         const types = this.fields[f].types;
 
         if (type === 'string' || type === 'number') {
