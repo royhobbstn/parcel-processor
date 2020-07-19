@@ -235,3 +235,42 @@ exports.searchLogsByReference = function (ctx, ref) {
     parameters: { ref },
   });
 };
+
+exports.getDownloadsData = async function (ctx) {
+  ctx.process.push('getDownloadsData');
+  const query = await slsAuroraClient.query({
+    sql: 'SELECT download_id, source_id, created, download_ref, raw_key FROM downloads',
+  });
+  unwindStack(ctx.process, 'getDownloadsData');
+  return query.records;
+};
+
+exports.getSourceData = async function (ctx) {
+  ctx.process.push('getSourceData');
+  const query = await slsAuroraClient.query({
+    sql:
+      'SELECT sources.source_id, sources.source_name, sources.source_type, source_checks.last_checked, source_checks.disposition FROM sources join source_checks ON sources.source_id = source_checks.source_id',
+  });
+  unwindStack(ctx.process, 'getSourceData');
+  return query.records;
+};
+
+exports.getProductsData = async function (ctx) {
+  ctx.process.push('getProductsData');
+  const query = await slsAuroraClient.query({
+    sql:
+      'SELECT product_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key, download_id FROM products',
+  });
+  unwindStack(ctx.process, 'getProductsData');
+  return query.records;
+};
+
+exports.getGeoIdentifiersData = async function (ctx) {
+  ctx.process.push('getGeoIdentifiersData');
+  const query = await slsAuroraClient.query({
+    sql:
+      'SELECT geoid, geoname, sumlev FROM geographic_identifiers WHERE geoid IN (SELECT DISTINCT geoid FROM products)',
+  });
+  unwindStack(ctx.process, 'getGeoIdentifiersData');
+  return query.records;
+};

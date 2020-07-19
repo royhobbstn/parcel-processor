@@ -26,6 +26,8 @@
     "winston": "^3.3.0"
   },
   "scripts": {
+    "update-site-data-dev": "NODE_ENV=development node site_data_run_from_npm_script.js",
+    "update-site-data-prod": "NODE_ENV=production node site_data_run_from_npm_script.js",
     "app-server-test": "NODE_ENV=test node app_run_from_npm_script.js",
     "app-server-dev": "NODE_ENV=development node app_run_from_npm_script.js",
     "app-server-prod": "NODE_ENV=production node app_run_from_npm_script.js",
