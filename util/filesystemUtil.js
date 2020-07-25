@@ -209,22 +209,6 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
   });
 };
 
-exports.getMaxDirectoryLevel = function (ctx, dir) {
-  ctx.process.push('getMaxDirectoryLevel');
-
-  const dirs = fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => parseInt(dirent.name));
-
-  ctx.log.info('Directories', { dirs });
-
-  ctx.log.info(Math.max(...dirs));
-
-  unwindStack(ctx.process, 'zipShapefile');
-  return Math.max(...dirs);
-};
-
 exports.cleanEFS = async function (ctx) {
   ctx.process.push('cleanEFS');
 

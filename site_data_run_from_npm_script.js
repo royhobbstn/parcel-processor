@@ -68,22 +68,14 @@ async function main() {
         created: downloads[download_id].created,
         download_ref: downloads[download_id].download_ref,
         raw_key: downloads[download_id].raw_key,
-        products: {},
-      };
-    }
-
-    const product_ref = row.product_ref;
-
-    if (!data[geoid].sources[source_id].downloads[download_id].products[product_ref]) {
-      data[geoid].sources[source_id].downloads[download_id].products[product_ref] = {
-        product_ref,
-        product_origin: row.product_origin,
-        product_types: [],
+        products: [],
       };
     }
 
     // push product into proper place
-    data[geoid].sources[source_id].downloads[download_id].products[product_ref].product_types.push({
+    data[geoid].sources[source_id].downloads[download_id].products.push({
+      product_ref: row.product_ref,
+      product_origin: row.product_origin,
       product_id: row.product_id,
       product_individual_ref: row.individual_ref,
       product_type: row.product_type,
