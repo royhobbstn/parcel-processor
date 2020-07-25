@@ -517,3 +517,27 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
       });
   });
 };
+
+exports.readTippecanoeMetadata = async function (ctx, metadataFile) {
+  ctx.process.push('readTippecanoeMetadata');
+  let metadataContents;
+
+  try {
+    metadataContents = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+  } catch (err) {
+    ctx.log.error(`Error reading tippecanoe metadata file from disk.  Path: ${metadataFile}`);
+    throw err;
+  }
+
+  try {
+    // delete file so it doesnt get synced to S3
+    fs.unlinkSync(metadataFile);
+  } catch (err) {
+    ctx.log.warn(
+      `Proble deleting tippecanoe metadata file from disk.  Path ${metadataFile}. Not critical.  Will continue. `,
+    );
+  }
+
+  unwindStack(ctx.process, 'readTippecanoeMetadata');
+  return metadataContents;
+};
