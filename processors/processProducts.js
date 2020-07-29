@@ -25,9 +25,10 @@ const {
   addClusterIdToGeoData,
   createNdGeoJsonWithClusterId,
   extractPointsFromNdGeoJson,
+  readTippecanoeMetadata,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
-const { zipShapefile, getMaxDirectoryLevel, createDirectories } = require('../util/filesystemUtil');
+const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
 const { unwindStack } = require('../util/misc');
 
 exports.processProducts = async function (ctx, data) {
@@ -386,10 +387,17 @@ exports.processProducts = async function (ctx, data) {
       // todo include cluster_id as property in tippecanoe
       // todo logs here
       const commandInput = await spawnTippecane(ctx, tilesDir, derivativePath);
-      const maxZoom = getMaxDirectoryLevel(ctx, tilesDir);
       await writeTileAttributes(ctx, derivativePath, tilesDir);
       await gzipTileAttributes(ctx, `${tilesDir}/attributes`);
-      const metadata = { ...commandInput, maxZoom, ...meta, processed: new Date().toISOString() };
+
+      const generatedMetadata = await readTippecanoeMetadata(ctx, `${tilesDir}/metadata.json`);
+
+      const metadata = {
+        ...commandInput,
+        ...meta,
+        processed: new Date().toISOString(),
+        generatedMetadata,
+      };
 
       // sync tiles
       if (!isDryRun) {

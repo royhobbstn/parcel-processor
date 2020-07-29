@@ -175,19 +175,22 @@ exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
   ctx.process.push('addClusterIdToGeoData');
 
   // write cluster-*(.ndgeojson) with a cluster id (to be used for making tiles)
+  ctx.log.info('adding clusterId to GeoData using KMeans');
 
   const featureCount = points.length;
   const numberOfClusters = Math.ceil((featureCount * propertyCount) / 30000);
   const clustered = clustersKmeans(ctx, turf.featureCollection(points), { numberOfClusters });
+  ctx.log.info('finished clustering');
 
   // create a master lookup of __po_id to __po_cl  (idPrefix to clusterPrefix)
   const lookup = {};
 
   clustered.features.forEach((feature, idx) => {
+    if (idx % 10000 === 0) {
+      ctx.log.info(`creating lookup, feature # ${idx}`);
+    }
     lookup[feature.properties[idPrefix]] = feature.properties.cluster;
   });
-
-  ctx.process.pop();
 
   unwindStack(ctx.process, 'addClusterIdToGeoData');
   return lookup;
@@ -323,7 +326,7 @@ exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
       '-pS',
       '-D10',
       '-M',
-      '500000',
+      '512000',
       '--coalesce-densest-as-needed',
       '--extend-zooms-if-still-dropping',
       `${derivativePath}.ndgeojson`,
@@ -365,16 +368,33 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
 
     let transformed = 0;
 
+    const writeStreams = {};
+    const writePromises = [];
+
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
         const copy = { ...obj.properties };
         delete copy[clusterPrefix]; // filter out clusterID property in stringified JSON
-        fs.appendFileSync(
-          `${tilesDir}/attributes/${tileInfoPrefix}cl_${obj.properties[clusterPrefix]}.ndjson`,
-          JSON.stringify(copy) + '\n',
-          'utf8',
-        );
+        const prefix = obj.properties[clusterPrefix];
+
+        if (!writeStreams[prefix]) {
+          writeStreams[prefix] = fs.createWriteStream(
+            `${tilesDir}/attributes/${tileInfoPrefix}cl_${prefix}.ndjson`,
+          );
+          writePromises.push(
+            new Promise((resolve, reject) => {
+              writeStreams[prefix].on('error', err => {
+                ctx.log.error(`error writing stream`, { error: err.message, stack: err.stack });
+                return reject(err);
+              });
+              writeStreams[prefix].on('finish', () => {
+                return resolve();
+              });
+            }),
+          );
+        }
+        writeStreams[prefix].write(JSON.stringify(copy) + '\n', 'utf8');
 
         transformed++;
         if (transformed % 10000 === 0) {
@@ -386,10 +406,28 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
         reject(err);
       })
-      .on('end', end => {
+      .on('end', async end => {
         ctx.log.info(transformed + ' records processed');
-        unwindStack(ctx.process, 'writeTileAttributes');
-        resolve('end');
+
+        ctx.log.info('waiting for streams to finish writing');
+
+        // for each stream, close it.
+
+        ctx.log.info('writeStream keys: ', { keys: Object.keys(writeStreams) });
+
+        Object.keys(writeStreams).forEach(key => {
+          writeStreams[key].end();
+        });
+
+        await Promise.all(writePromises)
+          .then(() => {
+            ctx.log.info('write streams have all closed successfully');
+            unwindStack(ctx.process, 'writeTileAttributes');
+            resolve('end');
+          })
+          .catch(err => {
+            reject(err);
+          });
       });
   });
 };
@@ -439,12 +477,20 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
   ctx.process.push('createNdGeoJsonWithClusterId');
 
   return new Promise((resolve, reject) => {
-    ctx.log.info('creating derivative ndgeojson with clusterId...');
+    ctx.log.info('createNdGeoJsonWithClusterId: creating derivative ndgeojson with clusterId...');
 
     let transformed = 0;
-    ctx.log.info('createNdGeoJsonWithClusterId');
-    ctx.log.info({ outputPath });
+
+    ctx.log.info('outputPath:', { outputPath });
     const derivativePath = `${outputPath}-cluster`;
+
+    const writer = fs.createWriteStream(`${derivativePath}.ndgeojson`);
+
+    writer.on('finish', () => {
+      ctx.log.info(`finished writing ${derivativePath}.ndgeojson`);
+      unwindStack(ctx.process, 'createNdGeoJsonWithClusterId');
+      return resolve(derivativePath);
+    });
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
       .pipe(ndjson.parse())
@@ -452,10 +498,10 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
         // add clusterId
         obj.properties = { ...obj.properties, [clusterPrefix]: lookup[obj.properties[idPrefix]] };
 
-        fs.appendFileSync(`${derivativePath}.ndgeojson`, JSON.stringify(obj) + '\n', 'utf8');
+        writer.write(JSON.stringify(obj) + '\n', 'utf8');
 
         transformed++;
-        if (transformed % 10000 === 0) {
+        if (transformed % 1000 === 0) {
           await sleep(50);
           ctx.log.info(transformed + ' records processed');
         }
@@ -465,9 +511,33 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
         reject(err);
       })
       .on('end', end => {
+        ctx.log.info('end', { end });
         ctx.log.info(transformed + ' records processed');
-        unwindStack(ctx.process, 'createNdGeoJsonWithClusterId');
-        resolve(derivativePath);
+        writer.end();
       });
   });
+};
+
+exports.readTippecanoeMetadata = async function (ctx, metadataFile) {
+  ctx.process.push('readTippecanoeMetadata');
+  let metadataContents;
+
+  try {
+    metadataContents = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+  } catch (err) {
+    ctx.log.error(`Error reading tippecanoe metadata file from disk.  Path: ${metadataFile}`);
+    throw err;
+  }
+
+  try {
+    // delete file so it doesnt get synced to S3
+    fs.unlinkSync(metadataFile);
+  } catch (err) {
+    ctx.log.warn(
+      `Proble deleting tippecanoe metadata file from disk.  Path ${metadataFile}. Not critical.  Will continue. `,
+    );
+  }
+
+  unwindStack(ctx.process, 'readTippecanoeMetadata');
+  return metadataContents;
 };

@@ -61,12 +61,13 @@ function collapseUnzippedDir(ctx) {
       const subDirectory = `${directories.unzippedDir + ctx.directoryId}/${file}`;
       ctx.log.info(`Moving contents of folder: ${subDirectory} into base folder: ${root}`);
       const arrayOfSubDirectoryFiles = fs.readdirSync(subDirectory);
+
+      // add move-prefix to avoid potential filename collision with identical files (or identically named files) in the lower directory
+      const prefix = generateRef(ctx, 5);
       for (let subFile of arrayOfSubDirectoryFiles) {
-        // add move-prefix to avoid potential filename collision with identical files (or identically named files) in the lower directory
-        const prefix = generateRef(ctx, 5);
         fsExtra.moveSync(`${subDirectory}/${subFile}`, `${root}/${prefix}-${subFile}`);
+        movedFlag = true;
       }
-      movedFlag = true;
     }
   }
 
@@ -94,11 +95,11 @@ exports.checkForFileType = function (ctx) {
     const gdbFilenames = new Set();
 
     arrayOfFiles.forEach(file => {
-      if (file.includes('.shp')) {
+      if (file.endsWith('.shp')) {
         const filename = file.split('.shp')[0];
         shpFilenames.add(filename);
       }
-      if (file.includes('.gdb')) {
+      if (file.endsWith('.gdb')) {
         gdbFilenames.add(file);
       }
     });
@@ -208,22 +209,6 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
   });
 };
 
-exports.getMaxDirectoryLevel = function (ctx, dir) {
-  ctx.process.push('getMaxDirectoryLevel');
-
-  const dirs = fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => parseInt(dirent.name));
-
-  ctx.log.info('Directories', { dirs });
-
-  ctx.log.info(Math.max(...dirs));
-
-  unwindStack(ctx.process, 'zipShapefile');
-  return Math.max(...dirs);
-};
-
 exports.cleanEFS = async function (ctx) {
   ctx.process.push('cleanEFS');
 
@@ -233,9 +218,11 @@ exports.cleanEFS = async function (ctx) {
     const dir = path.join(directories.root, entry);
     const stats = fs.statSync(dir);
 
-    const birthTime = stats.birthtimeMs;
+    const modifiedTime = stats.mtimeMs;
     const currentTime = new Date().getTime();
-    const duration = (currentTime - birthTime) / 1000 / 60 / 60;
+    const duration = (currentTime - modifiedTime) / 1000 / 60 / 60;
+
+    ctx.log.info('clean efs dir check: ', { modifiedTime, currentTime, duration });
 
     // if older than a day
     if (duration > 24) {

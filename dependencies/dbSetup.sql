@@ -31,6 +31,8 @@ CREATE table downloads(
 
 CREATE UNIQUE INDEX idx_checksum ON downloads(checksum);
 CREATE INDEX idx_dl_ref ON downloads(download_ref);
+CREATE INDEX idx_dl_srcid ON downloads(source_id);
+CREATE INDEX idx_dl_chkid ON downloads(check_id);
 
 CREATE table summary_levels(
    sumlev CHAR(3) NOT NULL PRIMARY KEY,
@@ -43,6 +45,8 @@ CREATE table geographic_identifiers(
    sumlev CHAR(3),
    CONSTRAINT fk_sumlev FOREIGN KEY (sumlev) REFERENCES summary_levels(sumlev)
 );
+
+CREATE INDEX idx_geoid_sumlev ON geographic_identifiers(sumlev);
 
 CREATE table products(
    product_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -60,6 +64,7 @@ CREATE table products(
 
 CREATE INDEX idx_pr_ref ON products(product_ref);
 CREATE INDEX idx_pr_geoid ON products(geoid);
+CREATE INDEX idx_pr_dlid ON products(download_id);
 
 CREATE table logfiles(
    logfile_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
