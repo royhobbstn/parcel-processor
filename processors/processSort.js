@@ -4,10 +4,9 @@ const config = require('config');
 const { default: axios } = require('axios');
 const httpAdapter = require('axios/lib/adapters/http');
 const fs = require('fs');
-const ndjson = require('ndjson');
 const { generateRef } = require('../util/crypto');
-const { StatContext } = require('../util/StatContext');
 const { unwindStack } = require('../util/misc');
+const { countStats } = require('../util/processGeoFile');
 const {
   directories,
   fileFormats,
@@ -340,34 +339,4 @@ function createFipsDetailsForCounty(ctx, geoid) {
     COUNTYFIPS: geoid.slice(2),
     PLACEFIPS: '',
   };
-}
-
-function countStats(ctx, path) {
-  ctx.process.push('countStats');
-
-  return new Promise((resolve, reject) => {
-    // read each file as ndjson and create stat object
-    let transformed = 0;
-    const statCounter = new StatContext(ctx);
-
-    fs.createReadStream(path)
-      .pipe(ndjson.parse())
-      .on('data', function (obj) {
-        statCounter.countStats(obj);
-
-        transformed++;
-        if (transformed % 10000 === 0) {
-          ctx.log.info(transformed + ' records processed');
-        }
-      })
-      .on('error', err => {
-        ctx.log.error('Error', { err: err.message, stack: err.stack });
-        return reject(err);
-      })
-      .on('end', async () => {
-        ctx.log.info(transformed + ' records processed');
-        unwindStack(ctx.process, 'countStats');
-        return resolve(statCounter.export());
-      });
-  });
 }

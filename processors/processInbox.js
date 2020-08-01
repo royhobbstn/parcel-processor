@@ -24,7 +24,7 @@ const {
   createDirectories,
   collapseUnzippedDir,
 } = require('../util/filesystemUtil');
-const { inspectFile, parseOutputPath, parseFile } = require('../util/processGeoFile');
+const { inspectFileExec, parseOutputPath, parseFileExec } = require('../util/processGeoFile');
 const {
   acquireConnection,
   doesHashExist,
@@ -145,15 +145,19 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
   // determines if file(s) are of type shapefile or geodatabase
   const [fileName, fileType] = await checkForFileType(ctx);
 
-  // open file && choose layer with OGR/GDAL
-  const [dataset, chosenLayer] = inspectFile(ctx, fileName, fileType);
+  // todo problem with geopackage as input here?
+  const inputPath = `${directories.unzippedDir + ctx.directoryId}/${
+    fileName + (fileType === 'shapefile' ? '.shp' : '')
+  }`;
+
+  const chosenLayerName = await inspectFileExec(ctx, inputPath);
 
   // determine where on the local disk the output geo products will be written
   const outputPath = parseOutputPath(ctx, fileName, fileType);
 
   // process all features and convert them to WGS84 ndgeojson
   // while gathering stats on the data.  Writes ndgeojson and stat files to output.
-  await parseFile(ctx, dataset, chosenLayer, fileName, outputPath);
+  await parseFileExec(ctx, outputPath, inputPath, chosenLayerName);
 
   const productRef = generateRef(ctx, referenceIdLength);
   const individualRef = generateRef(ctx, referenceIdLength);
@@ -217,7 +221,6 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
   return productSqsPayload;
 }
 
-// todo move
 // https://stackoverflow.com/a/61269447/8896489
 async function downloadFile(ctx, fileUrl, outputLocationPath) {
   ctx.process.push('downloadFile');

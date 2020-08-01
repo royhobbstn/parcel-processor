@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const spawn = require('child_process').spawn;
-const gdal = require('gdal-next');
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
 const { StatContext } = require('./StatContext');
@@ -16,60 +15,85 @@ const {
 const { clustersKmeans } = require('./modKmeans');
 const { sleep, unwindStack } = require('./misc');
 
-exports.inspectFile = function (ctx, fileName, fileType) {
-  ctx.process.push('inspectFile');
+function getOgrInfo(ctx, filePath) {
+  ctx.process.push('getOgrInfo');
+  let textOutput = '';
 
-  ctx.log.info(`Found file: ${fileName}`);
+  return new Promise((resolve, reject) => {
+    const application = 'ogrinfo';
+    const args = ['-ro', '-al', '-so', filePath];
 
-  ctx.log.info(
-    'opening from ' +
-      `${directories.unzippedDir + ctx.directoryId}/${
-        fileName + (fileType === 'shapefile' ? '.shp' : '')
-      }`,
-  );
+    const command = `${application} ${args.join(' ')}`;
+    ctx.log.info(`running: ${command}`);
 
-  const dataset = gdal.open(
-    `${directories.unzippedDir + ctx.directoryId}/${
-      fileName + (fileType === 'shapefile' ? '.shp' : '')
-    }`,
-  );
+    const proc = spawn(application, args);
 
-  const driver = dataset.driver;
-  const driver_metadata = driver.getMetadata();
+    proc.stdout.on('data', data => {
+      textOutput += data.toString();
+    });
 
-  if (driver_metadata.DCAP_VECTOR !== 'YES') {
-    ctx.log.error('Source file is not a valid vector file.');
-    throw new Error('Source file is not a valid vector file');
-  }
+    proc.stderr.on('data', data => {
+      ctx.log.warn(data.toString());
+    });
 
-  ctx.log.info(`Driver = ${driver.description}`);
+    proc.on('error', err => {
+      ctx.log.error('Error', { err: err.message, stack: err.stack });
+      return reject(err);
+    });
 
-  let total_layers = 0; // iterator for layer labels
+    proc.on('close', code => {
+      ctx.log.info(`completed gathering ogrinfo.`);
+      unwindStack(ctx.process, 'getOgrInfo');
+      ctx.log.info('command', { command });
+      ctx.log.info('ogrinfo', { textOutput });
+      return resolve(textOutput);
+    });
+  });
+}
 
-  // print out info for each layer in file
-  const layerSelection = dataset.layers
-    .map((layer, index) => {
-      ctx.log.info(`#${total_layers++}: ${layer.name}`);
-      ctx.log.info(`  Geometry Type = ${gdal.Geometry.getName(layer.geomType)}`);
-      ctx.log.info(
-        `  Spatial Reference = ${
-          layer.srs ? layer.srs.toWKT().replace(/\"/g, "'") : 'no spatial reference defined'
-        }`,
-      );
-      ctx.log.info('  Fields: ');
-      layer.fields.forEach(field => {
-        ctx.log.info(`    -${field.name} (${field.type})`);
-      });
-      ctx.log.info(`  Feature Count = ${layer.features.count()}`);
-      return {
-        index,
-        type: gdal.Geometry.getName(layer.geomType),
-        name: layer.name,
-        count: layer.features.count(),
-      };
-    })
+function parseOgrOutput(ctx, textOutput) {
+  ctx.process.push('parseOgrOutput');
+
+  const layers = [];
+  let cursor = 0;
+
+  const LAYER_NAME = 'Layer name: ';
+  const GEOMETRY = 'Geometry: ';
+  const FEATURE_COUNT = 'Feature Count: ';
+
+  do {
+    const idxLN = textOutput.indexOf(LAYER_NAME, cursor);
+    if (idxLN === -1) {
+      break;
+    }
+    const brLN = textOutput.indexOf('\n', idxLN);
+    const layerName = textOutput.slice(idxLN + LAYER_NAME.length, brLN);
+    const idxG = textOutput.indexOf(GEOMETRY, brLN);
+    const brG = textOutput.indexOf('\n', idxG);
+    const geometry = textOutput.slice(idxG + GEOMETRY.length, brG);
+    const idxFC = textOutput.indexOf(FEATURE_COUNT, brG);
+    const brFC = textOutput.indexOf('\n', idxFC);
+    const featureCount = textOutput.slice(idxFC + FEATURE_COUNT.length, brFC);
+
+    layers.push({ type: geometry, name: layerName, count: Number(featureCount) });
+    cursor = brFC;
+  } while (true);
+
+  unwindStack(ctx.process, 'parseOgrOutput');
+  return layers;
+}
+
+exports.inspectFileExec = async function (ctx, inputPath) {
+  ctx.process.push('inspectFileExec');
+
+  ctx.log.info(`opening from ${inputPath}`);
+
+  const textOutput = await getOgrInfo(ctx, inputPath);
+
+  const layers = parseOgrOutput(ctx, textOutput);
+
+  const layerSelection = layers
     .filter(d => {
-      // 3D Measured Multi Polygon?  Really, West Virginia?
       return [
         '3D Measured Polygon',
         '3D Polygon',
@@ -91,85 +115,76 @@ exports.inspectFile = function (ctx, fileName, fileType) {
 
   ctx.log.info('chosen layer: ', layerSelection[0]);
 
-  const chosenLayer = layerSelection[0].index;
+  const chosenLayerName = layerSelection[0].name;
 
-  ctx.process.pop();
-  return [dataset, chosenLayer];
+  unwindStack(ctx.process, 'inspectFileExec');
+  return chosenLayerName;
 };
 
-exports.parseFile = function (ctx, dataset, chosenLayer, fileName, outputPath) {
-  ctx.process.push('parseFile');
+exports.parseFileExec = async function (ctx, outputPath, inputPath, chosenLayerName) {
+  ctx.process.push('parseFileExec');
 
-  return new Promise(async (resolve, reject) => {
-    let layer;
-    let transform;
-    try {
-      // setup coordinate projections
-      const inputSpatialRef = dataset.layers.get(chosenLayer).srs;
-      const outputSpatialRef = gdal.SpatialReference.fromEPSG(4326);
-      transform = new gdal.CoordinateTransformation(inputSpatialRef, outputSpatialRef);
-      layer = dataset.layers.get(chosenLayer);
-    } catch (err) {
-      ctx.log.error('Unknown problem reading table', { err: err.message, stack: err.stack });
-      ctx.log.error('Last GDAL Error: ', { last: gdal.lastError });
-      return reject(err);
-    }
+  // convert from whatever to newline delimited geojson
+  await convertToFormat(
+    ctx,
+    fileFormats.NDGEOJSON,
+    outputPath + '.temp',
+    inputPath,
+    chosenLayerName,
+  );
 
-    ctx.log.info(`processing file: ${fileName}`);
+  const stats = await countStats(ctx, outputPath + '.temp' + '.ndgeojson');
 
-    const statCounter = new StatContext(ctx);
-    let writeStream = fs.createWriteStream(`${outputPath}.ndgeojson`);
-    let counter = 0; // assign as parcel-outlet unique id
-    let errored = 0;
-    const geometryErrors = {
-      'Unable to .getGeometry() from feature': 0,
-      'Unable to .clone() geometry': 0,
-      'Unable to .transform() geometry': 0,
-      'Unable to convert geometry .toObject()': 0,
-    };
-    // the finish event is emitted when all data has been flushed from the stream
-    writeStream.on('finish', () => {
-      fs.writeFileSync(`${outputPath}.json`, JSON.stringify(statCounter.export()), 'utf8');
-      ctx.log.info(`wrote all ${statCounter.rowCount} rows to file: ${outputPath}.ndgeojson`);
-      ctx.log.info(`processed ${counter} features`);
-      ctx.log.info(`found ${errored} feature errors`);
-      ctx.log.info(`geometry error breakdown: `, { geometryErrors });
-      unwindStack(ctx.process, 'parseFile');
-      return resolve();
-    });
+  fs.writeFileSync(outputPath + '.json', JSON.stringify(stats), 'utf8');
 
-    // load features
-    var layerFeatures = layer.features;
-    var feat = null;
+  // add idPrefix to final copy of ndgeojson
+  await addUniqueIdNdjson(ctx, outputPath + '.temp' + '.ndgeojson', outputPath + '.ndgeojson');
 
-    // transform features
-    // this awkward loop is because reading individual features can error
-    // we want to ignore those errors and continue to write valid features
-    let cont = true;
-    do {
-      try {
-        feat = layerFeatures.next();
-        if (!feat) {
-          cont = false;
-          writeStream.end();
-        } else {
-          const parsedFeature = getGeoJsonFromGdalFeature(ctx, feat, transform, geometryErrors);
-          if (counter % 10000 === 0) {
-            ctx.log.info(counter + ' records processed');
-            await sleep(100);
-          }
-          counter++;
-          parsedFeature.properties[idPrefix] = counter;
-          statCounter.countStats(parsedFeature);
-          writeStream.write(JSON.stringify(parsedFeature) + '\n', 'utf8');
+  unwindStack(ctx.process, 'parseFileExec');
+  return;
+};
+
+function addUniqueIdNdjson(ctx, inputPath, outputPath) {
+  ctx.process.push('addUniqueIdNdjson');
+
+  return new Promise((resolve, reject) => {
+    let transformed = 0;
+
+    const writeStream = fs
+      .createWriteStream(outputPath)
+      .on('error', err => {
+        ctx.log.error('Error: ', { error: err.message, stack: err.stack });
+        return reject(err);
+      })
+      .on('finish', () => {
+        ctx.log.info(`processing complete. autoincrement id: ${idPrefix} added.`);
+        unwindStack(ctx.process, 'addUniqueIdNdjson');
+        return resolve();
+      });
+
+    fs.createReadStream(inputPath)
+      .pipe(ndjson.parse())
+      .on('data', function (obj) {
+        transformed++;
+
+        obj.properties[idPrefix] = transformed;
+
+        writeStream.write(JSON.stringify(obj) + '\n', 'utf8');
+
+        if (transformed % 10000 === 0) {
+          ctx.log.info(transformed + ' records read');
         }
-      } catch (err) {
-        ctx.log.error('Feature was ignored.', { err: err.message, stack: err.stack });
-        errored++;
-      }
-    } while (cont);
+      })
+      .on('error', err => {
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
+        return reject(err);
+      })
+      .on('end', async () => {
+        ctx.log.info(transformed + ' records read');
+        writeStream.end();
+      });
   });
-};
+}
 
 exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
   ctx.process.push('addClusterIdToGeoData');
@@ -202,7 +217,9 @@ function createPointFeature(ctx, parsedFeature) {
     center.properties[idPrefix] = parsedFeature.properties[idPrefix];
     return center;
   } catch (err) {
-    ctx.log.info('ignoring error creating point feature in:', { __po_id: parsedFeature.__po_id });
+    ctx.log.info('ignoring error creating point feature in:', {
+      [idPrefix]: parsedFeature[idPrefix],
+    });
     return null;
   }
 }
@@ -214,68 +231,30 @@ exports.parseOutputPath = function (ctx, fileName, fileType) {
   return outputPath;
 };
 
-function getGeoJsonFromGdalFeature(ctx, feature, coordTransform, geometryErrors) {
-  var geoJsonFeature = {
-    type: 'Feature',
-    properties: {},
-  };
+exports.convertToFormat = convertToFormat;
 
-  var geometry;
-  try {
-    geometry = feature.getGeometry();
-  } catch (err) {
-    geometryErrors['Unable to .getGeometry() from feature'] += 1;
-  }
-
-  var clone;
-  if (geometry) {
-    try {
-      clone = geometry.clone();
-    } catch (err) {
-      geometryErrors['Unable to .clone() geometry'] += 1;
-    }
-  }
-
-  if (geometry && clone) {
-    try {
-      clone.transform(coordTransform);
-    } catch (err) {
-      geometryErrors['Unable to .transform() geometry'] += 1;
-    }
-  }
-
-  var obj;
-  if (geometry && clone) {
-    try {
-      clone.swapXY(); // ugh, you would think .toObject would take care of this
-      obj = clone.toObject();
-    } catch (err) {
-      geometryErrors['Unable to convert geometry .toObject()'] += 1;
-    }
-  }
-
-  geoJsonFeature.geometry = obj || [];
-  geoJsonFeature.properties = feature.fields.toObject();
-
-  return geoJsonFeature;
-}
-
-exports.convertToFormat = function (ctx, format, outputPath) {
+function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerName = '') {
   ctx.process.push('convertToFormat');
   ctx.process.push(format.extension);
 
-  // convert from ndgeojson into geojson, gpkg, shp, etc
+  // convert from anything into ndgeojson, geojson, gpkg, shp, etc
 
   return new Promise((resolve, reject) => {
     const application = 'ogr2ogr';
     const args = [
+      '-skipfailures',
       '-f',
       format.driver,
       `${outputPath}.${format.extension}`,
-      `${outputPath}.ndgeojson`,
+      inputPath || `${outputPath}.ndgeojson`,
     ];
 
+    if (chosenLayerName) {
+      args.push(chosenLayerName);
+    }
+
     // geojson needs RFC option specified
+    // ndgeojson doesnt accept it.
     if (format.extension === fileFormats.GEOJSON.extension) {
       args.push('-lco', 'RFC7946=YES');
     }
@@ -306,7 +285,7 @@ exports.convertToFormat = function (ctx, format, outputPath) {
       return resolve({ command });
     });
   });
-};
+}
 
 exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
   ctx.process.push('spawnTippecane');
@@ -541,3 +520,35 @@ exports.readTippecanoeMetadata = async function (ctx, metadataFile) {
   unwindStack(ctx.process, 'readTippecanoeMetadata');
   return metadataContents;
 };
+
+exports.countStats = countStats;
+
+function countStats(ctx, path) {
+  ctx.process.push('countStats');
+
+  return new Promise((resolve, reject) => {
+    // read each file as ndjson and create stat object
+    let transformed = 0;
+    const statCounter = new StatContext(ctx);
+
+    fs.createReadStream(path)
+      .pipe(ndjson.parse())
+      .on('data', function (obj) {
+        statCounter.countStats(obj);
+
+        transformed++;
+        if (transformed % 10000 === 0) {
+          ctx.log.info(transformed + ' records processed');
+        }
+      })
+      .on('error', err => {
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
+        return reject(err);
+      })
+      .on('end', async () => {
+        ctx.log.info(transformed + ' records processed');
+        unwindStack(ctx.process, 'countStats');
+        return resolve(statCounter.export());
+      });
+  });
+}
