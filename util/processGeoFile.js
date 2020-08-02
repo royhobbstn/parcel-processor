@@ -243,6 +243,8 @@ function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerNam
     const application = 'ogr2ogr';
     const args = [
       '-skipfailures',
+      '-fieldTypeToString',
+      'DateTime',
       '-f',
       format.driver,
       `${outputPath}.${format.extension}`,

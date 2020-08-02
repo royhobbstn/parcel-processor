@@ -1,6 +1,7 @@
 // @ts-check
 
 const config = require('config');
+const path = require('path');
 const { default: axios } = require('axios');
 const httpAdapter = require('axios/lib/adapters/http');
 const fs = require('fs');
@@ -198,10 +199,10 @@ async function processSort(ctx, data) {
     }
 
     // ndgeojson file is a plain geoid with no file extension
-    const path = `${directories.subGeographiesDir + ctx.directoryId}/${file}`;
+    const basePath = `${directories.subGeographiesDir + ctx.directoryId}/${file}`;
     const statPath = `${directories.subGeographiesDir + ctx.directoryId}/${file}.json`;
 
-    const statExport = await countStats(ctx, path);
+    const statExport = await countStats(ctx, basePath);
     fs.writeFileSync(statPath, JSON.stringify(statExport), 'utf8');
 
     // create product ref
@@ -233,6 +234,7 @@ async function processSort(ctx, data) {
           statPath,
           'application/json',
           true,
+          false,
         );
 
         cleanupS3.push({
@@ -246,9 +248,10 @@ async function processSort(ctx, data) {
           ctx,
           config.get('Buckets.productsBucket'),
           `${productKey}.ndgeojson`,
-          path,
+          basePath,
           'application/geo+json-seq',
           true,
+          `attachment; filename="${path.basename(productKey)}.ndgeojson"`,
         );
 
         cleanupS3.push({

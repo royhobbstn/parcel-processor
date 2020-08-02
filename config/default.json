@@ -1,4 +1,5 @@
 {
+  "env": "",
   "ECS": {
     "taskDefinition": "",
     "logGroupName": ""
@@ -18,6 +19,14 @@
     "rawBucket": "",
     "productsBucket": "",
     "tilesBucket": "",
-    "logfilesBucket": ""
+    "logfilesBucket": "",
+    "websiteBucket": ""
+  },
+  "DataExport": {
+    "localPath": "",
+    "remotePath": ""
+  },
+  "Cloudfront": {
+    "websiteDistributionId": ""
   }
 }

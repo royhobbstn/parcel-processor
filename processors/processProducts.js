@@ -162,6 +162,7 @@ exports.processProducts = async function (ctx, data) {
           `${convertToFormatBase}.geojson`,
           'application/geo+json',
           true,
+          `attachment; filename="${path.basename(productKeyGeoJSON)}.geojson"`,
         );
         cleanupS3.push({
           bucket: config.get('Buckets.productsBucket'),
@@ -237,6 +238,7 @@ exports.processProducts = async function (ctx, data) {
           `${convertToFormatBase}.gpkg`,
           'application/geopackage+sqlite3',
           true,
+          `attachment; filename="${path.basename(productKeyGPKG)}.gpkg"`,
         );
         cleanupS3.push({
           bucket: config.get('Buckets.productsBucket'),
@@ -307,6 +309,7 @@ exports.processProducts = async function (ctx, data) {
           `${directories.outputDir + ctx.directoryId}/${path.parse(productKeySHP).base}-shp.zip`,
           'application/zip',
           false,
+          `attachment; filename="${path.basename(productKeySHP)}-shp.zip"`,
         );
         cleanupS3.push({
           bucket: config.get('Buckets.productsBucket'),

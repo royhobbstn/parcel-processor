@@ -1,5 +1,6 @@
 // @ts-check
 const fs = require('fs');
+const config = require('config');
 const { acquireConnection } = require('./util/wrapQuery');
 const {
   getDownloadsData,
@@ -7,6 +8,8 @@ const {
   getProductsData,
   getGeoIdentifiersData,
 } = require('./util/queries');
+const { putFileToS3 } = require('./util/s3Operations');
+const { invalidateFiles } = require('./util/cloudfrontOps');
 
 const ctx = { log: console, process: [] };
 
@@ -110,11 +113,34 @@ async function main() {
     });
   });
 
-  console.log(JSON.stringify(data, null, ' '));
+  fs.writeFileSync(config.get('DataExport.localPath'), JSON.stringify(data), 'utf8');
 
-  fs.writeFileSync('database_data.json', JSON.stringify(data, null, ' '), 'utf8');
-
-  //
+  // production - put data on server
+  if (config.get('env') === 'production') {
+    await putFileToS3(
+      ctx,
+      config.get('Buckets.websiteBucket'),
+      config.get('DataExport.remotePath'),
+      config.get('DataExport.localPath'),
+      'application/json',
+      true,
+      false,
+    );
+    //
+    await invalidateFiles(ctx, [`/${config.get('DataExport.remotePath')}`]);
+  } else {
+    // development reads data from local environment
+    fs.copyFileSync(
+      config.get('DataExport.localPath'),
+      `../parcel-outlet/public/${config.get('DataExport.remotePath')}`,
+    );
+  }
 }
 
-main();
+main()
+  .then(() => {
+    console.log('done');
+  })
+  .catch(err => {
+    console.error(err);
+  });

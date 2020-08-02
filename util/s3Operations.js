@@ -45,7 +45,15 @@ exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, use
   });
 };
 
-exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType, useGzip) {
+exports.putFileToS3 = function (
+  ctx,
+  bucket,
+  key,
+  filePathToUpload,
+  contentType,
+  useGzip,
+  contentDisposition,
+) {
   ctx.process.push('putFileToS3');
 
   return new Promise((resolve, reject) => {
@@ -64,7 +72,11 @@ exports.putFileToS3 = function (ctx, bucket, key, filePathToUpload, contentType,
       };
 
       if (useGzip) {
-        params = { ...params, ContentEncoding: 'gzip' };
+        params.ContentEncoding = 'gzip';
+      }
+
+      if (contentDisposition) {
+        params.ContentDisposition = contentDisposition;
       }
 
       return {

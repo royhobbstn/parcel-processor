@@ -52,6 +52,7 @@ async function uploadRawFileToS3(ctx, filePath, rawKey) {
     filePath,
     'application/zip',
     false,
+    `attachment; filename="${path.basename(rawKey)}"`,
   );
   unwindStack(ctx.process, 'uploadRawFileToS3');
 }

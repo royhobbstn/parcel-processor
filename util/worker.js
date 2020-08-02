@@ -59,6 +59,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
         ctx.logpath,
         'text/plain',
         true,
+        false,
       );
       // send email to myself if there was an error
       if (errorFlag) {
