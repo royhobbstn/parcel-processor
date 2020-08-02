@@ -222,13 +222,10 @@ exports.cleanEFS = async function (ctx) {
     const currentTime = new Date().getTime();
     const duration = (currentTime - modifiedTime) / 1000 / 60 / 60;
 
-    ctx.log.info('clean efs dir check: ', { modifiedTime, currentTime, duration });
-
-    // if older than a day
-    if (duration > 24) {
+    // if older than 4 hours
+    if (duration > 4) {
       try {
         await del(dir, { force: true });
-        ctx.log.info(`${dir} was old and is now deleted!`);
       } catch (err) {
         ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
       }

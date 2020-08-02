@@ -242,7 +242,6 @@ function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerNam
   return new Promise((resolve, reject) => {
     const application = 'ogr2ogr';
     const args = [
-      '-skipfailures',
       '-fieldTypeToString',
       'DateTime',
       '-f',
@@ -303,13 +302,12 @@ exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
       tilesDir,
       `--include=${idPrefix}`,
       `--include=${clusterPrefix}`,
-      '-zg',
       '-pS',
       '-D10',
       '-M',
       '512000',
       '--coalesce-densest-as-needed',
-      '--extend-zooms-if-still-dropping',
+      '--maximum-zoom=16',
       `${derivativePath}.ndgeojson`,
     ];
     const command = `${application} ${args.join(' ')}`;
