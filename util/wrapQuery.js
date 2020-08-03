@@ -324,6 +324,16 @@ exports.getCountiesByState = async function (ctx, geoid) {
   return query.records;
 };
 
+exports.querySourceNameExact = async function (ctx, sourceName) {
+  ctx.process.push('querySourceNameExact');
+  const query = await querySource(ctx, sourceName);
+  if (!query) {
+    throw new Error(`Problem running querySourceNameExact Query`);
+  }
+  unwindStack(ctx.process, 'querySourceNameExact');
+  return query.records;
+};
+
 exports.querySourceNames = async function (ctx, sourceName) {
   ctx.process.push('querySourceNames');
 

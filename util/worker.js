@@ -24,6 +24,9 @@ exports.createContext = function (processor) {
 exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) {
   ctx.process.push('runProcess');
 
+  ctx.log.info('ENV', { env: process.env.NODE_ENV });
+  ctx.log.info('task definition', { ecs_task_definition: config.get('ECS.taskDefinition') });
+
   const deleteParams = {
     QueueUrl: queueUrl,
     ReceiptHandle: messages.Messages[0].ReceiptHandle,

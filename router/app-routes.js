@@ -10,6 +10,7 @@ const {
   getSplittableDownloads,
   getCountiesByState,
   querySourceNames,
+  querySourceNameExact,
 } = require('../util/wrapQuery');
 const { searchLogsByType, searchLogsByGeoid, searchLogsByReference } = require('../util/queries');
 const { getObject } = require('../util/s3Operations');
@@ -255,6 +256,22 @@ exports.appRouter = async app => {
       await acquireConnection(ctx);
       const rows = await querySourceNames(ctx, sourceName);
       return res.json(rows);
+    } catch (err) {
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/checkSourceExists', async function (req, res) {
+    const ctx = { log, process: [] };
+    const sourceName = decodeURIComponent(req.query.sourceName);
+    try {
+      await acquireConnection(ctx);
+      const rows = await querySourceNameExact(ctx, sourceName);
+      if (rows.length) {
+        return res.json({ status: true });
+      } else {
+        return res.json({ status: false });
+      }
     } catch (err) {
       return res.status(500).send(err.message);
     }

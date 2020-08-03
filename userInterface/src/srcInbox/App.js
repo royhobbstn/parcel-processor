@@ -16,7 +16,7 @@ function App({ env }) {
   const [sourceStatus, updateSourceStatus] = useState(false);
   const [sourceList, updateSourceList] = useState(null);
 
-  const handleSubmit = (evt, data) => {
+  const handleSubmit = async (evt, data) => {
     // sendInboxSQS
 
     const isWebpage =
@@ -39,6 +39,15 @@ function App({ env }) {
     const COUNTYFIPS = sumlevVal === '050' ? geoidVal.slice(2) : sumlevVal === '040' ? '000' : '';
 
     const PLACEFIPS = sumlevVal === '160' ? geoidVal.slice(2) : '';
+
+    const sourceExists = await checkSourceExists(sourceVal);
+
+    if (!sourceExists) {
+      const result = window.confirm('This will create a new source.  Is that okay?');
+      if (!result) {
+        console.log('Operation cancelled');
+      }
+    }
 
     const payload = {
       sourceType,
@@ -75,8 +84,6 @@ function App({ env }) {
       .fetch(`http://localhost:4000/proxyHeadRequest?url=${window.encodeURIComponent(urlKeyVal)}`)
       .then(res => res.json())
       .then(data => {
-        console.log(data);
-        console.log(data.status);
         updateUrlKeyStatus(data.status);
       })
       .catch(() => {
@@ -184,6 +191,8 @@ function App({ env }) {
             data.value.includes('ftps://')
           ) {
             updateSourceStatus(true);
+          } else {
+            updateSourceStatus(false);
           }
         }}
       />
@@ -246,3 +255,14 @@ function App({ env }) {
 }
 
 export default App;
+
+function checkSourceExists(sourceName) {
+  return window
+    .fetch(
+      `http://localhost:4000/checkSourceExists?sourceName=${window.encodeURIComponent(sourceName)}`,
+    )
+    .then(res => res.json())
+    .then(data => {
+      return data.status;
+    });
+}
