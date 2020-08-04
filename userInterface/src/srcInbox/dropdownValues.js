@@ -52,3 +52,39 @@ export const summaryLevels = [
     value: '160',
   },
 ];
+
+export const queueEnvironments = [
+  {
+    key: 'test',
+    text: 'test',
+    value: 'test',
+  },
+  {
+    key: 'development',
+    text: 'development',
+    value: 'development',
+  },
+  {
+    key: 'production',
+    text: 'production',
+    value: 'production',
+  },
+];
+
+export const messageTypeOptions = [
+  {
+    key: 'inbox',
+    text: 'inbox',
+    value: 'inbox',
+  },
+  {
+    key: 'sort',
+    text: 'sort',
+    value: 'sort',
+  },
+  {
+    key: 'product',
+    text: 'product',
+    value: 'product',
+  },
+];

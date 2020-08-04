@@ -46,6 +46,7 @@ function App({ env }) {
       const result = window.confirm('This will create a new source.  Is that okay?');
       if (!result) {
         console.log('Operation cancelled');
+        return;
       }
     }
 

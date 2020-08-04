@@ -3,6 +3,7 @@
 const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
+const fs = require('fs');
 const config = require('config');
 const axios = require('axios').default;
 const {
@@ -302,23 +303,35 @@ exports.appRouter = async app => {
 
   app.post('/sendInboxSQS', async function (req, res) {
     const ctx = { log, process: [] };
-    const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
+    let inboxQueueUrl = config.get('SQS.inboxQueueUrl');
+    const envOverride = req.query.env;
+    if (envOverride) {
+      inboxQueueUrl = readSqsConfig(envOverride, 'inboxQueueUrl');
+    }
     const payload = req.body;
     return sendSQS(ctx, res, inboxQueueUrl, payload);
   });
 
   app.post('/sendSortSQS', (req, res) => {
     const ctx = { log, process: [] };
-    const sortQueueUrl = config.get('SQS.sortQueueUrl');
+    let sortQueueUrl = config.get('SQS.sortQueueUrl');
+    const envOverride = req.query.env;
+    if (envOverride) {
+      sortQueueUrl = readSqsConfig(envOverride, 'sortQueueUrl');
+    }
     const payload = req.body;
     return sendSQS(ctx, res, sortQueueUrl, payload);
   });
 
   app.post('/sendProductSQS', (req, res) => {
     const ctx = { log, process: [] };
-    const productsQueueUrl = config.get('SQS.productQueueUrl');
+    let productQueueUrl = config.get('SQS.productQueueUrl');
+    const envOverride = req.query.env;
+    if (envOverride) {
+      productQueueUrl = readSqsConfig(envOverride, 'productQueueUrl');
+    }
     const payload = req.body;
-    return sendSQS(ctx, res, productsQueueUrl, payload);
+    return sendSQS(ctx, res, productQueueUrl, payload);
   });
 };
 
@@ -389,4 +402,9 @@ async function readDlq(ctx, res, queueUrl) {
     ctx.log.error('Error reading DLQ', { error: err.message, stack: err.stack });
     return res.status(500).send('Error reading DLQ');
   }
+}
+
+function readSqsConfig(env, queueConfig) {
+  const config = fs.readFileSync(`./config/${env}.json`, 'utf8');
+  return JSON.parse(config).SQS[queueConfig];
 }
