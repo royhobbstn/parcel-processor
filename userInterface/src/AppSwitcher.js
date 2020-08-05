@@ -16,24 +16,6 @@ function AppSwitcher() {
   const [app, updateApp] = useState('');
   const [online, updateOnline] = useState('no'); // yes, no, trying
 
-  const checkEnv = () => {
-    if (app !== '') {
-      // maintain an active db connection (unless on homepage)
-      pingDB();
-    }
-
-    fetch(`http://localhost:4000/fetchEnv`)
-      .then(res => res.json())
-      .then(res => {
-        updateEnv(res.env);
-      })
-      .catch(err => {
-        updateEnv('down');
-        updateOnline('no');
-        console.error(err);
-      });
-  };
-
   const pingDB = () => {
     updateOnline('trying');
     fetch('http://localhost:4000/acquireConnection')
@@ -50,10 +32,30 @@ function AppSwitcher() {
   };
 
   useEffect(() => {
+    // this will be re-triggered with every change to this component
+
     let time;
     window.onload = resetTimer;
     document.onmousemove = resetTimer;
     document.onclick = resetTimer;
+
+    const checkEnv = () => {
+      if (app !== '') {
+        // maintain an active db connection (unless on homepage)
+        pingDB();
+      }
+
+      fetch(`http://localhost:4000/fetchEnv`)
+        .then(res => res.json())
+        .then(res => {
+          updateEnv(res.env);
+        })
+        .catch(err => {
+          updateEnv('down');
+          updateOnline('no');
+          console.error(err);
+        });
+    };
 
     function resetApp() {
       updateApp('');
@@ -70,7 +72,7 @@ function AppSwitcher() {
 
     // initial call
     checkEnv();
-  }, []);
+  }, [app]);
 
   return (
     <div style={{ padding: '20px' }}>
@@ -82,7 +84,6 @@ function AppSwitcher() {
           <Button
             style={{ width: '200px' }}
             onClick={() => {
-              pingDB();
               updateApp('inbox');
             }}
           >
@@ -93,7 +94,6 @@ function AppSwitcher() {
           <Button
             style={{ width: '200px' }}
             onClick={() => {
-              pingDB();
               updateApp('sort');
             }}
           >
@@ -104,7 +104,6 @@ function AppSwitcher() {
           <Button
             style={{ width: '200px' }}
             onClick={() => {
-              pingDB();
               updateApp('sqs');
             }}
           >
@@ -115,7 +114,6 @@ function AppSwitcher() {
           <Button
             style={{ width: '200px' }}
             onClick={() => {
-              pingDB();
               updateApp('dlq');
             }}
           >
@@ -126,7 +124,6 @@ function AppSwitcher() {
           <Button
             style={{ width: '200px' }}
             onClick={() => {
-              pingDB();
               updateApp('logs');
             }}
           >
@@ -137,7 +134,6 @@ function AppSwitcher() {
           <Button
             style={{ width: '200px' }}
             onClick={() => {
-              pingDB();
               updateApp('launch');
             }}
           >
