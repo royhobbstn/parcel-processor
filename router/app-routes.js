@@ -13,7 +13,12 @@ const {
   querySourceNames,
   querySourceNameExact,
 } = require('../util/wrapQuery');
-const { searchLogsByType, searchLogsByGeoid, searchLogsByReference } = require('../util/queries');
+const {
+  searchLogsByType,
+  searchLogsByGeoid,
+  searchLogsByReference,
+  getSQSMessagesByGeoidAndType,
+} = require('../util/queries');
 const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
 const {
@@ -332,6 +337,19 @@ exports.appRouter = async app => {
     }
     const payload = req.body;
     return sendSQS(ctx, res, productQueueUrl, payload);
+  });
+
+  app.get('/getSQSMessageBody', async (req, res) => {
+    const ctx = { log, process: [] };
+    const messageType = req.query.type;
+    const geoid = req.query.geoid;
+    try {
+      const rows = await getSQSMessagesByGeoidAndType(ctx, messageType, geoid);
+      return res.json(rows);
+    } catch (err) {
+      ctx.log.error('Error', { err: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
   });
 };
 

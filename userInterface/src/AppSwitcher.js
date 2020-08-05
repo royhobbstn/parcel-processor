@@ -17,7 +17,11 @@ function AppSwitcher() {
   const [online, updateOnline] = useState('no'); // yes, no, trying
 
   const checkEnv = () => {
-    // load possible sub-geographies from a given parent geography
+    if (app !== '') {
+      // maintain an active db connection (unless on homepage)
+      pingDB();
+    }
+
     fetch(`http://localhost:4000/fetchEnv`)
       .then(res => res.json())
       .then(res => {
@@ -62,7 +66,7 @@ function AppSwitcher() {
     }
 
     // ping server
-    setInterval(checkEnv, 1000 * 60 * 5);
+    setInterval(checkEnv, 1000 * 60 * 4);
 
     // initial call
     checkEnv();
@@ -97,12 +101,24 @@ function AppSwitcher() {
           </Button>
           <br />
           <br />
-          <Button style={{ width: '200px' }} onClick={() => updateApp('sqs')}>
+          <Button
+            style={{ width: '200px' }}
+            onClick={() => {
+              pingDB();
+              updateApp('sqs');
+            }}
+          >
             Send SQS Message
           </Button>
           <br />
           <br />
-          <Button style={{ width: '200px' }} onClick={() => updateApp('dlq')}>
+          <Button
+            style={{ width: '200px' }}
+            onClick={() => {
+              pingDB();
+              updateApp('dlq');
+            }}
+          >
             Replay DLQ Message
           </Button>
           <br />
@@ -121,6 +137,7 @@ function AppSwitcher() {
           <Button
             style={{ width: '200px' }}
             onClick={() => {
+              pingDB();
               updateApp('launch');
             }}
           >

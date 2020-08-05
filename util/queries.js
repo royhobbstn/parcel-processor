@@ -274,3 +274,14 @@ exports.getGeoIdentifiersData = async function (ctx) {
   unwindStack(ctx.process, 'getGeoIdentifiersData');
   return query.records;
 };
+
+exports.getSQSMessagesByGeoidAndType = async function (ctx, messageType, geoid) {
+  ctx.process.push('getSQSMessagesByGeoidAndType');
+  const query = await slsAuroraClient.query({
+    sql:
+      'SELECT logfiles.created, logfiles.message_id, logfiles.message_type, logfiles.message_body, products.geoid FROM logfiles JOIN products ON logfiles.product_id = products.product_id WHERE message_type=:messageType AND geoid LIKE :geoid ORDER BY logfiles.created DESC LIMIT 300',
+    parameters: { messageType, geoid: `%${geoid}%` },
+  });
+  unwindStack(ctx.process, 'getSQSMessagesByGeoidAndType');
+  return query.records;
+};

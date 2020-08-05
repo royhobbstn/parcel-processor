@@ -225,6 +225,8 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
 async function downloadFile(ctx, fileUrl, outputLocationPath) {
   ctx.process.push('downloadFile');
 
+  ctx.log.info('Downloading file: ', { file: fileUrl });
+
   const writer = fs.createWriteStream(outputLocationPath);
 
   return axios({
@@ -245,6 +247,7 @@ async function downloadFile(ctx, fileUrl, outputLocationPath) {
       });
       writer.on('close', () => {
         if (!error) {
+          ctx.log.info('File downloaded to: ', { outputLocationPath });
           unwindStack(ctx.process, 'downloadFile');
           resolve(true);
         }

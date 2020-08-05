@@ -1,7 +1,8 @@
 // @ts-check
 
 import React, { useState } from 'react';
-import { Dropdown, TextArea, Button, Grid, Input } from 'semantic-ui-react';
+import { Dropdown, TextArea, Button, Grid, Input, Table, Icon, Modal } from 'semantic-ui-react';
+
 import { sqsQueues, queueEnvironments, messageTypeOptions } from '../srcInbox/dropdownValues';
 
 function SendSQS({ env }) {
@@ -10,8 +11,51 @@ function SendSQS({ env }) {
   const [queueEnv, updateQueueEnv] = useState('');
   const [messageType, updateMessageType] = useState('');
   const [geodStartsWith, updateGeoidStartsWith] = useState('');
+  const [tableResults, updateTableResults] = useState([]);
 
-  const submitGeoidQuery = () => {};
+  const [messageBody, updateMessageBody] = useState('');
+  const [showMessageModal, updateShowMessageModal] = useState(false);
+
+  const [logText, updateLogText] = useState('');
+  const [showLogModal, updateShowLogModal] = useState(false);
+
+  const queryLogfile = (messageId, messageType) => {
+    fetch(`http://localhost:4000/getLogfile?messageId=${messageId}&messageType=${messageType}`)
+      .then(response => response.text())
+      .then(response => {
+        updateLogText(response);
+      })
+      .catch(err => {
+        console.log(err);
+        alert('Unable to find logfile.');
+      });
+  };
+
+  const submitGeoidQuery = () => {
+    if (!messageType) {
+      window.alert('Message Type Required');
+      return;
+    }
+
+    const fetchUrl = `http://localhost:4000/getSQSMessageBody?type=${messageType}&geoid=${geodStartsWith}`;
+
+    fetch(fetchUrl, {
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      method: 'GET',
+    })
+      .then(response => response.json())
+      .then(res => {
+        updateTableResults(res);
+      })
+      .catch(err => {
+        console.log(err);
+        updateTableResults([]);
+        alert('Error sending Query.');
+      });
+  };
 
   const handleSubmit = (evt, data) => {
     const fetchUrl = `http://localhost:4000/${queueSelection}?env=${queueEnv}`;
@@ -127,10 +171,117 @@ function SendSQS({ env }) {
             />
             <br />
             <br />
-            <br />
+            <div
+              style={{
+                height: '360px',
+                border: '1px dotted grey',
+                overflowY: 'scroll',
+                marginTop: '10px',
+              }}
+            >
+              <Table>
+                <Table.Header>
+                  <Table.Row>
+                    <Table.HeaderCell>Created</Table.HeaderCell>
+                    <Table.HeaderCell>SQS</Table.HeaderCell>
+                    <Table.HeaderCell>Log</Table.HeaderCell>
+                    <Table.HeaderCell>Geoid</Table.HeaderCell>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {tableResults.map(result => {
+                    return (
+                      <Table.Row
+                        key={result.created}
+                        onDoubleClick={() => {
+                          updatePayload(result.message_body);
+                        }}
+                      >
+                        <Table.Cell>{result.created}</Table.Cell>
+                        <Table.Cell>
+                          <Icon
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              updateMessageBody(result.message_body);
+                              updateShowMessageModal(true);
+                            }}
+                            name="sticky note"
+                          />
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Icon
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              queryLogfile(result.message_id, result.message_type);
+                              updateShowLogModal(true);
+                            }}
+                            name="list alternate outline"
+                          />
+                        </Table.Cell>
+                        <Table.Cell>{result.geoid}</Table.Cell>
+                      </Table.Row>
+                    );
+                  })}
+                </Table.Body>
+              </Table>
+            </div>
           </Grid.Column>
         </Grid.Row>
       </Grid>
+      <Modal open={showMessageModal}>
+        <Modal.Header>SQS Message</Modal.Header>
+        <div style={{ maxWidth: '800px', maxHeight: '450px', overflowY: 'scroll', margin: 'auto' }}>
+          <Modal.Content>
+            <pre style={{ margin: '20px', whiteSpace: 'pre-wrap' }}>
+              {JSON.stringify(JSON.parse(messageBody || '{}'), null, '  ')}
+            </pre>
+          </Modal.Content>
+        </div>
+        <Modal.Actions>
+          <Button
+            secondary
+            onClick={() => {
+              updateShowMessageModal(false);
+              updateMessageBody('');
+            }}
+          >
+            Close
+          </Button>
+        </Modal.Actions>
+      </Modal>
+      <Modal open={showLogModal}>
+        <Modal.Header>Process Logs</Modal.Header>
+        <div style={{ maxWidth: '800px', maxHeight: '450px', overflowY: 'scroll', margin: 'auto' }}>
+          <Modal.Content>
+            <Table style={{ fontFamily: 'monospace', fontSize: '11px' }}>
+              <Table.Header>
+                <Table.Row>
+                  <Table.HeaderCell>Line</Table.HeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {logText.split('\n').map((line, index) => {
+                  return (
+                    <Table.Row key={index}>
+                      <Table.Cell>{line}</Table.Cell>
+                    </Table.Row>
+                  );
+                })}
+              </Table.Body>
+            </Table>
+          </Modal.Content>
+        </div>
+        <Modal.Actions>
+          <Button
+            secondary
+            onClick={() => {
+              updateShowLogModal(false);
+            }}
+          >
+            Close
+          </Button>
+        </Modal.Actions>
+      </Modal>
     </div>
   );
 }
