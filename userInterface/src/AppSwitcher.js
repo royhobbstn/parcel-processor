@@ -8,8 +8,11 @@ import InboxApp from './srcInbox/App';
 import DlqReplayApp from './srcDlqReplay/App';
 import ViewLogsApp from './srcViewLogs/App';
 import LaunchApp from './srcLaunch/App';
+import DeleteApp from './srcDelete/App';
 
 import { Button } from 'semantic-ui-react';
+
+let time;
 
 function AppSwitcher() {
   const [env, updateEnv] = useState('down');
@@ -34,7 +37,6 @@ function AppSwitcher() {
   useEffect(() => {
     // this will be re-triggered with every change to this component
 
-    let time;
     window.onload = resetTimer;
     document.onmousemove = resetTimer;
     document.onclick = resetTimer;
@@ -67,11 +69,13 @@ function AppSwitcher() {
       time = setTimeout(resetApp, 1000 * 60 * 5);
     }
 
-    // ping server
-    setInterval(checkEnv, 1000 * 60 * 4);
+    if (!time) {
+      // ping server
+      setInterval(checkEnv, 1000 * 60 * 4);
 
-    // initial call
-    checkEnv();
+      // initial call
+      checkEnv();
+    }
   }, [app]);
 
   return (
@@ -139,6 +143,16 @@ function AppSwitcher() {
           >
             Launch
           </Button>
+          <br />
+          <br />
+          <Button
+            style={{ width: '200px' }}
+            onClick={() => {
+              updateApp('delete');
+            }}
+          >
+            Delete
+          </Button>
         </div>
       ) : null}
 
@@ -148,6 +162,7 @@ function AppSwitcher() {
       {app === 'dlq' ? <DlqReplayApp env={env} /> : null}
       {app === 'logs' ? <ViewLogsApp env={env} /> : null}
       {app === 'launch' ? <LaunchApp env={env} /> : null}
+      {app === 'delete' ? <DeleteApp env={env} /> : null}
     </div>
   );
 }

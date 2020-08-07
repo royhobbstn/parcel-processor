@@ -307,7 +307,7 @@ exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
       '-M',
       '512000',
       '--coalesce-densest-as-needed',
-      '--maximum-zoom=16',
+      '--maximum-zoom=12',
       `${derivativePath}.ndgeojson`,
     ];
     const command = `${application} ${args.join(' ')}`;

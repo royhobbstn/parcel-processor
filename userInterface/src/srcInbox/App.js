@@ -168,6 +168,7 @@ function App({ env }) {
         placeholder="Enter the file Download URL"
         value={urlKeyVal}
         onChange={(evt, data) => {
+          updateUrlKeyStatus(false);
           updateUrlKeyVal(data.value);
         }}
       />

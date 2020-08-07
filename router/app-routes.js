@@ -18,6 +18,8 @@ const {
   searchLogsByGeoid,
   searchLogsByReference,
   getSQSMessagesByGeoidAndType,
+  queryProductByIndividualRef,
+  queryProductsByProductRef,
 } = require('../util/queries');
 const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
@@ -345,6 +347,32 @@ exports.appRouter = async app => {
     const geoid = req.query.geoid;
     try {
       const rows = await getSQSMessagesByGeoidAndType(ctx, messageType, geoid);
+      return res.json(rows);
+    } catch (err) {
+      ctx.log.error('Error', { err: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/byProductIndividualRef', async (req, res) => {
+    const ctx = { log, process: [] };
+    const productIndividualRef = req.query.ref;
+    console.log({ productIndividualRef });
+    try {
+      const rows = await queryProductByIndividualRef(ctx, productIndividualRef);
+      return res.json(rows);
+    } catch (err) {
+      ctx.log.error('Error', { err: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/byProductRef', async (req, res) => {
+    const ctx = { log, process: [] };
+    const productRef = req.query.ref;
+    console.log({ productRef });
+    try {
+      const rows = await queryProductsByProductRef(ctx, productRef);
       return res.json(rows);
     } catch (err) {
       ctx.log.error('Error', { err: err.message, stack: err.stack });

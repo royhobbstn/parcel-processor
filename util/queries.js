@@ -285,3 +285,23 @@ exports.getSQSMessagesByGeoidAndType = async function (ctx, messageType, geoid) 
   unwindStack(ctx.process, 'getSQSMessagesByGeoidAndType');
   return query.records;
 };
+
+exports.queryProductByIndividualRef = async function (ctx, individualRef) {
+  ctx.process.push('queryProductByIndividualRef');
+  const query = await slsAuroraClient.query({
+    sql: 'SELECT * from products where individual_ref=:individualRef',
+    parameters: { individualRef },
+  });
+  unwindStack(ctx.process, 'queryProductByIndividualRef');
+  return query.records;
+};
+
+exports.queryProductsByProductRef = async function (ctx, productRef) {
+  ctx.process.push('queryProductsByProductRef');
+  const query = await slsAuroraClient.query({
+    sql: 'SELECT * from products where product_ref=:productRef',
+    parameters: { productRef },
+  });
+  unwindStack(ctx.process, 'queryProductsByProductRef');
+  return query.records;
+};
