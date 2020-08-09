@@ -20,6 +20,8 @@ const {
   getSQSMessagesByGeoidAndType,
   queryProductByIndividualRef,
   queryProductsByProductRef,
+  getProductsByDownloadRef,
+  getDownloadsByDownloadRef,
 } = require('../util/queries');
 const { getObject } = require('../util/s3Operations');
 const { log } = require('../util/logger');
@@ -33,6 +35,53 @@ const { getTaskInfo, runProcessorTask } = require('../util/ecsOperations');
 const { getTaskLogs } = require('../util/cloudwatchOps');
 
 exports.appRouter = async app => {
+  //
+  app.post('/deleteSelectedItems', async function (req, res) {
+    const ctx = { log, process: [] };
+    const items = req.body;
+    const output = [];
+    try {
+      for (let item of items.sort((a, z) => {
+        return a.priority - z.priority;
+      })) {
+        console.log(item);
+        //const response = await deleteItem(ctx, item);
+      }
+      return res.json(output);
+    } catch (err) {
+      ctx.log.error('Unable to delete item(s)', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/downloadsByDownloadRef', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    const downloadRef = req.query.ref;
+
+    try {
+      const products = await getDownloadsByDownloadRef(ctx, downloadRef);
+      return res.json(products);
+    } catch (err) {
+      ctx.log.error('Unable to retrieve downloads', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/productsByDownloadRef', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    const downloadRef = req.query.ref;
+
+    try {
+      const products = await getProductsByDownloadRef(ctx, downloadRef);
+      return res.json(products);
+    } catch (err) {
+      ctx.log.error('Unable to retrieve products', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
   app.get('/getTaskLogs', async function (req, res) {
     const ctx = { log, process: [] };
 

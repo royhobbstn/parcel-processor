@@ -10,33 +10,56 @@ function Delete({ env }) {
   const [busy, updateBusy] = useState(false);
   const [taskRecords, updateTaskRecords] = useState([]);
 
-  function byDownloadRef() {
+  async function byDownloadRef() {
     if (!inputVal) {
+      alert('No value specified for reference number!');
       return;
     }
-    //
+    updateTaskRecords([]);
     updateBusy(true);
 
-    // query sourceChecks
-    // query downloads
-    // query products
+    const downloads = fetch(
+      `http://localhost:4000/productsByDownloadRef?ref=${inputVal}`,
+    ).then(response => response.json());
+
+    const products = fetch(
+      `http://localhost:4000/downloadsByDownloadRef?ref=${inputVal}`,
+    ).then(response => response.json());
+
+    await Promise.all([downloads, products])
+      .then(res => {
+        updateTaskRecords([
+          ...mapToDbDeletes(res[0], false),
+          ...mapToS3Deletes(res[0], false),
+          ...mapDownloadsToDbDeletes(res[1]),
+          ...mapDownloadsToS3Deletes(res[1]),
+        ]);
+      })
+      .catch(err => {
+        console.log(err);
+        alert('Problem querying download ref records.');
+      })
+      .finally(() => {
+        updateBusy(false);
+      });
   }
 
   function byProductRef() {
     if (!inputVal) {
+      alert('No value specified for reference number!');
       return;
     }
+    updateTaskRecords([]);
     updateBusy(true);
     //
     fetch(`http://localhost:4000/byProductRef?ref=${inputVal}`)
       .then(response => response.json())
       .then(res => {
-        console.log(res);
         updateTaskRecords([...mapToDbDeletes(res, false), ...mapToS3Deletes(res, false)]);
       })
       .catch(err => {
         console.log(err);
-        alert('Problem query product individual records.');
+        alert('Problem querying product individual records.');
       })
       .finally(() => {
         updateBusy(false);
@@ -45,23 +68,70 @@ function Delete({ env }) {
 
   function byIndividualRef() {
     if (!inputVal) {
+      alert('No value specified for reference number!');
       return;
     }
+    updateTaskRecords([]);
     updateBusy(true);
     //
     fetch(`http://localhost:4000/byProductIndividualRef?ref=${inputVal}`)
       .then(response => response.json())
       .then(res => {
-        console.log(res);
         updateTaskRecords([...mapToDbDeletes(res, true), ...mapToS3Deletes(res, true)]);
       })
       .catch(err => {
         console.log(err);
-        alert('Problem query product individual records.');
+        alert('Problem querying product individual records.');
       })
       .finally(() => {
         updateBusy(false);
       });
+  }
+
+  function mapDownloadsToS3Deletes(arr) {
+    return arr.map(item => {
+      return {
+        task_name: 'raw_file',
+        table_name: '',
+        record_id: '',
+        product_type: '',
+        bucket_name: 'raw-data-po',
+        bucket_key: item.raw_key,
+        geoid: '',
+        env,
+        priority: 1,
+      };
+    });
+  }
+
+  function mapDownloadsToDbDeletes(arr) {
+    const deletes = [];
+    arr.forEach(item => {
+      deletes.push({
+        task_name: 'download_row',
+        table_name: 'downloads',
+        record_id: item.download_id,
+        product_type: '',
+        bucket_name: '',
+        bucket_key: '',
+        geoid: '',
+        env,
+        priority: 5,
+      });
+      deletes.push({
+        task_name: 'source-check_row',
+        table_name: 'sourceChecks',
+        record_id: item.check_id,
+        product_type: '',
+        bucket_name: '',
+        bucket_key: '',
+        geoid: '',
+        env,
+        priority: 4,
+      });
+    });
+
+    return deletes;
   }
 
   function mapToDbDeletes(arr, filterOutNdGeoJson) {
@@ -84,6 +154,7 @@ function Delete({ env }) {
           bucket_key: '',
           geoid: item.geoid,
           env,
+          priority: 3,
         });
         deletes.push({
           task_name: 'logfile_row',
@@ -95,6 +166,7 @@ function Delete({ env }) {
           bucket_key: '',
           geoid: item.geoid,
           env,
+          priority: 2,
         });
       });
 
@@ -102,15 +174,17 @@ function Delete({ env }) {
   }
 
   function mapToS3Deletes(arr, filterOutNdGeoJson) {
-    return arr
+    const s3deletes = [];
+
+    arr
       .filter(d => {
         if (filterOutNdGeoJson) {
           return d.product_type !== 'ndgeojson';
         }
         return true;
       })
-      .map(item => {
-        return {
+      .forEach(item => {
+        s3deletes.push({
           task_name: item.product_type === 'pbf' ? 'tile_directory' : 'product_file',
           table_name: '',
           record_id: '',
@@ -119,12 +193,54 @@ function Delete({ env }) {
           bucket_key: item.product_key,
           geoid: item.geoid,
           env,
-        };
+          priority: 1,
+        });
+
+        if (item.product_type === 'ndgeojson') {
+          // stat file
+          s3deletes.push({
+            task_name: 'stat_file',
+            table_name: '',
+            record_id: '',
+            product_type: item.product_type,
+            bucket_name: 'data-products-po',
+            bucket_key: item.product_key,
+            geoid: item.geoid,
+            env,
+            priority: 1,
+          });
+        }
       });
+
+    return s3deletes;
   }
 
   function confirmDelete() {
-    //
+    const countS3 = taskRecords.filter(d => d.bucket_name).length;
+
+    const confirmed = window.confirm(
+      `Are you sure you wnat to delete these ${
+        taskRecords.length - countS3
+      } database rows and ${countS3} S3 Objects?`,
+    );
+    const fetchUrl = `http://localhost:4000/deleteSelectedItems`;
+
+    fetch(fetchUrl, {
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      body: JSON.stringify(taskRecords),
+    })
+      .then(response => response.json())
+      .then(res => {
+        console.log(res);
+      })
+      .catch(err => {
+        console.log(err);
+        alert('Problem deleting selected items.');
+      });
   }
 
   function reset() {

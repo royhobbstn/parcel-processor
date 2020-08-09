@@ -305,3 +305,24 @@ exports.queryProductsByProductRef = async function (ctx, productRef) {
   unwindStack(ctx.process, 'queryProductsByProductRef');
   return query.records;
 };
+
+exports.getProductsByDownloadRef = async function (ctx, downloadRef) {
+  ctx.process.push('getProductsByDownloadRef');
+  const query = await slsAuroraClient.query({
+    sql:
+      'SELECT * from products JOIN downloads on products.download_id = downloads.download_id where download_ref=:downloadRef',
+    parameters: { downloadRef },
+  });
+  unwindStack(ctx.process, 'getProductsByDownloadRef');
+  return query.records;
+};
+
+exports.getDownloadsByDownloadRef = async function (ctx, downloadRef) {
+  ctx.process.push('getDownloadsByDownloadRef');
+  const query = await slsAuroraClient.query({
+    sql: 'SELECT * from downloads where download_ref=:downloadRef',
+    parameters: { downloadRef },
+  });
+  unwindStack(ctx.process, 'getDownloadsByDownloadRef');
+  return query.records;
+};
