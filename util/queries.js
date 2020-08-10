@@ -326,3 +326,42 @@ exports.getDownloadsByDownloadRef = async function (ctx, downloadRef) {
   unwindStack(ctx.process, 'getDownloadsByDownloadRef');
   return query.records;
 };
+
+exports.deleteRecordById = async function (ctx, table, idName, value) {
+  ctx.process.push('deleteRecordById');
+  let query = await slsAuroraClient.query(`DELETE FROM ::table WHERE ::fieldName = :id`, {
+    table,
+    fieldName: idName,
+    id: value,
+  });
+  let response;
+  try {
+    if (query.numberOfRecordsUpdated > 0) {
+      response = query;
+    } else {
+      response = 'Could not find record id.  This may be expected';
+    }
+  } catch (err) {
+    ctx.log.error({ err: err.message, stack: err.stack });
+    response = 'There was an error a database row.';
+  }
+  unwindStack(ctx.process, 'deleteRecordById');
+  return response;
+};
+
+exports.getLogfileForProduct = async function (ctx, productId) {
+  ctx.process.push('getLogfileForProduct');
+  const query = await slsAuroraClient.query({
+    sql: 'SELECT logfile_id from logfiles WHERE product_id=:productId',
+    parameters: { productId },
+  });
+  let logfileId;
+  try {
+    logfileId = query.records[0].logfile_id;
+  } catch (err) {
+    // swallow error.
+    console.log('Could not find a logfileId.  This may be expected.');
+  }
+  unwindStack(ctx.process, 'getLogfileForProduct');
+  return logfileId;
+};

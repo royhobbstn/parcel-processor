@@ -33,6 +33,7 @@ const {
 } = require('../util/sqsOperations');
 const { getTaskInfo, runProcessorTask } = require('../util/ecsOperations');
 const { getTaskLogs } = require('../util/cloudwatchOps');
+const { deleteItem } = require('../util/deleteItems');
 
 exports.appRouter = async app => {
   //
@@ -40,13 +41,15 @@ exports.appRouter = async app => {
     const ctx = { log, process: [] };
     const items = req.body;
     const output = [];
+    const sortedItems = items.sort((a, z) => {
+      return a.priority - z.priority;
+    });
     try {
-      for (let item of items.sort((a, z) => {
-        return a.priority - z.priority;
-      })) {
-        console.log(item);
-        //const response = await deleteItem(ctx, item);
+      for (let item of sortedItems) {
+        const response = await deleteItem(ctx, item);
+        output.push(response);
       }
+      ctx.log.info('Deletions processed');
       return res.json(output);
     } catch (err) {
       ctx.log.error('Unable to delete item(s)', { error: err.message, stack: err.stack });

@@ -2,13 +2,15 @@
 
 import React, { useState } from 'react';
 
-import { Button, Input, Table } from 'semantic-ui-react';
+import { Button, Input, Table, Icon } from 'semantic-ui-react';
 
 function Delete({ env }) {
   const [inputVal, updateInputVal] = useState('');
 
   const [busy, updateBusy] = useState(false);
   const [taskRecords, updateTaskRecords] = useState([]);
+
+  const [deleteBusy, updateDeleteBusy] = useState(false);
 
   async function byDownloadRef() {
     if (!inputVal) {
@@ -116,18 +118,18 @@ function Delete({ env }) {
         bucket_key: '',
         geoid: '',
         env,
-        priority: 5,
+        priority: 4,
       });
       deletes.push({
         task_name: 'source-check_row',
-        table_name: 'sourceChecks',
+        table_name: 'source_checks',
         record_id: item.check_id,
         product_type: '',
         bucket_name: '',
         bucket_key: '',
         geoid: '',
         env,
-        priority: 4,
+        priority: 5,
       });
     });
 
@@ -189,7 +191,7 @@ function Delete({ env }) {
           table_name: '',
           record_id: '',
           product_type: item.product_type,
-          bucket_name: 'data-products-po',
+          bucket_name: item.product_type === 'pbf' ? 'tile-server-po' : 'data-products-po',
           bucket_key: item.product_key,
           geoid: item.geoid,
           env,
@@ -223,24 +225,32 @@ function Delete({ env }) {
         taskRecords.length - countS3
       } database rows and ${countS3} S3 Objects?`,
     );
-    const fetchUrl = `http://localhost:4000/deleteSelectedItems`;
 
-    fetch(fetchUrl, {
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-      body: JSON.stringify(taskRecords),
-    })
-      .then(response => response.json())
-      .then(res => {
-        console.log(res);
+    if (confirmed) {
+      updateDeleteBusy(true);
+
+      const fetchUrl = `http://localhost:4000/deleteSelectedItems`;
+
+      fetch(fetchUrl, {
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+        body: JSON.stringify(taskRecords),
       })
-      .catch(err => {
-        console.log(err);
-        alert('Problem deleting selected items.');
-      });
+        .then(response => response.json())
+        .then(res => {
+          console.log('Deletion succeeded', res);
+        })
+        .catch(err => {
+          console.log(err);
+          alert('Problem deleting selected items.');
+        })
+        .finally(() => {
+          updateDeleteBusy(false);
+        });
+    }
   }
 
   function reset() {
@@ -328,22 +338,30 @@ function Delete({ env }) {
                 </Table>
               </div>
               <br />
-              <Button
-                style={{ width: '200px', display: 'inline', margin: '20px' }}
-                onClick={() => {
-                  confirmDelete();
-                }}
-              >
-                Confirm Delete
-              </Button>
-              <Button
-                style={{ width: '200px', display: 'inline', margin: '20px' }}
-                onClick={() => {
-                  reset();
-                }}
-              >
-                Reset
-              </Button>
+              {deleteBusy ? (
+                <div style={{ width: '100%' }}>
+                  <Icon style={{ margin: 'auto' }} loading name="spinner" size="large" />
+                </div>
+              ) : (
+                <div>
+                  <Button
+                    style={{ width: '200px', display: 'inline', margin: '20px' }}
+                    onClick={() => {
+                      confirmDelete();
+                    }}
+                  >
+                    Confirm Delete
+                  </Button>
+                  <Button
+                    style={{ width: '200px', display: 'inline', margin: '20px' }}
+                    onClick={() => {
+                      reset();
+                    }}
+                  >
+                    Reset
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ width: '100%', border: '1px dotted grey' }}>

@@ -224,7 +224,10 @@ async function emptyDirectory(ctx, bucket, dir) {
   });
 
   const result = await S3.deleteObjects(deleteParams).promise();
-  ctx.log.info(result);
+  ctx.log.info(`deleted directory. Bucket: ${bucket} Dir: ${dir}`, {
+    deletions: result.Deleted.length,
+    errors: result.Errors,
+  });
 
   if (listedObjects.IsTruncated) {
     await emptyDirectory(ctx, bucket, dir);
