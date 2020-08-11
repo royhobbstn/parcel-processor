@@ -1,19 +1,19 @@
 // @ts-check
 const fs = require('fs');
 const config = require('config');
-const { acquireConnection } = require('./util/wrapQuery');
+const { acquireConnection } = require('./wrapQuery');
 const {
   getDownloadsData,
   getSourceData,
   getProductsData,
   getGeoIdentifiersData,
-} = require('./util/queries');
-const { putFileToS3 } = require('./util/s3Operations');
-const { invalidateFiles } = require('./util/cloudfrontOps');
+} = require('./queries');
+const { putFileToS3 } = require('./s3Operations');
+const { invalidateFiles } = require('./cloudfrontOps');
 
-const ctx = { log: console, process: [] };
+exports.siteData = siteData;
 
-async function main() {
+async function siteData(ctx) {
   await acquireConnection(ctx);
 
   const downloads_data = await getDownloadsData(ctx);
@@ -136,11 +136,3 @@ async function main() {
     );
   }
 }
-
-main()
-  .then(() => {
-    console.log('done');
-  })
-  .catch(err => {
-    console.error(err);
-  });

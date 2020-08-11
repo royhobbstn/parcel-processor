@@ -10,7 +10,7 @@ import ViewLogsApp from './srcViewLogs/App';
 import LaunchApp from './srcLaunch/App';
 import DeleteApp from './srcDelete/App';
 
-import { Button } from 'semantic-ui-react';
+import { Button, Grid } from 'semantic-ui-react';
 
 let time;
 
@@ -18,6 +18,8 @@ function AppSwitcher() {
   const [env, updateEnv] = useState('down');
   const [app, updateApp] = useState('');
   const [online, updateOnline] = useState('no'); // yes, no, trying
+  const [title, updateTitle] = useState('Home');
+  const [loadingInventory, updateLoadingInventory] = useState(false);
 
   const pingDB = () => {
     updateOnline('trying');
@@ -32,6 +34,10 @@ function AppSwitcher() {
         console.error(err);
         updateOnline('no');
       });
+  };
+
+  const triggerSiteData = () => {
+    return fetch('http://localhost:4000/triggerSiteData');
   };
 
   useEffect(() => {
@@ -80,79 +86,126 @@ function AppSwitcher() {
 
   return (
     <div style={{ padding: '20px' }}>
-      <EnvBar env={env} updateApp={updateApp} online={online} />
+      <EnvBar
+        env={env}
+        updateApp={updateApp}
+        online={online}
+        title={title}
+        updateTitle={updateTitle}
+      />
       {!app ? (
-        <div style={{ margin: 'auto', width: '100px' }}>
-          <br />
-          <br />
-          <Button
-            style={{ width: '200px' }}
-            onClick={() => {
-              updateApp('inbox');
-            }}
-          >
-            Inbox
-          </Button>
-          <br />
-          <br />
-          <Button
-            style={{ width: '200px' }}
-            onClick={() => {
-              updateApp('sort');
-            }}
-          >
-            Sort
-          </Button>
-          <br />
-          <br />
-          <Button
-            style={{ width: '200px' }}
-            onClick={() => {
-              updateApp('sqs');
-            }}
-          >
-            Send SQS Message
-          </Button>
-          <br />
-          <br />
-          <Button
-            style={{ width: '200px' }}
-            onClick={() => {
-              updateApp('dlq');
-            }}
-          >
-            Replay DLQ Message
-          </Button>
-          <br />
-          <br />
-          <Button
-            style={{ width: '200px' }}
-            onClick={() => {
-              updateApp('logs');
-            }}
-          >
-            View Logs
-          </Button>
-          <br />
-          <br />
-          <Button
-            style={{ width: '200px' }}
-            onClick={() => {
-              updateApp('launch');
-            }}
-          >
-            Launch
-          </Button>
-          <br />
-          <br />
-          <Button
-            style={{ width: '200px' }}
-            onClick={() => {
-              updateApp('delete');
-            }}
-          >
-            Delete
-          </Button>
+        <div>
+          <Grid columns={2} divided>
+            <Grid.Row>
+              <Grid.Column>
+                <div style={{ margin: 'auto', width: '200px' }}>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={() => {
+                      updateTitle('Inbox');
+                      updateApp('inbox');
+                    }}
+                  >
+                    Inbox
+                  </Button>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={() => {
+                      updateTitle('Sort');
+                      updateApp('sort');
+                    }}
+                  >
+                    Sort
+                  </Button>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={() => {
+                      updateTitle('Send SQS');
+                      updateApp('sqs');
+                    }}
+                  >
+                    Send SQS Message
+                  </Button>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={() => {
+                      updateTitle('Replay DLQ');
+                      updateApp('dlq');
+                    }}
+                  >
+                    Replay DLQ Message
+                  </Button>
+                  <br />
+                </div>
+              </Grid.Column>
+              <Grid.Column>
+                <div style={{ margin: 'auto', width: '200px' }}>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={() => {
+                      updateTitle('View Logs');
+                      updateApp('logs');
+                    }}
+                  >
+                    View Logs
+                  </Button>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={() => {
+                      updateTitle('Launch Workers');
+                      updateApp('launch');
+                    }}
+                  >
+                    Launch
+                  </Button>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={() => {
+                      updateTitle('Delete Records');
+                      updateApp('delete');
+                    }}
+                  >
+                    Delete
+                  </Button>
+                  <br />
+                  <br />
+                  <Button
+                    style={{ width: '200px' }}
+                    onClick={async () => {
+                      updateLoadingInventory(true);
+                      triggerSiteData()
+                        .then(() => {
+                          window.alert('Updated Successfully!');
+                        })
+                        .catch(() => {
+                          window.alert('There was a problem updating Site Data');
+                        })
+                        .finally(() => {
+                          updateLoadingInventory(false);
+                        });
+                    }}
+                    loading={loadingInventory}
+                  >
+                    Update Inventory
+                  </Button>
+                </div>
+              </Grid.Column>
+            </Grid.Row>
+          </Grid>
         </div>
       ) : null}
 

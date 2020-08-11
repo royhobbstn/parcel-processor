@@ -34,6 +34,7 @@ const {
 const { getTaskInfo, runProcessorTask } = require('../util/ecsOperations');
 const { getTaskLogs } = require('../util/cloudwatchOps');
 const { deleteItem } = require('../util/deleteItems');
+const { siteData } = require('../util/siteData');
 
 exports.appRouter = async app => {
   //
@@ -53,6 +54,18 @@ exports.appRouter = async app => {
       return res.json(output);
     } catch (err) {
       ctx.log.error('Unable to delete item(s)', { error: err.message, stack: err.stack });
+      return res.status(500).send(err.message);
+    }
+  });
+
+  app.get('/triggerSiteData', async function (req, res) {
+    const ctx = { log, process: [] };
+
+    try {
+      await siteData(ctx);
+      return res.json({ success: true });
+    } catch (err) {
+      ctx.log.error('Unable to build site data', { error: err.message, stack: err.stack });
       return res.status(500).send(err.message);
     }
   });

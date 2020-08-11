@@ -3,7 +3,7 @@
 import React from 'react';
 import { Segment, Icon } from 'semantic-ui-react';
 
-function EnvBar({ env, updateApp, online }) {
+function EnvBar({ env, updateApp, online, title, updateTitle }) {
   const devStyle = { color: 'white', backgroundColor: 'green' };
   const prodStyle = { color: 'white', backgroundColor: 'red' };
   const testStyle = { color: 'white', backgroundColor: 'blue' };
@@ -46,12 +46,24 @@ function EnvBar({ env, updateApp, online }) {
         name="home"
         link
         size="large"
-        style={{ marginRight: '40px' }}
+        style={{ marginRight: '30px' }}
         onClick={() => {
+          updateTitle('Home');
           updateApp('');
         }}
       />
-      {text}
+      <span
+        style={{
+          display: 'inline',
+          verticalAlign: 'bottom',
+          fontSize: '20px',
+          marginRight: '30px',
+          fontWeight: 'bolder',
+        }}
+      >
+        {title}
+      </span>
+      <span style={{ verticalAlign: 'bottom' }}>{text}</span>
       {dbIcon}
     </Segment>
   );
