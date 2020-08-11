@@ -25,7 +25,7 @@ const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wr
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
 const { putFileToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
-const { createDirectories } = require('../util/filesystemUtil');
+const { createDirectories, cleanDirectory } = require('../util/filesystemUtil');
 
 exports.processSort = processSort;
 
@@ -98,6 +98,9 @@ async function processSort(ctx, data) {
   for (let file of files) {
     await processFile(ctx, file);
   }
+
+  await cleanDirectory(ctx, `${directories.logDir + ctx.directoryId}`);
+  await cleanDirectory(ctx, `${directories.subGeographiesDir + ctx.directoryId}`);
 
   ctx.log.info('done with processSort');
   unwindStack(ctx.process, 'processSort');

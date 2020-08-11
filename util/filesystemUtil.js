@@ -234,3 +234,13 @@ exports.cleanEFS = async function (ctx) {
 
   unwindStack(ctx.process, 'cleanEFS');
 };
+
+exports.cleanDirectory = async function (ctx, dir) {
+  ctx.process.push('cleanDirectory');
+  try {
+    await del(dir, { force: true });
+  } catch (err) {
+    ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
+  }
+  unwindStack(ctx.process, 'cleanDirectory');
+};

@@ -28,7 +28,7 @@ const {
   readTippecanoeMetadata,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
-const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
+const { zipShapefile, createDirectories, cleanDirectory } = require('../util/filesystemUtil');
 const { unwindStack } = require('../util/misc');
 
 exports.processProducts = async function (ctx, data) {
@@ -460,6 +460,11 @@ exports.processProducts = async function (ctx, data) {
   if (caughtError) {
     throw new Error('There were issues with one or more products.  See logs.');
   }
+
+  await cleanDirectory(ctx, `${directories.outputDir + ctx.directoryId}`);
+  await cleanDirectory(ctx, `${directories.productTempDir + ctx.directoryId}`);
+  await cleanDirectory(ctx, `${directories.logDir + ctx.directoryId}`);
+  await cleanDirectory(ctx, `${directories.tilesDir + ctx.directoryId}`);
 
   unwindStack(ctx.process, 'processProducts');
 };
