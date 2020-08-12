@@ -226,6 +226,7 @@ exports.cleanEFS = async function (ctx) {
     if (duration > 4) {
       try {
         await del(dir, { force: true });
+        ctx.log.info('Deleted directory:', { dir });
       } catch (err) {
         ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
       }
@@ -239,6 +240,7 @@ exports.cleanDirectory = async function (ctx, dir) {
   ctx.process.push('cleanDirectory');
   try {
     await del(dir, { force: true });
+    ctx.log.info('Deleted directory:', { dir });
   } catch (err) {
     ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
   }

@@ -23,7 +23,6 @@ const {
   checkForFileType,
   createDirectories,
   collapseUnzippedDir,
-  cleanDirectory,
 } = require('../util/filesystemUtil');
 const { inspectFileExec, parseOutputPath, parseFileExec } = require('../util/processGeoFile');
 const {
@@ -82,11 +81,6 @@ async function processInbox(ctx, data) {
         // Send SQS message to create products
         const productsQueueUrl = config.get('SQS.productQueueUrl');
         await sendQueueMessage(ctx, productsQueueUrl, payload);
-
-        await cleanDirectory(ctx, `${directories.logDir + ctx.directoryId}`);
-        await cleanDirectory(ctx, `${directories.outputDir + ctx.directoryId}`);
-        await cleanDirectory(ctx, `${directories.rawDir + ctx.directoryId}`);
-        await cleanDirectory(ctx, `${directories.unzippedDir + ctx.directoryId}`);
       }
     } else {
       ctx.log.info(

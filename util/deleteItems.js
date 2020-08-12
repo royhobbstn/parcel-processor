@@ -176,7 +176,8 @@ async function deleteLogfileRow(ctx, item) {
 async function deleteFile(ctx, item, type) {
   ctx.process.push('deleteFile');
 
-  const bucketName = item.bucket_name + (item.env === 'development' ? '-dev' : '');
+  const bucketName =
+    item.bucket_name + (item.env === 'development' || item.env === 'test' ? '-dev' : '');
   const output = await removeS3Files(ctx, [{ type, bucket: bucketName, key: item.bucket_key }]);
 
   unwindStack(ctx.process, 'deleteFile');
@@ -184,18 +185,21 @@ async function deleteFile(ctx, item, type) {
 }
 
 async function deleteFileStat(ctx, item) {
-  ctx.process.push('deleteFile');
+  ctx.process.push('deleteFileStat');
+
+  const bucketName =
+    item.bucket_name + (item.env === 'development' || item.env === 'test' ? '-dev' : '');
 
   const updatedKey = item.bucket_key.replace('.ndgeojson', '-stat.json');
 
   const statItem = {
-    bucket_name: item.bucket_name,
+    bucket_name: bucketName,
     bucket_key: updatedKey,
     env: item.env,
   };
 
   const output = deleteFile(ctx, statItem, s3deleteType.FILE);
 
-  unwindStack(ctx.process, 'deleteFile');
+  unwindStack(ctx.process, 'deleteFileStat');
   return output;
 }

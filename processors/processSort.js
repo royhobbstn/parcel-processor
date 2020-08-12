@@ -99,9 +99,6 @@ async function processSort(ctx, data) {
     await processFile(ctx, file);
   }
 
-  await cleanDirectory(ctx, `${directories.logDir + ctx.directoryId}`);
-  await cleanDirectory(ctx, `${directories.subGeographiesDir + ctx.directoryId}`);
-
   ctx.log.info('done with processSort');
   unwindStack(ctx.process, 'processSort');
 

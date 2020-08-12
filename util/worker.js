@@ -11,6 +11,7 @@ const { directories, directoryIdLength } = require('./constants');
 const { generateRef } = require('./crypto');
 const { initiateDatabaseHeartbeat } = require('./wrapQuery');
 const { initiateProgressHeartbeat, unwindStack } = require('./misc');
+const { cleanDirectory } = require('./filesystemUtil');
 
 exports.createContext = function (processor) {
   const processorShort = processor.replace('process', '').toLowerCase();
@@ -72,6 +73,14 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     } else {
       console.log('This is a DryRun so no email will be sent, and no logfile uploaded to S3.');
     }
+
+    await cleanDirectory(ctx, `${directories.outputDir + ctx.directoryId}`);
+    await cleanDirectory(ctx, `${directories.rawDir + ctx.directoryId}`);
+    await cleanDirectory(ctx, `${directories.unzippedDir + ctx.directoryId}`);
+    await cleanDirectory(ctx, `${directories.productTempDir + ctx.directoryId}`);
+    await cleanDirectory(ctx, `${directories.logDir + ctx.directoryId}`);
+    await cleanDirectory(ctx, `${directories.tilesDir + ctx.directoryId}`);
+    await cleanDirectory(ctx, `${directories.subGeographiesDir + ctx.directoryId}`);
 
     unwindStack(ctx.process, 'runProcess');
     console.log('\nAll complete!\n\n');
