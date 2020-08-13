@@ -1,6 +1,7 @@
 // @ts-check
 
 const { unwindStack } = require('./misc');
+const { idPrefix } = require('./constants');
 
 // gather field statistics for a dataset
 
@@ -8,7 +9,7 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
   ctx.process.push('StatContext');
 
   this.rowCount = 0;
-  this.fields = null;
+  this.fields = {};
 
   this.export = () => {
     // cleanup by determining ObjectID type fields here and just
@@ -30,6 +31,28 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
       }
     });
 
+    Object.keys(this.fields).forEach(field => {
+      const currentField = this.fields[field];
+      if (!currentField.IDField) {
+        // turn it into array
+        const arr = Object.keys(currentField.uniques).map(key => {
+          return { key, value: currentField.uniques[key] };
+        });
+        arr.sort((a, b) => {
+          return b.value > a.value ? 1 : -1;
+        });
+        // keep up to uniquesMax Limit
+        const mostFrequent = arr.slice(0, uniquesMax);
+        // back to keyed object
+        const obj = {};
+        mostFrequent.forEach(row => {
+          obj[row.key] = row.value;
+        });
+        // mutate original, keeping only uniquesMax values
+        currentField.uniques = obj;
+      }
+    });
+
     unwindStack(ctx.process, 'StatContext');
     return {
       rowCount: this.rowCount,
@@ -40,39 +63,18 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
   this.countStats = row => {
     this.rowCount++;
 
-    // add fields names one time
-    if (!this.fields) {
-      this.fields = {};
-      // iterate through columns in each row, add as field name to summary object
-      Object.keys(row.properties).forEach(f => {
-        this.fields[f] = {
-          types: [],
-          uniques: {},
-          mean: 0,
-          max: -Infinity,
-          min: Infinity,
-          numCount: 0,
-          strCount: 0,
-          IDField: false,
-          IDSample: [],
-        };
-      });
-    }
-
     Object.keys(row.properties).forEach(f => {
+      if (f === idPrefix) {
+        return;
+      }
       const value = row.properties[f];
       const type = typeof value;
+      const strValue = String(value);
 
       if (!this.fields[f]) {
-        // a field was missed previous because it was null or undefined
         this.fields[f] = {
           types: [],
           uniques: {},
-          mean: 0,
-          max: -Infinity,
-          min: Infinity,
-          numCount: 0,
-          strCount: 0,
           IDField: false,
           IDSample: [],
         };
@@ -86,23 +88,14 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
         }
       }
 
-      // both strings and numbers watch uniques
-      const uniques = Object.keys(this.fields[f].uniques);
-
-      // caps uniques to uniquesMax.  Prevents things like ObjectIDs being catalogued extensively.
-      if (uniques.length < uniquesMax) {
-        if (!uniques.includes(String(value))) {
-          this.fields[f].uniques[String(value)] = 1;
-        } else {
-          this.fields[f].uniques[String(value)]++;
-        }
+      // increment each unique
+      if (!this.fields[f].uniques[strValue]) {
+        this.fields[f].uniques[strValue] = 1;
+      } else {
+        this.fields[f].uniques[strValue]++;
       }
 
-      if (type === 'string') {
-        this.fields[f].strCount++;
-      } else if (type === 'number') {
-        this.fields[f].numCount++;
-
+      if (type === 'number') {
         if (value > this.fields[f].max) {
           this.fields[f].max = value;
         }
@@ -113,8 +106,6 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
         // might cause overflow here
         this.fields[f].mean =
           (this.fields[f].mean * (this.fields[f].numCount - 1) + value) / this.fields[f].numCount;
-      } else {
-        // probably null.  skipping;
       }
     });
   };
