@@ -22,7 +22,8 @@
     "skmeans": "^0.11.3",
     "unzipper": "^0.10.11",
     "uuid": "^8.1.0",
-    "winston": "^3.3.0"
+    "winston": "^3.3.0",
+    "wise-inspection": "^1.0.1"
   },
   "scripts": {
     "update-site-data-dev": "NODE_ENV=development node site_data_run_from_npm_script.js",

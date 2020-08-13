@@ -1,5 +1,5 @@
 // @ts-check
-
+require('wise-inspection')(Promise);
 const config = require('config');
 const path = require('path');
 const { default: axios } = require('axios');
@@ -25,7 +25,7 @@ const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wr
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
 const { putFileToS3 } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
-const { createDirectories, cleanDirectory } = require('../util/filesystemUtil');
+const { createDirectories } = require('../util/filesystemUtil');
 
 exports.processSort = processSort;
 
@@ -89,7 +89,7 @@ async function processSort(ctx, data) {
   const downloadRef = messagePayload.selectedDownload.download_ref;
   const geonameLookup = keifyGeographies(ctx, messagePayload.geographies);
   const files = Array.from(new Set(Object.values(geoidTranslator)));
-  const fileWrites = [];
+  let fileWrites = [];
   let counter = 0;
 
   await sortData(ctx);
@@ -129,6 +129,14 @@ async function processSort(ctx, data) {
             }
             lastChunkPiece = splitData[splitData.length - 1];
           }
+
+          // filter out completed writes
+          // Otherwise, on large files:
+          // RangeError: Too many elements passed to Promise.all
+          fileWrites = fileWrites.filter(pr => {
+            const promiseStatus = pr.inspect();
+            return promiseStatus === 'pending';
+          });
 
           processData(ctx, dataToProcess);
         });
