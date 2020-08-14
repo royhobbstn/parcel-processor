@@ -19,7 +19,7 @@ const {
 const {
   queryCreateProductRecord,
   checkForProduct,
-  createLogfileRecord,
+  createMessageRecord,
 } = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
@@ -278,16 +278,11 @@ async function processSort(ctx, data) {
           productOrigins.DERIVED,
           file,
           `${productKey}.ndgeojson`,
+          ctx.messageId,
         );
 
-        await createLogfileRecord(
-          ctx,
-          product_id,
-          ctx.messageId,
-          JSON.stringify(messagePayload),
-          ctx.type,
-        );
-        ctx.log.info('Logfile reference record was created.');
+        await createMessageRecord(ctx, ctx.messageId, JSON.stringify(messagePayload), ctx.type);
+        ctx.log.info('Message reference record was created.');
       } catch (err) {
         await removeS3Files(ctx, cleanupS3);
         // throwing here will cause processSort to end.

@@ -16,7 +16,7 @@ const { putFileToS3, streamS3toFileSystem, putTextToS3, s3Sync } = require('../u
 const {
   queryCreateProductRecord,
   checkForProducts,
-  createLogfileRecord,
+  createMessageRecord,
 } = require('../util/queries');
 const {
   convertToFormat,
@@ -171,7 +171,7 @@ exports.processProducts = async function (ctx, data) {
         });
         ctx.log.info(`uploaded geoJSON file to S3.  key: ${productKeyGeoJSON}`);
 
-        const product_id = await queryCreateProductRecord(
+        await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -180,17 +180,9 @@ exports.processProducts = async function (ctx, data) {
           productOrigin,
           geoid,
           `${productKeyGeoJSON}.geojson`,
+          ctx.messageId,
         );
         ctx.log.info(`created geoJSON product record.  ref: ${individualRefGeoJson}`);
-
-        await createLogfileRecord(
-          ctx,
-          product_id,
-          ctx.messageId,
-          JSON.stringify(messagePayload),
-          ctx.type,
-        );
-        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       // unlike in processSort, we won't let a failure in a product creation
@@ -247,7 +239,7 @@ exports.processProducts = async function (ctx, data) {
         });
         ctx.log.info(`uploaded GPKG file to S3.  key: ${productKeyGPKG}`);
 
-        const product_id = await queryCreateProductRecord(
+        await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -256,17 +248,9 @@ exports.processProducts = async function (ctx, data) {
           productOrigin,
           geoid,
           `${productKeyGPKG}.gpkg`,
+          ctx.messageId,
         );
         ctx.log.info(`created GPKG product record.  ref: ${individualRefGPKG}`);
-
-        await createLogfileRecord(
-          ctx,
-          product_id,
-          ctx.messageId,
-          JSON.stringify(messagePayload),
-          ctx.type,
-        );
-        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       await removeS3Files(ctx, cleanupS3);
@@ -318,7 +302,7 @@ exports.processProducts = async function (ctx, data) {
         });
         ctx.log.info(`uploaded SHP file to S3  key: ${productKeySHP}`);
 
-        const product_id = await queryCreateProductRecord(
+        await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -327,17 +311,9 @@ exports.processProducts = async function (ctx, data) {
           productOrigin,
           geoid,
           `${productKeySHP}-shp.zip`,
+          ctx.messageId,
         );
         ctx.log.info(`created SHP product record.  ref: ${individualRefSHP}`);
-
-        await createLogfileRecord(
-          ctx,
-          product_id,
-          ctx.messageId,
-          JSON.stringify(messagePayload),
-          ctx.type,
-        );
-        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       await removeS3Files(ctx, cleanupS3);
@@ -424,7 +400,7 @@ exports.processProducts = async function (ctx, data) {
         );
         ctx.log.info(`uploaded TILES meta file to S3.  Dir: ${dirName}/info.json`);
 
-        const product_id = await queryCreateProductRecord(
+        await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,
@@ -433,17 +409,9 @@ exports.processProducts = async function (ctx, data) {
           productOrigins.ORIGINAL,
           geoid,
           dirName,
+          ctx.messageId,
         );
         ctx.log.info(`created TILES product record.  ref: ${productRefTiles}`);
-
-        await createLogfileRecord(
-          ctx,
-          product_id,
-          ctx.messageId,
-          JSON.stringify(messagePayload),
-          ctx.type,
-        );
-        ctx.log.info('Logfile reference record was created.');
       }
     } catch (err) {
       await removeS3Files(ctx, cleanupS3);
@@ -454,6 +422,9 @@ exports.processProducts = async function (ctx, data) {
       });
     }
   }
+
+  await createMessageRecord(ctx, ctx.messageId, JSON.stringify(messagePayload), ctx.type);
+  ctx.log.info('Message reference record was created.');
 
   ctx.log.info('product creation finished');
 

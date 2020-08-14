@@ -11,17 +11,19 @@ const { directories } = require('./constants');
 const { generateRef } = require('./crypto');
 const { unwindStack } = require('./misc');
 
-exports.createDirectories = async function (ctx, dirs) {
+exports.createDirectories = createDirectories;
+
+async function createDirectories(ctx, dirs) {
   ctx.process.push('createDirectories');
 
   for (let dir of dirs) {
-    const newDir = `${dir}${ctx.directoryId}`;
+    const newDir = `${dir}${ctx.directoryId || ''}`;
     mkdirp.sync(newDir);
     ctx.log.info(`Created directory: ${newDir}`);
   }
   ctx.log.info('Done creating staging directories.');
   unwindStack(ctx.process, 'createDirectories');
-};
+}
 
 exports.extractZip = function (ctx, filePath) {
   ctx.process.push('extractZip');
@@ -212,6 +214,10 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
 exports.cleanEFS = async function (ctx) {
   ctx.process.push('cleanEFS');
 
+  // create the directory if it doesn't exist, so we dont get an error when we try to read from it
+  await createDirectories(ctx, [directories.root]);
+
+  // keeping this operational in case AwS tries to recycle containers
   const contents = fs.readdirSync(directories.root);
 
   for (let entry of contents) {

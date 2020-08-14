@@ -61,13 +61,14 @@ exports.queryCreateDownloadRecord = function (
   rawKey,
   downloadRef,
   originalFilename,
+  messageId,
   transactionId,
 ) {
   // write a download record to unique identify a downloaded file.
   return slsAuroraClient.query({
     sql:
-      'INSERT INTO downloads(source_id, check_id, checksum, raw_key, download_ref, original_filename) VALUES (:sourceId, :checkId, :checksum, :rawKey, :downloadRef, :originalFilename);',
-    parameters: { sourceId, checkId, checksum, rawKey, downloadRef, originalFilename },
+      'INSERT INTO downloads(source_id, check_id, checksum, raw_key, message_id, download_ref, original_filename) VALUES (:sourceId, :checkId, :checksum, :rawKey, :messageId, :downloadRef, :originalFilename);',
+    parameters: { sourceId, checkId, checksum, rawKey, messageId, downloadRef, originalFilename },
     transactionId,
   });
 };
@@ -81,13 +82,14 @@ exports.queryCreateProductRecord = async function (
   productOrigin,
   geoid,
   productKey,
+  messageId,
   transactionId,
 ) {
   ctx.process.push('queryCreateProductRecord');
 
   const query = await slsAuroraClient.query({
     sql:
-      'INSERT INTO products(download_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key) VALUES (:downloadId, :productRef, :individualRef, :productType, :productOrigin, :geoid, :productKey);',
+      'INSERT INTO products(download_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key, message_id) VALUES (:downloadId, :productRef, :individualRef, :productType, :productOrigin, :geoid, :productKey, :messageId);',
     parameters: {
       downloadId,
       productRef,
@@ -96,6 +98,7 @@ exports.queryCreateProductRecord = async function (
       productOrigin,
       geoid,
       productKey,
+      messageId,
     },
     transactionId,
   });
@@ -108,9 +111,8 @@ exports.queryCreateProductRecord = async function (
   return product_id;
 };
 
-exports.createLogfileRecord = function (
+exports.createMessageRecord = function (
   ctx,
-  productId,
   messageId,
   messagePayload,
   messageType,
@@ -118,9 +120,8 @@ exports.createLogfileRecord = function (
 ) {
   return slsAuroraClient.query({
     sql:
-      'INSERT INTO logfiles(product_id, message_id, message_body, message_type) VALUES (:productId, :messageId, :messagePayload, :messageType);',
+      'INSERT INTO messages(message_id, message_body, message_type) VALUES (:messageId, :messagePayload, :messageType);',
     parameters: {
-      productId,
       messageId,
       messagePayload,
       messageType,

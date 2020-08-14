@@ -23,6 +23,7 @@ CREATE table downloads(
    check_id INT,
    checksum CHAR(32),
    raw_key VARCHAR(500),
+   message_id VARCHAR(100),
    original_filename VARCHAR(500),
    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
    CONSTRAINT fk_dl_source FOREIGN KEY (source_id) REFERENCES sources(source_id),
@@ -57,6 +58,7 @@ CREATE table products(
    product_origin ENUM('original', 'derived'),
    geoid VARCHAR(7),
    product_key VARCHAR(500),
+   message_id VARCHAR(100),
    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
    CONSTRAINT fk_geoid FOREIGN KEY (geoid) REFERENCES geographic_identifiers(geoid),
    CONSTRAINT fk_dl_id FOREIGN KEY (download_id) REFERENCES downloads(download_id)
@@ -65,19 +67,14 @@ CREATE table products(
 CREATE INDEX idx_pr_ref ON products(product_ref);
 CREATE INDEX idx_pr_geoid ON products(geoid);
 CREATE INDEX idx_pr_dlid ON products(download_id);
+CREATE INDEX idx_msg_id ON products(message_id);
 
-CREATE table logfiles(
-   logfile_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   product_id INT,
-   message_id VARCHAR(100),
+CREATE table messages(
+   message_id VARCHAR(100) NOT NULL PRIMARY KEY,
    message_body TEXT,
    message_type ENUM('inbox', 'sort', 'product'),
-   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-   CONSTRAINT fk_prod_id FOREIGN KEY (product_id) REFERENCES products(product_id)
+   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 )
-
-CREATE INDEX idx_msg_id ON logfiles(message_id);
-
 
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("040", "state");
 INSERT INTO summary_levels(sumlev, level_name) VALUES ("050", "county");

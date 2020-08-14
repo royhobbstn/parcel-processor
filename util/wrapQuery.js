@@ -18,7 +18,7 @@ const {
   startTransaction,
   commitTransaction,
   rollbackTransaction,
-  createLogfileRecord,
+  createMessageRecord,
 } = require('./queries');
 const { getSourceType, unwindStack } = require('./misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
@@ -66,6 +66,7 @@ exports.DBWrites = async function (
       rawKey,
       downloadRef,
       filePath,
+      ctx.messageId,
       transactionId,
     );
     ctx.log.info(`Created download record.`, { downloadId });
@@ -79,19 +80,19 @@ exports.DBWrites = async function (
       productOrigins.ORIGINAL,
       geoid,
       `${productKey}.ndgeojson`,
+      ctx.messageId,
       transactionId,
     );
     ctx.log.info('NdGeoJson product record was created.');
 
-    await createLogfileRecord(
+    await createMessageRecord(
       ctx,
-      product_id,
       ctx.messageId,
       JSON.stringify(messagePayload),
       ctx.type,
       transactionId,
     );
-    ctx.log.info('Logfile reference record was created.');
+    ctx.log.info('Message reference record was created.');
 
     await commitTransaction(ctx, transactionId);
     ctx.log.info('Transaction Committed');
@@ -224,6 +225,7 @@ async function constructDownloadRecord(
   rawKey,
   downloadRef,
   filePath,
+  messageId,
   transactionId,
 ) {
   ctx.process.push('constructDownloadRecord');
@@ -238,6 +240,7 @@ async function constructDownloadRecord(
     rawKey,
     downloadRef,
     originalFilename,
+    messageId,
     transactionId,
   );
 
