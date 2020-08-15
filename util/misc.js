@@ -75,6 +75,12 @@ exports.initiateProgressHeartbeat = function (ctx, seconds) {
 
   const interval = setInterval(() => {
     ctx.log.info(`still processing: ${ctx.process.slice(-10).reverse().join(', ')}`);
+    try {
+      const output = execSync('df -h ');
+      ctx.log.info(`disk: `, { output: output.toString() });
+    } catch (e) {
+      ctx.log.info(`disk check failed`);
+    }
   }, seconds * 1000);
 
   unwindStack(ctx.process, 'initiateProgressHeartbeat');

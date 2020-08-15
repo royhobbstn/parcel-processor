@@ -214,9 +214,9 @@ exports.searchLogsByType = function (ctx, type) {
   }
   return slsAuroraClient.query({
     sql:
-      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id ' +
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, messages.created, messages.message_id, message_body, message_type FROM products JOIN messages ON messages.message_id = products.message_id JOIN downloads ON products.download_id = downloads.download_id ' +
       clause +
-      ' ORDER BY logfiles.created DESC LIMIT 100;',
+      ' ORDER BY messages.created DESC LIMIT 100;',
     parameters: { type },
   });
 };
@@ -224,7 +224,7 @@ exports.searchLogsByType = function (ctx, type) {
 exports.searchLogsByGeoid = function (ctx, geoid) {
   return slsAuroraClient.query({
     sql:
-      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE geoid = :geoid ORDER BY logfiles.created DESC LIMIT 100;',
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, messages.created, messages.message_id, message_body, message_type FROM products JOIN messages ON messages.message_id = products.message_id JOIN downloads ON products.download_id = downloads.download_id WHERE geoid = :geoid ORDER BY messages.created DESC LIMIT 100;',
     parameters: { geoid },
   });
 };
@@ -232,7 +232,7 @@ exports.searchLogsByGeoid = function (ctx, geoid) {
 exports.searchLogsByReference = function (ctx, ref) {
   return slsAuroraClient.query({
     sql:
-      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, logfiles.created, message_id, message_body, message_type FROM products JOIN logfiles ON logfiles.product_id = products.product_id JOIN downloads ON products.download_id = downloads.download_id WHERE product_ref = :ref OR individual_ref = :ref OR download_ref = :ref ORDER BY logfiles.created DESC LIMIT 100;',
+      'SELECT product_ref, individual_ref, download_ref, product_type, product_origin, geoid, messages.created, messages.message_id, message_body, message_type FROM products JOIN messages ON messages.message_id = products.message_id JOIN downloads ON products.download_id = downloads.download_id WHERE product_ref = :ref OR individual_ref = :ref OR download_ref = :ref ORDER BY messages.created DESC LIMIT 100;',
     parameters: { ref },
   });
 };
@@ -280,7 +280,7 @@ exports.getSQSMessagesByGeoidAndType = async function (ctx, messageType, geoid) 
   ctx.process.push('getSQSMessagesByGeoidAndType');
   const query = await slsAuroraClient.query({
     sql:
-      'SELECT logfiles.created, logfiles.message_id, logfiles.message_type, logfiles.message_body, products.geoid FROM logfiles JOIN products ON logfiles.product_id = products.product_id WHERE message_type=:messageType AND geoid LIKE :geoid ORDER BY logfiles.created DESC LIMIT 300',
+      'SELECT messages.created, messages.message_id, messages.message_type, messages.message_body, products.geoid FROM messages JOIN products ON messages.message_id = products.message_id WHERE message_type=:messageType AND geoid LIKE :geoid ORDER BY messages.created DESC LIMIT 300',
     parameters: { messageType, geoid: `%${geoid}%` },
   });
   unwindStack(ctx.process, 'getSQSMessagesByGeoidAndType');
@@ -348,21 +348,4 @@ exports.deleteRecordById = async function (ctx, table, idName, value) {
   }
   unwindStack(ctx.process, 'deleteRecordById');
   return response;
-};
-
-exports.getLogfileForProduct = async function (ctx, productId) {
-  ctx.process.push('getLogfileForProduct');
-  const query = await slsAuroraClient.query({
-    sql: 'SELECT logfile_id from logfiles WHERE product_id=:productId',
-    parameters: { productId },
-  });
-  let logfileId;
-  try {
-    logfileId = query.records[0].logfile_id;
-  } catch (err) {
-    // swallow error.
-    console.log('Could not find a logfileId.  This may be expected.');
-  }
-  unwindStack(ctx.process, 'getLogfileForProduct');
-  return logfileId;
 };

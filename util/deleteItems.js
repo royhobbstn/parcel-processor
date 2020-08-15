@@ -3,7 +3,7 @@
 const { unwindStack } = require('./misc');
 const { removeS3Files } = require('./wrapS3');
 const { s3deleteType } = require('./constants');
-const { deleteRecordById, getLogfileForProduct } = require('./queries');
+const { deleteRecordById } = require('./queries');
 
 exports.deleteItem = deleteItem;
 
@@ -76,24 +76,6 @@ async function deleteItem(ctx, item) {
         output = `Delete raw file failed: ${err.message}`;
       }
       break;
-    case 'logfile_row':
-      ctx.log.info(`Deleting logfile row`, {
-        product_type: item.product_type,
-        table_name: item.table_name,
-        record_id: item.record_id,
-        meta: item.meta,
-        geoid: item.geoid,
-      });
-      try {
-        output = await deleteLogfileRow(ctx, item);
-      } catch (err) {
-        ctx.log.info(`Delete logfile record failed: ${err.message}`, {
-          error: err.message,
-          stack: err.stack,
-        });
-        output = `Delete logfile record failed: ${err.message}`;
-      }
-      break;
     case 'product_row':
       ctx.log.info(`Deleting product row`, {
         product_type: item.product_type,
@@ -153,23 +135,6 @@ async function deleteItem(ctx, item) {
   }
 
   unwindStack(ctx.process, 'deleteItem');
-  return output;
-}
-
-async function deleteLogfileRow(ctx, item) {
-  ctx.process.push('deleteLogfileRow');
-
-  const logfileId = await getLogfileForProduct(ctx, item.record_id);
-
-  let output;
-
-  if (logfileId != null) {
-    output = await deleteRecordById(ctx, item.table_name, 'logfile_id', logfileId);
-  } else {
-    output = 'Could not find a logfile row to delete.';
-  }
-
-  unwindStack(ctx.process, 'deleteLogfileRow');
   return output;
 }
 

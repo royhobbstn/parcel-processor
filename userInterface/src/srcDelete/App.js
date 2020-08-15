@@ -158,18 +158,6 @@ function Delete({ env }) {
           env,
           priority: 3,
         });
-        deletes.push({
-          task_name: 'logfile_row',
-          table_name: 'logfiles',
-          record_id: item.product_id,
-          meta: 'join on products_id',
-          product_type: item.product_type,
-          bucket_name: '',
-          bucket_key: '',
-          geoid: item.geoid,
-          env,
-          priority: 2,
-        });
       });
 
     return deletes;
