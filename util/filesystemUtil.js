@@ -214,27 +214,34 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
 exports.cleanEFS = async function (ctx) {
   ctx.process.push('cleanEFS');
 
-  // create the directory if it doesn't exist, so we dont get an error when we try to read from it
-  await createDirectories(ctx, [directories.root]);
+  // create the root directories if they doesn't exist, so we dont get an error when we try to read from it
+  // there is an EFS and local root directory.  Tiles are done locally becaust the latency
+  // of working with thousands of small files on EFS is prohibitive.
+  // EFS is needed because processing State files exceeds the max capacity of the scratch
+  // space on ECS.
+  await createDirectories(ctx, [directories.EFSroot]);
+  await createDirectories(ctx, [directories.SCRATCHroot]);
 
-  // keeping this operational in case AwS tries to recycle containers
-  const contents = fs.readdirSync(directories.root);
+  await deleteContents(fs.readdirSync(directories.EFSroot), directories.EFSroot);
+  await deleteContents(fs.readdirSync(directories.SCRATCHroot), directories.SCRATCHroot);
 
-  for (let entry of contents) {
-    const dir = path.join(directories.root, entry);
-    const stats = fs.statSync(dir);
+  async function deleteContents(contents, root) {
+    for (let entry of contents) {
+      const dir = path.join(root, entry);
+      const stats = fs.statSync(dir);
 
-    const modifiedTime = stats.mtimeMs;
-    const currentTime = new Date().getTime();
-    const duration = (currentTime - modifiedTime) / 1000 / 60 / 60;
+      const modifiedTime = stats.mtimeMs;
+      const currentTime = new Date().getTime();
+      const duration = (currentTime - modifiedTime) / 1000 / 60 / 60;
 
-    // if older than 4 hours
-    if (duration > 4) {
-      try {
-        await del(dir, { force: true });
-        ctx.log.info('Deleted directory:', { dir });
-      } catch (err) {
-        ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
+      // if older than 4 hours
+      if (duration > 4) {
+        try {
+          await del(dir, { force: true });
+          ctx.log.info('Deleted directory:', { dir });
+        } catch (err) {
+          ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
+        }
       }
     }
   }

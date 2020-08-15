@@ -1,11 +1,12 @@
 // @ts-check
 
 exports.directories = {
-  root: '/files/staging',
+  EFSroot: '/files/staging',
+  SCRATCHroot: './files/staging',
   outputDir: '/files/staging/output-',
   rawDir: '/files/staging/raw-',
   unzippedDir: '/files/staging/unzipped-',
-  tilesDir: '/files/staging/tiles-',
+  tilesDir: './files/staging/tiles-',
   subGeographiesDir: '/files/staging/subGeographies-',
   productTempDir: '/files/staging/productTemp-',
   logDir: '/files/staging/logs-',
