@@ -5,28 +5,21 @@ const { idPrefix } = require('../util/constants');
 
 // passed by reference.  will mutate
 
-exports.computeFeature = function (feature, tree, ordered_obj, counter) {
+exports.computeFeature = function (feature, tree, ordered_arr, counter) {
   const bbox = turf.bbox(feature);
   const nearby = tree.search(bbox);
 
-  // console.log(nearby.features.length);
+  // TODO performance is there a better way to do this?
   const nearby_filtered = nearby.features.filter(d => {
     // ignore self
     const self = d.properties[idPrefix] === feature.properties[idPrefix];
-    const blankId = !d.properties[idPrefix];
-
-    return !self && !blankId;
+    return !self;
   });
-  // console.log(nearby_filtered.length);
-  // console.log('filtered');
 
   const best_match = {
     coalescability: Infinity,
     match: [],
-    geo_division: 'A',
   };
-
-  // TODO new first find overlaps
 
   nearby_filtered.forEach(near_feature => {
     const line1 = turf.polygonToLine(feature);
@@ -38,7 +31,6 @@ exports.computeFeature = function (feature, tree, ordered_obj, counter) {
       if (!intersection.features.length) {
         return;
       }
-      // console.log('overlap');
 
       const l1 = turf.length(intersection, { units: 'kilometers' });
       const l2 = turf.length(feature, { units: 'kilometers' });
@@ -47,32 +39,23 @@ exports.computeFeature = function (feature, tree, ordered_obj, counter) {
 
       const inverse_shared_edge = 1 - l1 / l2;
       const combined_area = area + matching_feature_area;
-      const geo_division = 'A';
 
       counter++;
 
       const coalescability = inverse_shared_edge * combined_area;
-      const c_counter = `_${counter}`;
 
       // we only care about registering the best match; coalescibility will
       // be recalculated as soon as a feature is joined to another,
       // rendering a lesser match useless
       if (coalescability < best_match.coalescability) {
         best_match.coalescability = coalescability;
-        best_match.c_counter = c_counter;
         best_match.match = [feature.properties[idPrefix], near_feature.properties[idPrefix]];
-        best_match.geo_division = geo_division;
       }
-    } else {
-      // console.log('no overlap');
     }
   });
 
   if (best_match.match.length) {
-    if (!ordered_obj[best_match.geo_division]) {
-      ordered_obj[best_match.geo_division] = [];
-    }
-    inOrder(ordered_obj[best_match.geo_division], best_match);
+    inOrder(ordered_arr, best_match);
   }
 };
 

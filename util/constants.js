@@ -64,3 +64,8 @@ exports.messageTypes = {
   SORT: 'sort',
   PRODUCT: 'product',
 };
+
+exports.zoomLevels = {
+  LOW: 3,
+  HIGH: 13,
+};
