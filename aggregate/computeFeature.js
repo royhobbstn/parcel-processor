@@ -9,19 +9,16 @@ exports.computeFeature = function (feature, tree, ordered_arr, counter) {
   const bbox = turf.bbox(feature);
   const nearby = tree.search(bbox);
 
-  // TODO performance is there a better way to do this?
-  const nearby_filtered = nearby.features.filter(d => {
-    // ignore self
-    const self = d.properties[idPrefix] === feature.properties[idPrefix];
-    return !self;
-  });
-
   const best_match = {
     coalescability: Infinity,
     match: [],
   };
 
-  nearby_filtered.forEach(near_feature => {
+  nearby.forEach(near_feature => {
+    if (near_feature.properties[idPrefix] === feature.properties[idPrefix]) {
+      // ignore self
+      return;
+    }
     const line1 = turf.polygonToLine(feature);
     const line2 = turf.polygonToLine(near_feature);
     const intersection = turf.lineOverlap(line1, line2);

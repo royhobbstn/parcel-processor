@@ -1,6 +1,4 @@
-// node --max_old_space_size=8192 aggregate.js bg 2016
-// (geotype, zoomlevel, year)
-// required: nodeJS 8+ for util.promisify
+// @ts-check
 
 const fs = require('fs');
 const geojsonRbush = require('geojson-rbush').default;
@@ -10,219 +8,240 @@ const turf = require('@turf/turf');
 const { idPrefix } = require('../util/constants');
 const { promisify } = require('util');
 const writeFileAsync = promisify(fs.writeFile);
+const ndjson = require('ndjson');
 
-const geojson_file = require(`./input.json`);
+// const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
+// const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
-// TODO this is temporary
-geojson_file.features.forEach((feature, index) => {
-  feature.properties[idPrefix] = index + 1;
-});
+// const derivativePath = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}-cluster`;
+// const writer = fs.createWriteStream(`${derivativePath}.ndgeojson`);
 
-let geojson_feature_count = geojson_file.features.length;
-console.log(`Features in dataset: ${geojson_feature_count}`);
+exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
+  /*** Mutable Globals ***/
 
-/*** Mutable Globals ***/
+  let ordered_arr = [];
+  const keyed_geojson = {};
+  let counter = 0;
+  const threshold = [];
+  const written_file_promises = [];
+  let geojson_feature_count = 0;
 
-let ordered_arr = [];
-const keyed_geojson = {};
-let counter = 0;
-const threshold = [];
-const written_file_promises = [];
+  /*** Initial index creation and calculation ***/
 
-/*** Initial index creation and calculation ***/
+  const tree = geojsonRbush();
 
-const tree = geojsonRbush();
-tree.load(geojson_file);
+  await new Promise((resolve, reject) => {
+    const attributeLookupFile = {};
+    fs.createReadStream(`${derivativePath}.ndgeojson`)
+      .pipe(ndjson.parse())
+      .on('data', function (obj) {
+        // save attributes to lookup file
+        attributeLookupFile[obj.properties[idPrefix]] = JSON.parse(JSON.stringify(obj.properties));
 
-geojson_file.features.forEach((feature, index) => {
-  if (index % 2000 === 0) {
-    console.log('index progress: ' + ((index / geojson_feature_count) * 100).toFixed(2) + '%');
-  }
+        // make a new feature with only __po_id
+        obj.properties = { [idPrefix]: obj.properties[idPrefix] };
 
-  keyed_geojson[feature.properties[idPrefix]] = Object.assign({}, feature, {
-    properties: { [idPrefix]: feature.properties[idPrefix] },
-  });
-  computeFeature(feature, tree, ordered_arr, counter);
-});
+        tree.insert(obj);
 
-/********* main ************/
+        if (geojson_feature_count % 2000 === 0) {
+          console.log(`${geojson_feature_count} features indexed.`);
+        }
 
-// continually combine smaller features.
-// without aggregating across state or county lines
-// note: this is beautiful
+        keyed_geojson[obj.properties[idPrefix]] = obj;
+        computeFeature(obj, tree, ordered_arr, counter);
 
-const total_time = present(); // tracks total execution time
-
-const RETAINED = getRetained();
-
-const LOW_ZOOM = 4;
-const HIGH_ZOOM = 16;
-
-/****** Setup ******/
-
-const STARTING_GEOJSON_FEATURE_COUNT = geojson_feature_count;
-
-// set an array of feature thresholds
-for (let i = LOW_ZOOM; i < HIGH_ZOOM; i++) {
-  threshold.push({ count: Math.round(geojson_feature_count * RETAINED[i]), zoom: i });
-}
-
-const DESIRED_NUMBER_FEATURES = Math.round(geojson_feature_count * RETAINED[LOW_ZOOM]);
-const REDUCTIONS_NEEDED = STARTING_GEOJSON_FEATURE_COUNT - DESIRED_NUMBER_FEATURES;
-
-let can_still_simplify = true;
-
-/****** Do this is in a loop ******/
-
-while (geojson_feature_count > DESIRED_NUMBER_FEATURES && can_still_simplify) {
-  // a zoom level threshold has been reached.  save that zoomlevel.
-  threshold.forEach(obj => {
-    if (geojson_feature_count === obj.count) {
-      // convert keyed geojson back to array
-      const geojson_array = Object.keys(keyed_geojson).map(feature => {
-        return keyed_geojson[feature];
+        geojson_feature_count++;
+      })
+      .on('error', err => {
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
+        return reject(err);
+      })
+      .on('end', async () => {
+        ctx.log.info(geojson_feature_count + ' records read and indexed');
+        fs.writeFileSync(`attributes.json`, JSON.stringify(attributeLookupFile), 'utf8');
+        return resolve();
       });
-      console.log('writing zoomlevel: ' + obj.zoom);
-      written_file_promises.push(
-        writeFileAsync(
-          `./output_${obj.zoom}.json`,
-          JSON.stringify(turf.featureCollection(geojson_array)),
-          'utf8',
-        ),
-      );
+  });
+
+  /********* main ************/
+
+  // continually combine smaller features.
+  // without aggregating across state or county lines
+  // note: this is beautiful
+
+  const total_time = present(); // tracks total execution time
+
+  const RETAINED = getRetained();
+
+  const LOW_ZOOM = 4;
+  const HIGH_ZOOM = 16;
+
+  /****** Setup ******/
+
+  const STARTING_GEOJSON_FEATURE_COUNT = geojson_feature_count;
+
+  // set an array of feature thresholds
+  for (let i = LOW_ZOOM; i < HIGH_ZOOM; i++) {
+    threshold.push({ count: Math.round(geojson_feature_count * RETAINED[i]), zoom: i });
+  }
+
+  const DESIRED_NUMBER_FEATURES = Math.round(geojson_feature_count * RETAINED[LOW_ZOOM]);
+  const REDUCTIONS_NEEDED = STARTING_GEOJSON_FEATURE_COUNT - DESIRED_NUMBER_FEATURES;
+
+  let can_still_simplify = true;
+
+  /****** Do this is in a loop ******/
+
+  while (geojson_feature_count > DESIRED_NUMBER_FEATURES && can_still_simplify) {
+    // a zoom level threshold has been reached.  save that zoomlevel.
+    threshold.forEach(obj => {
+      if (geojson_feature_count === obj.count) {
+        // convert keyed geojson back to array
+        const geojson_array = Object.keys(keyed_geojson).map(feature => {
+          return keyed_geojson[feature];
+        });
+        console.log('writing zoomlevel: ' + obj.zoom);
+        written_file_promises.push(
+          writeFileAsync(
+            `./output_${obj.zoom}.json`,
+            JSON.stringify(turf.featureCollection(geojson_array)),
+            'utf8',
+          ),
+        );
+      }
+    });
+
+    if (geojson_feature_count % 500 === 0) {
+      console.log({ STARTING_GEOJSON_FEATURE_COUNT, geojson_feature_count });
+      const progress =
+        ((STARTING_GEOJSON_FEATURE_COUNT - geojson_feature_count) / REDUCTIONS_NEEDED) * 100;
+      console.log(`compute progress ${progress.toFixed(2)} %`);
     }
+
+    // error check this for nothing left in coalesced_scores array
+    let a_match;
+
+    let lowest = Infinity;
+
+    const item = ordered_arr[0];
+    const value = item.coalescability;
+
+    if (value < lowest) {
+      lowest = value;
+    }
+
+    if (lowest === Infinity) {
+      // exhausted all features eligible for combining
+      a_match = false;
+    } else {
+      // lowest found, now grab it
+      // TODO performance concern with SHIFT!
+      const a_next_lowest = ordered_arr.shift();
+      a_match = a_next_lowest.match;
+    }
+
+    // are there still a pool of features remaining that can be simplified?
+    // sometimes constraints such as making sure features are not combined
+    // across county lines creates situations where we exhaust the pool of
+    // features able to be combined for low (zoomed out) zoom levels
+    if (!a_match) {
+      can_still_simplify = false;
+    } else {
+      // we only use unique_key.  new unique_key is just old unique_keys concatenated with _
+      let properties_a;
+      let properties_b;
+
+      properties_a = keyed_geojson[a_match[0]].properties;
+      properties_b = keyed_geojson[a_match[1]].properties;
+
+      const area_a = turf.area(keyed_geojson[a_match[0]]);
+      const area_b = turf.area(keyed_geojson[a_match[1]]);
+      const prop_a = properties_a[idPrefix];
+      const prop_b = properties_b[idPrefix];
+
+      const larger_geoid = area_a > area_b ? properties_a[idPrefix] : properties_b[idPrefix];
+
+      const combined = turf.union(keyed_geojson[a_match[0]], keyed_geojson[a_match[1]]);
+
+      // overwrite properties with geoid of larger feature
+      // AA property is a flag for aggregated area
+      combined.properties = {
+        [idPrefix]: larger_geoid,
+      };
+
+      // delete old features that were combined
+      delete keyed_geojson[a_match[0]];
+      delete keyed_geojson[a_match[1]];
+
+      // create new combined feature
+      keyed_geojson[larger_geoid] = combined;
+
+      geojson_feature_count--;
+
+      // go back through all features and remove everything that was affected by the above transformation
+      ordered_arr = ordered_arr.filter(item => {
+        const geoid_array = item.match;
+
+        if (
+          geoid_array[0] === prop_a ||
+          geoid_array[0] === prop_b ||
+          geoid_array[1] === prop_a ||
+          geoid_array[1] === prop_b
+        ) {
+          return false;
+        }
+        return true;
+      });
+
+      // update index (remove previous)
+      const options = tree.search(combined);
+
+      options.features.forEach(option => {
+        if (
+          option.properties[idPrefix] === properties_a[idPrefix] ||
+          option.properties[idPrefix] === properties_b[idPrefix]
+        ) {
+          tree.remove(option);
+        }
+      });
+
+      // update index (add new)
+      tree.insert(combined);
+
+      // recompute features
+      computeFeature(combined, tree, ordered_arr, counter);
+    }
+  }
+
+  // convert keyed geojson back to array
+  const geojson_array = Object.keys(keyed_geojson).map(feature => {
+    return keyed_geojson[feature];
   });
 
-  if (geojson_feature_count % 500 === 0) {
-    console.log({ STARTING_GEOJSON_FEATURE_COUNT, geojson_feature_count });
-    const progress =
-      ((STARTING_GEOJSON_FEATURE_COUNT - geojson_feature_count) / REDUCTIONS_NEEDED) * 100;
-    console.log(`compute progress ${progress.toFixed(2)} %`);
-  }
+  // presumably the lowest zoom level doesn't get reached since the loop terminates just before the count hits the target
+  // so it is saved here, at the end of the program.
+  written_file_promises.push(
+    writeFileAsync(
+      `./output_${LOW_ZOOM}.json`,
+      JSON.stringify(turf.featureCollection(geojson_array)),
+      'utf8',
+    ),
+  );
 
-  // error check this for nothing left in coalesced_scores array
-  let a_match;
-
-  let lowest = Infinity;
-
-  const item = ordered_arr[0];
-  const value = item.coalescability;
-
-  if (value < lowest) {
-    lowest = value;
-  }
-
-  if (lowest === Infinity) {
-    // exhausted all features eligible for combining
-    a_match = false;
-  } else {
-    // lowest found, now grab it
-    // TODO performance concern with SHIFT!
-    const a_next_lowest = ordered_arr.shift();
-    a_match = a_next_lowest.match;
-  }
-
-  // are there still a pool of features remaining that can be simplified?
-  // sometimes constraints such as making sure features are not combined
-  // across county lines creates situations where we exhaust the pool of
-  // features able to be combined for low (zoomed out) zoom levels
-  if (!a_match) {
-    can_still_simplify = false;
-  } else {
-    // we only use unique_key.  new unique_key is just old unique_keys concatenated with _
-    let properties_a;
-    let properties_b;
-
-    properties_a = keyed_geojson[a_match[0]].properties;
-    properties_b = keyed_geojson[a_match[1]].properties;
-
-    const area_a = turf.area(keyed_geojson[a_match[0]]);
-    const area_b = turf.area(keyed_geojson[a_match[1]]);
-    const prop_a = properties_a[idPrefix];
-    const prop_b = properties_b[idPrefix];
-
-    const larger_geoid = area_a > area_b ? properties_a[idPrefix] : properties_b[idPrefix];
-
-    const combined = turf.union(keyed_geojson[a_match[0]], keyed_geojson[a_match[1]]);
-
-    // overwrite properties with geoid of larger feature
-    // AA property is a flag for aggregated area
-    combined.properties = {
-      [idPrefix]: larger_geoid,
-    };
-
-    // delete old features that were combined
-    delete keyed_geojson[a_match[0]];
-    delete keyed_geojson[a_match[1]];
-
-    // create new combined feature
-    keyed_geojson[larger_geoid] = combined;
-
-    geojson_feature_count--;
-
-    // go back through all features and remove everything that was affected by the above transformation
-    ordered_arr = ordered_arr.filter(item => {
-      const geoid_array = item.match;
-
-      if (
-        geoid_array[0] === prop_a ||
-        geoid_array[0] === prop_b ||
-        geoid_array[1] === prop_a ||
-        geoid_array[1] === prop_b
-      ) {
-        return false;
-      }
-      return true;
+  Promise.all(written_file_promises)
+    .then(() => {
+      // end of program
+      console.log('Completed.');
+      console.log(present() - total_time);
+    })
+    .catch(err => {
+      // error writing file(s).  stop immediately
+      console.log(err);
+      process.exit();
     });
 
-    // update index (remove previous)
-    const options = tree.search(combined);
-
-    options.features.forEach(option => {
-      if (
-        option.properties[idPrefix] === properties_a[idPrefix] ||
-        option.properties[idPrefix] === properties_b[idPrefix]
-      ) {
-        tree.remove(option);
-      }
-    });
-
-    // update index (add new)
-    tree.insert(combined);
-
-    // recompute features
-    computeFeature(combined, tree, ordered_arr, counter);
-  }
-}
-
-// convert keyed geojson back to array
-const geojson_array = Object.keys(keyed_geojson).map(feature => {
-  return keyed_geojson[feature];
-});
-
-// presumably the lowest zoom level doesn't get reached since the loop terminates just before the count hits the target
-// so it is saved here, at the end of the program.
-written_file_promises.push(
-  writeFileAsync(
-    `./output_${LOW_ZOOM}.json`,
-    JSON.stringify(turf.featureCollection(geojson_array)),
-    'utf8',
-  ),
-);
-
-Promise.all(written_file_promises)
-  .then(() => {
-    // end of program
-    console.log('Completed.');
-    console.log(present() - total_time);
-  })
-  .catch(err => {
-    // error writing file(s).  stop immediately
-    console.log(err);
-    process.exit();
-  });
-
-/*** Functions ***/
+  //  unwindStack(ctx.process, 'addUniqueIdNdjson');
+};
 
 // percent of features that will be retained at each zoom level
 function getRetained() {

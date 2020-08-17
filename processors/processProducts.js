@@ -30,6 +30,7 @@ const {
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
 const { unwindStack } = require('../util/misc');
+const { runAggregate } = require('../aggregate/aggregate');
 
 exports.processProducts = async function (ctx, data) {
   ctx.process.push('processProducts');
@@ -362,6 +363,10 @@ exports.processProducts = async function (ctx, data) {
 
       const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
       const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
+
+      await runAggregate(ctx, tilesDir, derivativePath);
+
+      throw new Error('finished successfully');
 
       // todo include cluster_id as property in tippecanoe
       // todo logs here
