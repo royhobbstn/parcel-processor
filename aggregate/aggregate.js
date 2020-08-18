@@ -5,10 +5,11 @@ const geojsonRbush = require('geojson-rbush').default;
 const { computeFeature } = require('./computeFeature.js');
 const present = require('present');
 const turf = require('@turf/turf');
-const { idPrefix } = require('../util/constants');
+const { idPrefix, directories } = require('../util/constants');
 const { promisify } = require('util');
 const writeFileAsync = promisify(fs.writeFile);
 const ndjson = require('ndjson');
+const { unwindStack } = require('../util/misc');
 
 // const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
 // const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
@@ -16,7 +17,9 @@ const ndjson = require('ndjson');
 // const derivativePath = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}-cluster`;
 // const writer = fs.createWriteStream(`${derivativePath}.ndgeojson`);
 
-exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
+exports.runAggregate = async function (ctx, derivativePath) {
+  ctx.process.push('runAggregate');
+
   /*** Mutable Globals ***/
 
   let ordered_arr = [];
@@ -25,13 +28,13 @@ exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
   const threshold = [];
   const written_file_promises = [];
   let geojson_feature_count = 0;
+  const attributeLookupFile = {};
 
   /*** Initial index creation and calculation ***/
 
   const tree = geojsonRbush();
 
   await new Promise((resolve, reject) => {
-    const attributeLookupFile = {};
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', function (obj) {
@@ -44,7 +47,7 @@ exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
         tree.insert(obj);
 
         if (geojson_feature_count % 2000 === 0) {
-          console.log(`${geojson_feature_count} features indexed.`);
+          ctx.log.info(`${geojson_feature_count} features indexed.`);
         }
 
         keyed_geojson[obj.properties[idPrefix]] = obj;
@@ -58,7 +61,11 @@ exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
       })
       .on('end', async () => {
         ctx.log.info(geojson_feature_count + ' records read and indexed');
-        fs.writeFileSync(`attributes.json`, JSON.stringify(attributeLookupFile), 'utf8');
+        // fs.writeFileSync(
+        //   `${directories.productTempDir + ctx.directoryId}/attributes.json`,
+        //   JSON.stringify(attributeLookupFile),
+        //   'utf8',
+        // );
         return resolve();
       });
   });
@@ -73,6 +80,8 @@ exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
 
   const RETAINED = getRetained();
 
+  // TODO figure the strategy around this.  constants?
+  // also keep in mind reading constants in clusterAggregated.
   const LOW_ZOOM = 4;
   const HIGH_ZOOM = 16;
 
@@ -100,10 +109,10 @@ exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
         const geojson_array = Object.keys(keyed_geojson).map(feature => {
           return keyed_geojson[feature];
         });
-        console.log('writing zoomlevel: ' + obj.zoom);
+        ctx.log.info('writing zoomlevel: ' + obj.zoom);
         written_file_promises.push(
           writeFileAsync(
-            `./output_${obj.zoom}.json`,
+            `${directories.productTempDir + ctx.directoryId}/aggregated_${obj.zoom}.json`,
             JSON.stringify(turf.featureCollection(geojson_array)),
             'utf8',
           ),
@@ -112,10 +121,9 @@ exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
     });
 
     if (geojson_feature_count % 500 === 0) {
-      console.log({ STARTING_GEOJSON_FEATURE_COUNT, geojson_feature_count });
       const progress =
         ((STARTING_GEOJSON_FEATURE_COUNT - geojson_feature_count) / REDUCTIONS_NEEDED) * 100;
-      console.log(`compute progress ${progress.toFixed(2)} %`);
+      ctx.log.info(`compute progress ${progress.toFixed(2)} %`);
     }
 
     // error check this for nothing left in coalesced_scores array
@@ -222,42 +230,37 @@ exports.runAggregate = async function (ctx, tilesDir, derivativePath) {
   // so it is saved here, at the end of the program.
   written_file_promises.push(
     writeFileAsync(
-      `./output_${LOW_ZOOM}.json`,
+      `${directories.productTempDir + ctx.directoryId}/aggregated_${LOW_ZOOM}.json`,
       JSON.stringify(turf.featureCollection(geojson_array)),
       'utf8',
     ),
   );
 
-  Promise.all(written_file_promises)
-    .then(() => {
-      // end of program
-      console.log('Completed.');
-      console.log(present() - total_time);
-    })
-    .catch(err => {
-      // error writing file(s).  stop immediately
-      console.log(err);
-      process.exit();
-    });
+  await Promise.all(written_file_promises);
 
-  //  unwindStack(ctx.process, 'addUniqueIdNdjson');
+  ctx.log.info(`Completed aggregation: ${present() - total_time} ms`);
+
+  unwindStack(ctx.process, 'runAggregate');
+
+  return attributeLookupFile;
 };
 
 // percent of features that will be retained at each zoom level
 function getRetained() {
   return {
     '4': 0.15,
-    '5': 0.2,
-    '6': 0.25,
-    '7': 0.3,
-    '8': 0.35,
-    '9': 0.4,
-    '10': 0.45,
-    '11': 0.5,
-    '12': 0.6,
-    '13': 0.7,
-    '14': 0.8,
-    '15': 0.9,
+    '5': 0.22,
+    '6': 0.29,
+    '7': 0.36,
+    '8': 0.43,
+    '9': 0.5,
+    '10': 0.57,
+    '11': 0.64,
+    '12': 0.71,
+    '13': 0.78,
+    '14': 0.85,
+    '15': 0.92,
+    '16': 1,
   };
 
   // TODO another one of these for Alaska ZoomLevels

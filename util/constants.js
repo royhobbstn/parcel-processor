@@ -66,6 +66,6 @@ exports.messageTypes = {
 };
 
 exports.zoomLevels = {
-  LOW: 3,
-  HIGH: 13,
+  LOW: 4,
+  HIGH: 16,
 };

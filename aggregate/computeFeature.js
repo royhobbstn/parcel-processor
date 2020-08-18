@@ -14,7 +14,7 @@ exports.computeFeature = function (feature, tree, ordered_arr, counter) {
     match: [],
   };
 
-  nearby.forEach(near_feature => {
+  nearby.features.forEach(near_feature => {
     if (near_feature.properties[idPrefix] === feature.properties[idPrefix]) {
       // ignore self
       return;

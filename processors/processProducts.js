@@ -31,6 +31,7 @@ const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
 const { unwindStack } = require('../util/misc');
 const { runAggregate } = require('../aggregate/aggregate');
+const { clusterAggregated } = require('../aggregate/clusterAggregated');
 
 exports.processProducts = async function (ctx, data) {
   ctx.process.push('processProducts');
@@ -364,7 +365,9 @@ exports.processProducts = async function (ctx, data) {
       const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
       const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
-      await runAggregate(ctx, tilesDir, derivativePath);
+      const featureProperties = await runAggregate(ctx, derivativePath);
+
+      await clusterAggregated(ctx, tilesDir, featureProperties);
 
       throw new Error('finished successfully');
 
@@ -394,6 +397,7 @@ exports.processProducts = async function (ctx, data) {
           type: s3deleteType.DIRECTORY,
         });
 
+        // TODO cant you just put this into the local dir and have s3 sync take care of it?
         // write metadata
         await putTextToS3(
           ctx,
@@ -421,8 +425,8 @@ exports.processProducts = async function (ctx, data) {
     } catch (err) {
       await removeS3Files(ctx, cleanupS3);
       caughtError = true;
-      ctx.log.info(`Uploading or product record creation failed on Tiles`, {
-        data: err.message,
+      ctx.log.error(`Uploading or product record creation failed on Tiles`, {
+        error: err.message,
         stack: err.stack,
       });
     }
