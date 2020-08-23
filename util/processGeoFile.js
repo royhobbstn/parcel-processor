@@ -11,6 +11,7 @@ const {
   idPrefix,
   clusterPrefix,
   fileFormats,
+  zoomLevels,
 } = require('./constants');
 const { clustersKmeans } = require('./modKmeans');
 const { sleep, unwindStack } = require('./misc');
@@ -288,30 +289,15 @@ function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerNam
   });
 }
 
-exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
-  ctx.process.push('spawnTippecane');
+exports.tileJoinLayers = function (ctx, tilesDir) {
+  ctx.process.push('tileJoinLayers');
 
   return new Promise((resolve, reject) => {
-    const layername = 'parcelslayer';
-    const application = 'tippecanoe';
-    const args = [
-      '-f',
-      '-l',
-      layername,
-      '-e',
-      tilesDir,
-      `--include=${idPrefix}`,
-      `--include=${clusterPrefix}`,
-      '-pS',
-      '-D10',
-      '-pf',
-      '-pk',
-      // '-M',
-      // '512000',
-      '--coalesce-densest-as-needed',
-      '--maximum-zoom=12',
-      `${derivativePath}.ndgeojson`,
-    ];
+    const application = 'tile-join';
+    const args = ['-e', tilesDir];
+    for (let i = zoomLevels.LOW; i <= zoomLevels.HIGH; i++) {
+      args.push(`${directories.tilesDir + ctx.directoryId}/lvl_${i}.mbtiles`);
+    }
     const command = `${application} ${args.join(' ')}`;
     ctx.log.info(`running: ${command}`);
 
@@ -331,9 +317,9 @@ exports.spawnTippecane = function (ctx, tilesDir, derivativePath) {
     });
 
     proc.on('close', code => {
-      ctx.log.info(`completed creating tiles. code ${code}`);
-      unwindStack(ctx.process, 'spawnTippecane');
-      resolve({ command, layername });
+      ctx.log.info(`finished creating directory of tiles. code ${code}`);
+      unwindStack(ctx.process, 'tileJoinLayers');
+      resolve({ command });
     });
   });
 };
@@ -554,3 +540,54 @@ function countStats(ctx, path) {
       });
   });
 }
+
+exports.writeMbTiles = async function (ctx, filename, currentZoom) {
+  //
+  ctx.process.push('writeMbTiles');
+
+  ctx.log.info('Writing tile level ' + currentZoom);
+
+  return new Promise((resolve, reject) => {
+    const layername = 'parcelslayer';
+    const application = 'tippecanoe';
+    const args = [
+      '-f',
+      '-l',
+      layername,
+      '-o',
+      `${directories.tilesDir + ctx.directoryId}/lvl_${currentZoom}.mbtiles`,
+      `--include=${idPrefix}`,
+      `--include=${clusterPrefix}`,
+      '-D10',
+      '-pf',
+      '-pk',
+      `-z${currentZoom}`,
+      `-Z${currentZoom}`,
+      filename,
+    ];
+    const command = `${application} ${args.join(' ')}`;
+    ctx.log.info(`running: ${command}`);
+
+    const proc = spawn(application, args);
+
+    proc.stdout.on('data', data => {
+      ctx.log.info(data.toString());
+    });
+
+    proc.stderr.on('data', data => {
+      console.log(data.toString());
+    });
+
+    proc.on('error', err => {
+      ctx.log.error('Error', { err: err.message, stack: err.stack });
+      reject(err);
+    });
+
+    proc.on('close', code => {
+      ctx.log.info(`completed creating tiles. code ${code}`);
+      unwindStack(ctx.process, 'writeMbTiles');
+      resolve({ command, layername });
+    });
+  });
+  //
+};

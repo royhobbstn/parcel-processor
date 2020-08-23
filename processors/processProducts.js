@@ -9,6 +9,7 @@ const {
   productOrigins,
   s3deleteType,
   messageTypes,
+  zoomLevels,
 } = require('../util/constants');
 const { acquireConnection } = require('../util/wrapQuery');
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
@@ -20,12 +21,13 @@ const {
 } = require('../util/queries');
 const {
   convertToFormat,
-  spawnTippecane,
   writeTileAttributes,
   addClusterIdToGeoData,
   createNdGeoJsonWithClusterId,
   extractPointsFromNdGeoJson,
   readTippecanoeMetadata,
+  writeMbTiles,
+  tileJoinLayers,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
@@ -367,19 +369,34 @@ exports.processProducts = async function (ctx, data) {
 
       const featureProperties = await runAggregate(ctx, derivativePath);
 
-      await clusterAggregated(ctx, tilesDir, featureProperties);
+      await clusterAggregated(ctx, tilesDir, featureProperties, derivativePath);
 
-      throw new Error('finished successfully');
+      for (let currentZoom = zoomLevels.LOW; currentZoom <= zoomLevels.HIGH; currentZoom++) {
+        const findOriginalFile = currentZoom === zoomLevels.HIGH;
+        let filename = '';
 
-      // todo include cluster_id as property in tippecanoe
-      // todo logs here
-      const commandInput = await spawnTippecane(ctx, tilesDir, derivativePath);
+        if (!findOriginalFile) {
+          // get from aggregated geojson outputs
+          filename = `${
+            directories.productTempDir + ctx.directoryId
+          }/aggregated_${currentZoom}.json`;
+        } else {
+          // get from original ndgeojson
+          filename = `${derivativePath}.ndgeojson`;
+        }
+
+        await writeMbTiles(ctx, filename, currentZoom);
+      }
+
+      const commandInput = await tileJoinLayers(ctx, tilesDir);
+
       await writeTileAttributes(ctx, derivativePath, tilesDir);
       await gzipTileAttributes(ctx, `${tilesDir}/attributes`);
 
       const generatedMetadata = await readTippecanoeMetadata(ctx, `${tilesDir}/metadata.json`);
 
       const metadata = {
+        layername: '',
         ...commandInput,
         ...meta,
         processed: new Date().toISOString(),

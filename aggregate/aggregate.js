@@ -5,7 +5,7 @@ const geojsonRbush = require('geojson-rbush').default;
 const { computeFeature } = require('./computeFeature.js');
 const present = require('present');
 const turf = require('@turf/turf');
-const { idPrefix, directories } = require('../util/constants');
+const { idPrefix, directories, zoomLevels } = require('../util/constants');
 const { promisify } = require('util');
 const writeFileAsync = promisify(fs.writeFile);
 const ndjson = require('ndjson');
@@ -17,6 +17,14 @@ const { unwindStack } = require('../util/misc');
 // const derivativePath = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}-cluster`;
 // const writer = fs.createWriteStream(`${derivativePath}.ndgeojson`);
 
+function setPause(timer) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      return resolve();
+    }, timer);
+  });
+}
+
 exports.runAggregate = async function (ctx, derivativePath) {
   ctx.process.push('runAggregate');
 
@@ -24,7 +32,6 @@ exports.runAggregate = async function (ctx, derivativePath) {
 
   let ordered_arr = [];
   const keyed_geojson = {};
-  let counter = 0;
   const threshold = [];
   const written_file_promises = [];
   let geojson_feature_count = 0;
@@ -37,7 +44,7 @@ exports.runAggregate = async function (ctx, derivativePath) {
   await new Promise((resolve, reject) => {
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
         // save attributes to lookup file
         attributeLookupFile[obj.properties[idPrefix]] = JSON.parse(JSON.stringify(obj.properties));
 
@@ -51,7 +58,6 @@ exports.runAggregate = async function (ctx, derivativePath) {
         }
 
         keyed_geojson[obj.properties[idPrefix]] = obj;
-        computeFeature(obj, tree, ordered_arr, counter);
 
         geojson_feature_count++;
       })
@@ -61,14 +67,19 @@ exports.runAggregate = async function (ctx, derivativePath) {
       })
       .on('end', async () => {
         ctx.log.info(geojson_feature_count + ' records read and indexed');
-        // fs.writeFileSync(
-        //   `${directories.productTempDir + ctx.directoryId}/attributes.json`,
-        //   JSON.stringify(attributeLookupFile),
-        //   'utf8',
-        // );
         return resolve();
       });
   });
+
+  // initially seed ordered_arr
+  Object.keys(keyed_geojson).forEach(async (key, index) => {
+    computeFeature(keyed_geojson[key], tree, ordered_arr);
+    if (index % 2000 === 0) {
+      ctx.log.info(`${index} features computed.`);
+      await setPause(100);
+    }
+  });
+  ctx.log.info(`finished feature computation.  Ready to aggregate.`);
 
   /********* main ************/
 
@@ -80,21 +91,16 @@ exports.runAggregate = async function (ctx, derivativePath) {
 
   const RETAINED = getRetained();
 
-  // TODO figure the strategy around this.  constants?
-  // also keep in mind reading constants in clusterAggregated.
-  const LOW_ZOOM = 4;
-  const HIGH_ZOOM = 16;
-
   /****** Setup ******/
 
   const STARTING_GEOJSON_FEATURE_COUNT = geojson_feature_count;
 
   // set an array of feature thresholds
-  for (let i = LOW_ZOOM; i < HIGH_ZOOM; i++) {
+  for (let i = zoomLevels.LOW; i < zoomLevels.HIGH; i++) {
     threshold.push({ count: Math.round(geojson_feature_count * RETAINED[i]), zoom: i });
   }
 
-  const DESIRED_NUMBER_FEATURES = Math.round(geojson_feature_count * RETAINED[LOW_ZOOM]);
+  const DESIRED_NUMBER_FEATURES = Math.round(geojson_feature_count * RETAINED[zoomLevels.LOW]);
   const REDUCTIONS_NEEDED = STARTING_GEOJSON_FEATURE_COUNT - DESIRED_NUMBER_FEATURES;
 
   let can_still_simplify = true;
@@ -217,7 +223,7 @@ exports.runAggregate = async function (ctx, derivativePath) {
       tree.insert(combined);
 
       // recompute features
-      computeFeature(combined, tree, ordered_arr, counter);
+      computeFeature(combined, tree, ordered_arr);
     }
   }
 
@@ -230,7 +236,7 @@ exports.runAggregate = async function (ctx, derivativePath) {
   // so it is saved here, at the end of the program.
   written_file_promises.push(
     writeFileAsync(
-      `${directories.productTempDir + ctx.directoryId}/aggregated_${LOW_ZOOM}.json`,
+      `${directories.productTempDir + ctx.directoryId}/aggregated_${zoomLevels.LOW}.json`,
       JSON.stringify(turf.featureCollection(geojson_array)),
       'utf8',
     ),
@@ -254,13 +260,11 @@ function getRetained() {
     '7': 0.36,
     '8': 0.43,
     '9': 0.5,
-    '10': 0.57,
-    '11': 0.64,
-    '12': 0.71,
-    '13': 0.78,
-    '14': 0.85,
-    '15': 0.92,
-    '16': 1,
+    '10': 0.6,
+    '11': 0.7,
+    '12': 0.8,
+    '13': 0.9,
+    '14': 1,
   };
 
   // TODO another one of these for Alaska ZoomLevels
