@@ -194,7 +194,7 @@ exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
   ctx.log.info('adding clusterId to GeoData using KMeans');
 
   const featureCount = points.length;
-  const numberOfClusters = Math.ceil((featureCount * propertyCount) / 30000);
+  const numberOfClusters = Math.ceil((featureCount * propertyCount) / 2000);
   const clustered = clustersKmeans(ctx, turf.featureCollection(points), { numberOfClusters });
   ctx.log.info('finished clustering');
 
@@ -296,7 +296,9 @@ exports.tileJoinLayers = function (ctx, tilesDir) {
     const application = 'tile-join';
     const args = ['-e', tilesDir];
     for (let i = zoomLevels.LOW; i <= zoomLevels.HIGH; i++) {
-      args.push(`${directories.tilesDir + ctx.directoryId}/lvl_${i}.mbtiles`);
+      if (i % 2 === 0) {
+        args.push(`${directories.tilesDir + ctx.directoryId}/lvl_${i}.mbtiles`);
+      }
     }
     const command = `${application} ${args.join(' ')}`;
     ctx.log.info(`running: ${command}`);
@@ -324,7 +326,7 @@ exports.tileJoinLayers = function (ctx, tilesDir) {
   });
 };
 
-exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
+exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup) {
   ctx.process.push('writeTileAttributes');
 
   return new Promise((resolve, reject) => {
@@ -341,9 +343,8 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
     fs.createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
-        const copy = { ...obj.properties };
-        delete copy[clusterPrefix]; // filter out clusterID property in stringified JSON
-        const prefix = obj.properties[clusterPrefix];
+        const properties = obj.properties;
+        const prefix = lookup[properties[idPrefix]];
 
         if (!writeStreams[prefix]) {
           writeStreams[prefix] = fs.createWriteStream(
@@ -361,12 +362,12 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir) {
             }),
           );
         }
-        writeStreams[prefix].write(JSON.stringify(copy) + '\n', 'utf8');
+        writeStreams[prefix].write(JSON.stringify(properties) + '\n', 'utf8');
 
         transformed++;
         if (transformed % 10000 === 0) {
-          await sleep(50);
           ctx.log.info(transformed + ' records processed');
+          await sleep(50);
         }
       })
       .on('error', err => {
@@ -440,36 +441,31 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
   });
 };
 
-exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) {
-  ctx.process.push('createNdGeoJsonWithClusterId');
+exports.createClusterIdHull = async function (ctx, outputPath, lookup) {
+  ctx.process.push('createClusterIdHull');
 
   return new Promise((resolve, reject) => {
-    ctx.log.info('createNdGeoJsonWithClusterId: creating derivative ndgeojson with clusterId...');
+    ctx.log.info('creating clusterID Hull');
 
     let transformed = 0;
-
-    ctx.log.info('outputPath:', { outputPath });
-    const derivativePath = `${outputPath}-cluster`;
-
-    const writer = fs.createWriteStream(`${derivativePath}.ndgeojson`);
-
-    writer.on('finish', () => {
-      ctx.log.info(`finished writing ${derivativePath}.ndgeojson`);
-      unwindStack(ctx.process, 'createNdGeoJsonWithClusterId');
-      return resolve(derivativePath);
-    });
+    const clusterGeo = {};
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
         // add clusterId
-        obj.properties = { ...obj.properties, [clusterPrefix]: lookup[obj.properties[idPrefix]] };
+        const cluster = lookup[obj.properties[idPrefix]];
+        obj.properties = { [clusterPrefix]: cluster };
 
-        writer.write(JSON.stringify(obj) + '\n', 'utf8');
+        // keep track of geojson layers in memory (hrm.. does it scale)
+        if (!clusterGeo[cluster]) {
+          clusterGeo[cluster] = [obj];
+        } else {
+          clusterGeo[cluster].push(obj);
+        }
 
         transformed++;
-        if (transformed % 1000 === 0) {
-          await sleep(50);
+        if (transformed % 5000 === 0) {
           ctx.log.info(transformed + ' records processed');
         }
       })
@@ -480,7 +476,15 @@ exports.createNdGeoJsonWithClusterId = async function (ctx, outputPath, lookup) 
       .on('end', end => {
         ctx.log.info('end', { end });
         ctx.log.info(transformed + ' records processed');
-        writer.end();
+
+        const hulls = Object.keys(clusterGeo).map(key => {
+          const layer = turf.convex(turf.featureCollection(clusterGeo[key]));
+          layer.properties = { [clusterPrefix]: key };
+          return layer;
+        });
+        // fs.writeFileSync('./clusterio.geojson', JSON.stringify(turf.featureCollection(hulls)));
+        unwindStack(ctx.process, 'createClusterIdHull');
+        resolve(turf.featureCollection(hulls));
       });
   });
 };

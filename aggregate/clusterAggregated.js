@@ -24,7 +24,11 @@ exports.clusterAggregated = async function (ctx, tilesDir, featureProperties, de
   const totalClusters = [];
   const ids = {};
 
-  for (let currentZoom = zoomLevels.LOW; currentZoom <= zoomLevels.HIGH; currentZoom++) {
+  for (
+    let currentZoom = zoomLevels.LOW;
+    currentZoom <= zoomLevels.HIGH;
+    currentZoom = currentZoom + 2
+  ) {
     const streamOriginalFile = currentZoom === zoomLevels.HIGH;
 
     let filtered = [];
