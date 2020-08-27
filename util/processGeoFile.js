@@ -4,6 +4,7 @@ const fs = require('fs');
 const spawn = require('child_process').spawn;
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
+const geojsonRbush = require('geojson-rbush').default;
 const { StatContext } = require('./StatContext');
 const {
   directories,
@@ -126,33 +127,27 @@ exports.parseFileExec = async function (ctx, outputPath, inputPath, chosenLayerN
   ctx.process.push('parseFileExec');
 
   // convert from whatever to newline delimited geojson
-  await convertToFormat(
-    ctx,
-    fileFormats.NDGEOJSON,
-    outputPath + '.temp',
-    inputPath,
-    chosenLayerName,
-  );
+  await convertToFormat(ctx, fileFormats.NDGEOJSON, outputPath, inputPath, chosenLayerName);
 
-  const stats = await countStats(ctx, outputPath + '.temp' + '.ndgeojson');
+  const stats = await countStats(ctx, outputPath + '.ndgeojson');
 
   fs.writeFileSync(outputPath + '.json', JSON.stringify(stats), 'utf8');
-
-  // add idPrefix to final copy of ndgeojson
-  await addUniqueIdNdjson(ctx, outputPath + '.temp' + '.ndgeojson', outputPath + '.ndgeojson');
 
   unwindStack(ctx.process, 'parseFileExec');
   return;
 };
 
-function addUniqueIdNdjson(ctx, inputPath, outputPath) {
+exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
   ctx.process.push('addUniqueIdNdjson');
+
+  const tree = geojsonRbush(); // to detect duplicates
+  const additionalFeatures = {}; // key[id] = [array of feature properties]  : duplicate features
 
   return new Promise((resolve, reject) => {
     let transformed = 0;
 
     const writeStream = fs
-      .createWriteStream(outputPath)
+      .createWriteStream(`${outputPath}.ndgeojson`)
       .on('error', err => {
         ctx.log.error('Error: ', { error: err.message, stack: err.stack });
         return reject(err);
@@ -160,21 +155,68 @@ function addUniqueIdNdjson(ctx, inputPath, outputPath) {
       .on('finish', () => {
         ctx.log.info(`processing complete. autoincrement id: ${idPrefix} added.`);
         unwindStack(ctx.process, 'addUniqueIdNdjson');
-        return resolve();
+        return resolve(additionalFeatures);
       });
 
-    fs.createReadStream(inputPath)
+    fs.createReadStream(`${inputPath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', function (obj) {
-        transformed++;
+        const flattened = turf.flatten(obj);
 
-        obj.properties[idPrefix] = transformed;
+        flattened.features.forEach(feature => {
+          transformed++;
 
-        writeStream.write(JSON.stringify(obj) + '\n', 'utf8');
+          feature.properties[idPrefix] = transformed;
 
-        if (transformed % 10000 === 0) {
-          ctx.log.info(transformed + ' records read');
-        }
+          const results = tree.search(feature);
+
+          let writeNewFeature = true;
+
+          if (results.features.length) {
+            //   get outline from main feature
+            // @ts-ignore
+            const featureOutline = turf.polygonToLine(feature);
+
+            for (let indexFeature of results.features) {
+              //   for each spatial index results
+              //     get outline from result
+              const indexOutline = turf.polygonToLine(indexFeature);
+              const intersection = turf.lineOverlap(featureOutline, indexOutline);
+
+              // potentially could be within bbox but not intersecting
+              if (intersection && intersection.features && intersection.features.length) {
+                const l1 = turf.length(intersection, { units: 'kilometers' });
+                const l2 = turf.length(featureOutline, { units: 'kilometers' });
+                const lineOverlapThreshold = l1 / l2;
+
+                //  if line overlap from 98%+
+                if (lineOverlapThreshold > 0.98) {
+                  //  get id of index feature
+                  const id = indexFeature.properties[idPrefix];
+
+                  // add current features attributes to key(id): [array of additional features]
+                  if (additionalFeatures[id]) {
+                    additionalFeatures[id].push(feature.properties);
+                  } else {
+                    additionalFeatures[feature.properties];
+                  }
+
+                  // dont write new feature to ndgeojson
+                  writeNewFeature = false;
+                }
+              }
+            }
+          }
+
+          if (writeNewFeature) {
+            writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
+            tree.insert(feature);
+          }
+
+          if (transformed % 10000 === 0) {
+            ctx.log.info(transformed + ' records read');
+          }
+        });
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -185,7 +227,7 @@ function addUniqueIdNdjson(ctx, inputPath, outputPath) {
         writeStream.end();
       });
   });
-}
+};
 
 exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
   ctx.process.push('addClusterIdToGeoData');

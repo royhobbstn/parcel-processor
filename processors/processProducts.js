@@ -30,6 +30,7 @@ const {
   readTippecanoeMetadata,
   writeMbTiles,
   tileJoinLayers,
+  addUniqueIdNdjson,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
@@ -358,18 +359,22 @@ exports.processProducts = async function (ctx, data) {
     const cleanupS3 = [];
 
     try {
-      const [points, propertyCount] = await extractPointsFromNdGeoJson(ctx, convertToFormatBase);
+      // flatten, unstack and add prefixId
+      const augmentedBase = `${convertToFormatBase}.aug`;
+      const additionalFeatures = await addUniqueIdNdjson(ctx, convertToFormatBase, augmentedBase);
+
+      const [points, propertyCount] = await extractPointsFromNdGeoJson(ctx, augmentedBase);
 
       // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
       const lookup = addClusterIdToGeoData(ctx, points, propertyCount);
-      const clusterHull = await createClusterIdHull(ctx, convertToFormatBase, lookup);
+      const clusterHull = await createClusterIdHull(ctx, augmentedBase, lookup);
 
       const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
       const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
-      const featureProperties = await runAggregate(ctx, convertToFormatBase);
+      const featureProperties = await runAggregate(ctx, augmentedBase);
 
-      await clusterAggregated(ctx, tilesDir, featureProperties, convertToFormatBase);
+      await clusterAggregated(ctx, tilesDir, featureProperties, augmentedBase);
 
       for (
         let currentZoom = zoomLevels.LOW;
@@ -386,7 +391,7 @@ exports.processProducts = async function (ctx, data) {
           }/aggregated_${currentZoom}.json`;
         } else {
           // get from original ndgeojson
-          filename = `${convertToFormatBase}.ndgeojson`;
+          filename = `${augmentedBase}.ndgeojson`;
         }
 
         await writeMbTiles(ctx, filename, currentZoom);
@@ -398,7 +403,7 @@ exports.processProducts = async function (ctx, data) {
       const buffer = zlib.gzipSync(JSON.stringify(clusterHull));
       fs.writeFileSync(`${tilesDir}/cluster_hull.geojson`, buffer);
 
-      await writeTileAttributes(ctx, convertToFormatBase, tilesDir, lookup);
+      await writeTileAttributes(ctx, augmentedBase, tilesDir, lookup);
       await gzipTileAttributes(ctx, `${tilesDir}/attributes`);
 
       const generatedMetadata = await readTippecanoeMetadata(ctx, `${tilesDir}/metadata.json`);

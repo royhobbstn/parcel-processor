@@ -1,7 +1,6 @@
 // @ts-check
 
 const { unwindStack } = require('./misc');
-const { idPrefix } = require('./constants');
 
 // gather field statistics for a dataset
 
@@ -64,9 +63,6 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
     this.rowCount++;
 
     Object.keys(row.properties).forEach(f => {
-      if (f === idPrefix) {
-        return;
-      }
       const value = row.properties[f];
       const type = typeof value;
       const strValue = String(value);

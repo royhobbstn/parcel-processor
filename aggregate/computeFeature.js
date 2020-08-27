@@ -1,21 +1,19 @@
 // @ts-check
-
+const fs = require('fs');
 const turf = require('@turf/turf');
 const { idPrefix } = require('../util/constants');
 
 // passed by reference.  will mutate
 
 exports.computeFeature = function (feature, tree, ordered_arr) {
-  const bbox = turf.bbox(feature);
-  const nearby = tree.search(bbox);
+  const nearby = tree.search(feature.bbox);
   const best_match = {
     coalescability: Infinity,
     match: [],
   };
 
-  // I'm slicing here because its possible there could be thousands of
-  // overlapping features (rem: Denver condos)
-  nearby.features.slice(0, 10).forEach((near_feature, i) => {
+  // TODO check this count again to make sure multipart to singlepart and remove overlapping are working
+  nearby.features.forEach(near_feature => {
     if (near_feature.properties[idPrefix] === feature.properties[idPrefix]) {
       // ignore self
       return;
@@ -35,12 +33,14 @@ exports.computeFeature = function (feature, tree, ordered_arr) {
       const area = turf.area(feature);
       const matching_feature_area = turf.area(near_feature);
 
-      const inverse_shared_edge = 1 - l1 / l2;
-      const combined_area = area + matching_feature_area;
+      const pow = Math.pow(l1 / l2, 2);
+      const inverse_shared_edge = 1.0001 - pow;
 
-      const coalescability = inverse_shared_edge * combined_area;
+      const combined_area = Math.sqrt(area + matching_feature_area);
 
-      // we only care about registering the best match; coalescibility will
+      let coalescability = inverse_shared_edge * combined_area;
+
+      // we only care about registering the best match; coalescability will
       // be recalculated as soon as a feature is joined to another,
       // rendering a lesser match useless
       if (coalescability < best_match.coalescability) {
@@ -51,13 +51,12 @@ exports.computeFeature = function (feature, tree, ordered_arr) {
   });
 
   if (best_match.match.length) {
+    // todo retry binary search at some point
     inOrder(ordered_arr, best_match);
   }
 };
 
 function inOrder(arr, item) {
-  /* Insert item into arr keeping low to high order */
-
   let ix = 0;
   while (ix < arr.length) {
     if (item.coalescability < arr[ix].coalescability) {

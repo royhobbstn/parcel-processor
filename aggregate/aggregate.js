@@ -70,8 +70,6 @@ exports.runAggregate = async function (ctx, derivativePath) {
   /********* main ************/
 
   // continually combine smaller features.
-  // without aggregating across state or county lines
-  // note: this is beautiful
 
   const total_time = present(); // tracks total execution time
   let cftime = 0;
@@ -108,13 +106,13 @@ exports.runAggregate = async function (ctx, derivativePath) {
           return keyed_geojson[feature];
         });
         ctx.log.info('writing zoomlevel: ' + obj.zoom);
-        // written_file_promises.push(
-        //   writeFileAsync(
-        //     `${directories.productTempDir + ctx.directoryId}/aggregated_${obj.zoom}.json`,
-        //     JSON.stringify(turf.featureCollection(geojson_array)),
-        //     'utf8',
-        //   ),
-        // );
+        written_file_promises.push(
+          writeFileAsync(
+            `${directories.productTempDir + ctx.directoryId}/aggregated_${obj.zoom}.json`,
+            JSON.stringify(turf.featureCollection(geojson_array)),
+            'utf8',
+          ),
+        );
       }
     });
 
@@ -124,43 +122,19 @@ exports.runAggregate = async function (ctx, derivativePath) {
       ctx.log.info(`aggregate progress ${progress.toFixed(2)} %`);
     }
 
-    // error check this for nothing left in coalesced_scores array
-    let a_match;
-
-    let lowest = Infinity;
-
-    const item = ordered_arr[0];
-    const value = item.coalescability;
-
-    if (value < lowest) {
-      lowest = value;
-    }
-
-    if (lowest === Infinity) {
+    if (!ordered_arr[0]) {
       // exhausted all features eligible for combining
-      a_match = false;
-    } else {
-      // lowest found, now grab it
-      // TODO performance concern with SHIFT!
-      const s = present();
-      const a_next_lowest = ordered_arr.shift();
-      calcShift += present() - s;
-      a_match = a_next_lowest.match;
-    }
-
-    // are there still a pool of features remaining that can be simplified?
-    // sometimes constraints such as making sure features are not combined
-    // across county lines creates situations where we exhaust the pool of
-    // features able to be combined for low (zoomed out) zoom levels
-    if (!a_match) {
       can_still_simplify = false;
     } else {
-      // we only use unique_key.  new unique_key is just old unique_keys concatenated with _
-      let properties_a;
-      let properties_b;
+      // lowest found, now grab it
+      const s = present();
+      const nextLowest = ordered_arr.shift();
+      calcShift += present() - s;
+      const a_match = nextLowest.match;
 
-      properties_a = keyed_geojson[a_match[0]].properties;
-      properties_b = keyed_geojson[a_match[1]].properties;
+      // we only use unique_key.  new unique_key is just old unique_keys concatenated with _
+      const properties_a = keyed_geojson[a_match[0]].properties;
+      const properties_b = keyed_geojson[a_match[1]].properties;
 
       const ta = present();
       const area_a = turf.area(keyed_geojson[a_match[0]]);
@@ -188,10 +162,13 @@ exports.runAggregate = async function (ctx, derivativePath) {
       // create new combined feature
       keyed_geojson[larger_geoid] = combined;
 
+      // we lost a feature in this combine
       geojson_feature_count--;
 
       // go back through all features and remove everything that was affected by the above transformation
       // todo shouldnt need to go through EVERYTHING!
+      const associatedFeatures = new Set();
+
       ordered_arr = ordered_arr.filter(item => {
         const geoid_array = item.match;
 
@@ -201,10 +178,15 @@ exports.runAggregate = async function (ctx, derivativePath) {
           geoid_array[1] === prop_a ||
           geoid_array[1] === prop_b
         ) {
+          associatedFeatures.add(geoid_array[0]);
+          associatedFeatures.add(geoid_array[1]);
           return false;
         }
         return true;
       });
+
+      associatedFeatures.delete(prop_a);
+      associatedFeatures.delete(prop_b);
 
       // update index (remove previous)
       const ts = present();
@@ -225,9 +207,13 @@ exports.runAggregate = async function (ctx, derivativePath) {
       tree.insert(combined);
       treeInsert += present() - ti;
 
-      // recompute features
+      // recompute features (new combined + all features linked to previous original features)
       const cf = present();
       computeFeature(combined, tree, ordered_arr);
+
+      associatedFeatures.forEach(id => {
+        computeFeature(keyed_geojson[id], tree, ordered_arr);
+      });
       cftime += present() - cf;
     }
   }
@@ -239,15 +225,15 @@ exports.runAggregate = async function (ctx, derivativePath) {
 
   // presumably the lowest zoom level doesn't get reached since the loop terminates just before the count hits the target
   // so it is saved here, at the end of the program.
-  // written_file_promises.push(
-  //   writeFileAsync(
-  //     `${directories.productTempDir + ctx.directoryId}/aggregated_${zoomLevels.LOW}.json`,
-  //     JSON.stringify(turf.featureCollection(geojson_array)),
-  //     'utf8',
-  //   ),
-  // );
+  written_file_promises.push(
+    writeFileAsync(
+      `${directories.productTempDir + ctx.directoryId}/aggregated_${zoomLevels.LOW}.json`,
+      JSON.stringify(turf.featureCollection(geojson_array)),
+      'utf8',
+    ),
+  );
 
-  // await Promise.all(written_file_promises);
+  await Promise.all(written_file_promises);
 
   ctx.log.info(`Completed aggregation: ${present() - total_time} ms`);
   ctx.log.info(`Compute feature time: ${cftime} ms`);
@@ -272,6 +258,4 @@ function getRetained() {
     '12': 0.8,
     '14': 1,
   };
-
-  // TODO another one of these for Alaska ZoomLevels
 }
