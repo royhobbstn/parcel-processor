@@ -198,7 +198,7 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
                   if (additionalFeatures[id]) {
                     additionalFeatures[id].push(feature.properties);
                   } else {
-                    additionalFeatures[feature.properties];
+                    additionalFeatures[id] = [feature.properties];
                   }
 
                   // dont write new feature to ndgeojson
