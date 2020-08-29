@@ -30,6 +30,7 @@ const {
   readTippecanoeMetadata,
   writeMbTiles,
   tileJoinLayers,
+  execGolangClusters,
   addUniqueIdNdjson,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
@@ -363,10 +364,21 @@ exports.processProducts = async function (ctx, data) {
       const augmentedBase = `${convertToFormatBase}.aug`;
       const additionalFeatures = await addUniqueIdNdjson(ctx, convertToFormatBase, augmentedBase);
 
-      const [points, propertyCount] = await extractPointsFromNdGeoJson(ctx, augmentedBase);
+      // -- start golang
+      const [points, propertyCount, centroidsFilename] = await extractPointsFromNdGeoJson(
+        ctx,
+        augmentedBase,
+      );
 
+      const featureCount = points.length;
+      const numClusters = Math.ceil((featureCount * propertyCount) / 2000);
+      const outputFilename = './output.json';
+      await execGolangClusters(ctx, numClusters, centroidsFilename, outputFilename);
+      throw new Error('stop here');
       // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
       const lookup = addClusterIdToGeoData(ctx, points, propertyCount);
+      // -- end golang
+
       const clusterHull = await createClusterIdHull(ctx, augmentedBase, lookup);
 
       const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
@@ -403,7 +415,7 @@ exports.processProducts = async function (ctx, data) {
       const buffer = zlib.gzipSync(JSON.stringify(clusterHull));
       fs.writeFileSync(`${tilesDir}/cluster_hull.geojson`, buffer);
 
-      await writeTileAttributes(ctx, augmentedBase, tilesDir, lookup);
+      await writeTileAttributes(ctx, augmentedBase, tilesDir, lookup, additionalFeatures);
       await gzipTileAttributes(ctx, `${tilesDir}/attributes`);
 
       const generatedMetadata = await readTippecanoeMetadata(ctx, `${tilesDir}/metadata.json`);

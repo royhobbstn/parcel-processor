@@ -48,7 +48,7 @@ exports.initiateFreeMemoryQuery = function (ctx) {
 exports.getStatus = async function (ctx) {
   ctx.process.push('getStatus');
 
-  const applications = ['tippecanoe', 'tile-join', 'ogr2ogr', 'aws'];
+  const applications = ['tippecanoe', 'tile-join', 'ogr2ogr', 'aws', 'go'];
   const status = {};
 
   for (let appName of applications) {

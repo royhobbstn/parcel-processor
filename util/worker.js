@@ -77,7 +77,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     await cleanDirectory(ctx, `${directories.outputDir + ctx.directoryId}`);
     await cleanDirectory(ctx, `${directories.rawDir + ctx.directoryId}`);
     await cleanDirectory(ctx, `${directories.unzippedDir + ctx.directoryId}`);
-    await cleanDirectory(ctx, `${directories.productTempDir + ctx.directoryId}`);
+    // await cleanDirectory(ctx, `${directories.productTempDir + ctx.directoryId}`);
     await cleanDirectory(ctx, `${directories.logDir + ctx.directoryId}`);
     // await cleanDirectory(ctx, `${directories.tilesDir + ctx.directoryId}`);
     await cleanDirectory(ctx, `${directories.subGeographiesDir + ctx.directoryId}`);

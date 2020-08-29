@@ -161,9 +161,22 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
     fs.createReadStream(`${inputPath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', function (obj) {
-        const flattened = turf.flatten(obj);
+        if (!obj.geometry) {
+          return;
+        }
+
+        let flattened;
+        try {
+          flattened = turf.flatten(obj);
+        } catch (e) {
+          ctx.log.error('Error in flatten', { message: e.message, obj });
+          throw e;
+        }
 
         flattened.features.forEach(feature => {
+          if (!feature.geometry) {
+            return;
+          }
           transformed++;
 
           feature.properties[idPrefix] = transformed;
@@ -174,14 +187,38 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
 
           if (results.features.length) {
             //   get outline from main feature
-            // @ts-ignore
-            const featureOutline = turf.polygonToLine(feature);
+
+            let featureOutline;
+
+            try {
+              // @ts-ignore
+              featureOutline = turf.polygonToLine(feature);
+            } catch (e) {
+              ctx.log.error('Error in feature polygonToLine', { message: e.message, feature });
+              throw e;
+            }
 
             for (let indexFeature of results.features) {
               //   for each spatial index results
               //     get outline from result
-              const indexOutline = turf.polygonToLine(indexFeature);
-              const intersection = turf.lineOverlap(featureOutline, indexOutline);
+              let indexOutline;
+              try {
+                indexOutline = turf.polygonToLine(indexFeature);
+              } catch (e) {
+                ctx.log.error('Error in index polygonToLine', { message: e.message, indexFeature });
+                throw e;
+              }
+              let intersection;
+              try {
+                intersection = turf.lineOverlap(featureOutline, indexOutline);
+              } catch (e) {
+                ctx.log.error('Error in lineOverlap', {
+                  message: e.message,
+                  featureOutline,
+                  indexOutline,
+                });
+                throw e;
+              }
 
               // potentially could be within bbox but not intersecting
               if (intersection && intersection.features && intersection.features.length) {
@@ -287,6 +324,7 @@ function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerNam
     const args = [
       '-fieldTypeToString',
       'DateTime',
+      '-progress',
       '-f',
       format.driver,
       `${outputPath}.${format.extension}`,
@@ -368,7 +406,7 @@ exports.tileJoinLayers = function (ctx, tilesDir) {
   });
 };
 
-exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup) {
+exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, additionalFeatures) {
   ctx.process.push('writeTileAttributes');
 
   return new Promise((resolve, reject) => {
@@ -386,6 +424,8 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup) {
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
         const properties = obj.properties;
+        properties.overlappingFeatures = additionalFeatures[properties[idPrefix]];
+        console.log(properties.overlappingFeatures);
         const prefix = lookup[properties[idPrefix]];
 
         if (!writeStreams[prefix]) {
@@ -442,6 +482,44 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup) {
   });
 };
 
+exports.execGolangClusters = async function (ctx, numClusters, inputFilename, outputFilename) {
+  ctx.process.push('execGolangClusters');
+
+  return new Promise((resolve, reject) => {
+    const application = 'go';
+    const args = [
+      'run',
+      './golang/cluster.go',
+      numClusters,
+      `${inputFilename}`,
+      `${outputFilename}`,
+    ];
+    const command = `${application} ${args.join(' ')}`;
+    ctx.log.info(`running: ${command}`);
+
+    const proc = spawn(application, args);
+
+    proc.stdout.on('data', data => {
+      ctx.log.info(data.toString());
+    });
+
+    proc.stderr.on('data', data => {
+      console.log(data.toString());
+    });
+
+    proc.on('error', err => {
+      ctx.log.error('Error', { err: err.message, stack: err.stack });
+      reject(err);
+    });
+
+    proc.on('close', code => {
+      ctx.log.info(`finished running golang clusters script. code ${code}`);
+      unwindStack(ctx.process, 'execGolangClusters');
+      resolve({ command });
+    });
+  });
+};
+
 exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
   ctx.process.push('extractPointsFromNdGeoJson');
 
@@ -452,6 +530,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
     ctx.log.info('extractPointsFromNdGeoJson');
     ctx.log.info('outputPath', { outputPath });
     const points = []; // point centroid geojson features with parcel-outlet ids
+    const barePts = [];
     let propertyCount = 1; // will be updated below.  count of property attributes per feature.  used for deciding attribute file size and number of clusters
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
@@ -459,8 +538,14 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
       .on('data', async function (obj) {
         // create a point feature
         const pt = createPointFeature(ctx, obj);
+
         if (pt) {
           points.push(pt);
+          barePts.push({
+            id: pt.properties[idPrefix],
+            lat: pt.geometry.coordinates[1],
+            lng: pt.geometry.coordinates[0],
+          });
         }
 
         transformed++;
@@ -478,7 +563,9 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
         unwindStack(ctx.process, 'extractPointsFromNdGeoJson');
-        return resolve([points, propertyCount]);
+        const centroidsFilename = `${directories.productTempDir + ctx.directoryId}/centroids.json`;
+        fs.writeFileSync(centroidsFilename, JSON.stringify(barePts));
+        return resolve([points, propertyCount, centroidsFilename]);
       });
   });
 };
