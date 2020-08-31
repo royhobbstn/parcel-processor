@@ -1,6 +1,7 @@
 // @ts-check
 
 const fs = require('fs');
+const path = require('path');
 const geojsonRbush = require('geojson-rbush').default;
 const { computeFeature } = require('./computeFeature.js');
 const present = require('present');
@@ -17,8 +18,13 @@ let queue = new TinyQueue([], (a, b) => {
   return a.coalescability - b.coalescability;
 });
 
-exports.runAggregate = async function (ctx, derivativePath) {
+exports.runAggregate = async function (ctx, clusterFilePath) {
   ctx.process.push('runAggregate');
+
+  const extension = path.extname(clusterFilePath);
+  const file = path.basename(clusterFilePath, extension);
+  const cluster = file.split('_')[1];
+  ctx.log.info(`aggregating cluster: ${cluster}`);
 
   /*** Mutable Globals ***/
 
@@ -33,7 +39,7 @@ exports.runAggregate = async function (ctx, derivativePath) {
   const tree = geojsonRbush();
 
   await new Promise((resolve, reject) => {
-    fs.createReadStream(`${derivativePath}.ndgeojson`)
+    fs.createReadStream(`${clusterFilePath}`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
         // save attributes to lookup file
@@ -111,7 +117,9 @@ exports.runAggregate = async function (ctx, derivativePath) {
         ctx.log.info('writing zoomlevel: ' + obj.zoom);
         written_file_promises.push(
           writeFileAsync(
-            `${directories.productTempDir + ctx.directoryId}/aggregated_${obj.zoom}.json`,
+            `${directories.productTempDir + ctx.directoryId}/aggregated_${
+              obj.zoom
+            }|${cluster}.json`,
             JSON.stringify(turf.featureCollection(geojson_array)),
             'utf8',
           ),
@@ -141,9 +149,16 @@ exports.runAggregate = async function (ctx, derivativePath) {
     } else {
       const a_match = nextLowest.match;
 
+      let properties_a, properties_b;
       // we only use unique_key.  new unique_key is just old unique_keys concatenated with _
-      const properties_a = keyed_geojson[a_match[0]].properties;
-      const properties_b = keyed_geojson[a_match[1]].properties;
+      try {
+        properties_a = keyed_geojson[a_match[0]].properties;
+        properties_b = keyed_geojson[a_match[1]].properties;
+      } catch (e) {
+        console.log(e);
+        console.log({ a_match });
+        throw e;
+      }
 
       const area_a = turf.area(keyed_geojson[a_match[0]]);
       const area_b = turf.area(keyed_geojson[a_match[1]]);
@@ -163,7 +178,7 @@ exports.runAggregate = async function (ctx, derivativePath) {
         // todo set up test with these two features
         // so that if you preprocess them a certain way
         // either they union, or they are filtered out.
-        console.log(e);
+        ctx.log.warn('error', { error: e.message });
         errors++;
         errorIds.add(a_match[0]);
         errorIds.add(a_match[1]);
@@ -251,7 +266,9 @@ exports.runAggregate = async function (ctx, derivativePath) {
   // so it is saved here, at the end of the program.
   written_file_promises.push(
     writeFileAsync(
-      `${directories.productTempDir + ctx.directoryId}/aggregated_${zoomLevels.LOW}.json`,
+      `${directories.productTempDir + ctx.directoryId}/aggregated_${
+        zoomLevels.LOW
+      }|${cluster}.json`,
       JSON.stringify(turf.featureCollection(geojson_array)),
       'utf8',
     ),

@@ -31,6 +31,7 @@ const {
   tileJoinLayers,
   execGolangClusters,
   addUniqueIdNdjson,
+  divideIntoClusters,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
@@ -94,6 +95,8 @@ exports.processProducts = async function (ctx, data) {
   const destPlain = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.ndgeojson.gz`;
   const destUnzipped = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.ndgeojson`;
   const convertToFormatBase = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}`;
+
+  const miniNdgeojsonBase = `${directories.productTempDir + ctx.directoryId}/mini`;
 
   ctx.log.info('paths', {
     fileNameBase,
@@ -370,7 +373,7 @@ exports.processProducts = async function (ctx, data) {
       );
 
       const featureCount = points.length;
-      const numClusters = Math.ceil((featureCount * propertyCount) / 2000);
+      const numClusters = Math.ceil((featureCount * propertyCount) / 5000);
       const lookupFilename = `${directories.productTempDir + ctx.directoryId}/clusterLookup.json`;
 
       // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
@@ -382,10 +385,19 @@ exports.processProducts = async function (ctx, data) {
 
       const clusterHull = await createClusterIdHull(ctx, augmentedBase, lookup);
 
+      const filenames = await divideIntoClusters(ctx, augmentedBase, miniNdgeojsonBase, lookup);
+
+      console.log(filenames);
+
+      for (let filename of filenames) {
+        const featureProperties = await runAggregate(ctx, filename);
+        // uh... what about featureProperties
+      }
+
       const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
       const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
-      const featureProperties = await runAggregate(ctx, augmentedBase);
+      throw new Error('okay stop');
 
       await clusterAggregated(ctx, tilesDir, featureProperties, augmentedBase);
 

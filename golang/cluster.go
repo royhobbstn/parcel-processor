@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"fmt"
+	"strconv"
 )
 
 // Centroid struct
@@ -40,11 +41,11 @@ func main() {
 
 	fmt.Println(args)
 	
-	inputNumClusters := args[0]
+	inputNumClusters, _ := strconv.Atoi(args[0])
 	inputFilename := args[1]
 	outputFilename := args[2]
 
-	fmt.Println("Number Of Clusters: " + inputNumClusters)
+	fmt.Println(fmt.Sprintf("Number Of Clusters: %d", inputNumClusters))
 	fmt.Println("Input File: " + inputFilename)
 	fmt.Println("Output File: " + outputFilename)
 
@@ -66,7 +67,7 @@ func main() {
 
 	// Partition the data points into X clusters
 	km := kmeans.New()
-	clusters, err := km.Partition(d, 50)
+	clusters, err := km.Partition(d, inputNumClusters)
 
 	clusterLookup := map[int32]int{}
 

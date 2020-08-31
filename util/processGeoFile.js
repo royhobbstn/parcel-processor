@@ -173,120 +173,118 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           throw e;
         }
 
-        flattened.features.forEach(roughFeature => {
-          if (!roughFeature.geometry) {
+        flattened.features.forEach(feature => {
+          if (!feature.geometry) {
             return;
           }
 
-          const cleanFeatures = [];
+          // const cleanFeatures = [];
 
-          // @ts-ignore
-          const kinks = turf.kinks(roughFeature);
-          if (kinks.features.length) {
-            try {
-              // @ts-ignore
-              const buffer = turf.buffer(roughFeature, 0);
-              const result = turf.unkinkPolygon(buffer);
-              cleanFeatures.push(...result.features);
-            } catch (e) {
-              // could not un-kink, keeping original
-              cleanFeatures.push(roughFeature);
-            }
-          } else {
-            cleanFeatures.push(roughFeature);
+          // const kinks = turf.kinks(roughFeature);
+          // if (kinks.features.length) {
+          //   try {
+          //     const buffer = turf.buffer(roughFeature, 0);
+          //     const result = turf.unkinkPolygon(buffer);
+          //     cleanFeatures.push(...result.features);
+          //   } catch (e) {
+          //     // could not un-kink, keeping original
+          //     cleanFeatures.push(roughFeature);
+          //   }
+          // } else {
+          //   cleanFeatures.push(roughFeature);
+          // }
+
+          // cleanFeatures.forEach(feature => {
+          // // mutates
+          // turf.truncate(feature, { precision: 5, coordinates: 2, mutate: true });
+          // turf.cleanCoords(feature, { mutate: true });
+
+          // filter out impossibly tiny areas < 1m
+          if (turf.area(feature) < 1) {
+            return;
           }
 
-          cleanFeatures.forEach(feature => {
-            // mutates
-            turf.truncate(feature, { precision: 5, coordinates: 2, mutate: true });
-            turf.cleanCoords(feature, { mutate: true });
+          transformed++;
 
-            // filter out impossibly tiny areas < 1m
-            if (turf.area(feature) < 1) {
-              return;
+          feature.properties[idPrefix] = transformed;
+
+          // so as to check for overlaps
+          const results = tree.search(feature);
+
+          let writeNewFeature = true;
+
+          if (results.features.length) {
+            //   get outline from main feature
+
+            let featureOutline;
+
+            try {
+              // @ts-ignore
+              featureOutline = turf.polygonToLine(feature);
+            } catch (e) {
+              ctx.log.error('Error in feature polygonToLine', { message: e.message, feature });
+              throw e;
             }
 
-            transformed++;
-
-            feature.properties[idPrefix] = transformed;
-
-            // so as to check for overlaps
-            const results = tree.search(feature);
-
-            let writeNewFeature = true;
-
-            if (results.features.length) {
-              //   get outline from main feature
-
-              let featureOutline;
-
+            for (let indexFeature of results.features) {
+              //   for each spatial index results
+              //     get outline from result
+              let indexOutline;
               try {
-                // @ts-ignore
-                featureOutline = turf.polygonToLine(feature);
+                indexOutline = turf.polygonToLine(indexFeature);
               } catch (e) {
-                ctx.log.error('Error in feature polygonToLine', { message: e.message, feature });
+                ctx.log.error('Error in index polygonToLine', {
+                  message: e.message,
+                  indexFeature,
+                });
+                throw e;
+              }
+              let intersection;
+              try {
+                intersection = turf.lineOverlap(featureOutline, indexOutline);
+              } catch (e) {
+                ctx.log.error('Error in lineOverlap', {
+                  message: e.message,
+                  featureOutline,
+                  indexOutline,
+                });
                 throw e;
               }
 
-              for (let indexFeature of results.features) {
-                //   for each spatial index results
-                //     get outline from result
-                let indexOutline;
-                try {
-                  indexOutline = turf.polygonToLine(indexFeature);
-                } catch (e) {
-                  ctx.log.error('Error in index polygonToLine', {
-                    message: e.message,
-                    indexFeature,
-                  });
-                  throw e;
-                }
-                let intersection;
-                try {
-                  intersection = turf.lineOverlap(featureOutline, indexOutline);
-                } catch (e) {
-                  ctx.log.error('Error in lineOverlap', {
-                    message: e.message,
-                    featureOutline,
-                    indexOutline,
-                  });
-                  throw e;
-                }
+              // potentially could be within bbox but not intersecting
+              if (intersection && intersection.features && intersection.features.length) {
+                const l1 = turf.length(intersection, { units: 'kilometers' });
+                const l2 = turf.length(featureOutline, { units: 'kilometers' });
+                const lineOverlapThreshold = l1 / l2;
 
-                // potentially could be within bbox but not intersecting
-                if (intersection && intersection.features && intersection.features.length) {
-                  const l1 = turf.length(intersection, { units: 'kilometers' });
-                  const l2 = turf.length(featureOutline, { units: 'kilometers' });
-                  const lineOverlapThreshold = l1 / l2;
+                //  if line overlap from 96%+
+                if (lineOverlapThreshold > 0.96) {
+                  //  get id of index feature
+                  const id = indexFeature.properties[idPrefix];
 
-                  //  if line overlap from 96%+
-                  if (lineOverlapThreshold > 0.96) {
-                    //  get id of index feature
-                    const id = indexFeature.properties[idPrefix];
-
-                    // add current features attributes to key(id): [array of additional features]
-                    if (additionalFeatures[id]) {
-                      additionalFeatures[id].push(feature.properties);
-                    } else {
-                      additionalFeatures[id] = [feature.properties];
-                    }
-
-                    // dont write new feature to ndgeojson
-                    writeNewFeature = false;
+                  // add current features attributes to key(id): [array of additional features]
+                  if (additionalFeatures[id]) {
+                    additionalFeatures[id].push(feature.properties);
+                  } else {
+                    additionalFeatures[id] = [feature.properties];
                   }
+
+                  // dont write new feature to ndgeojson
+                  writeNewFeature = false;
                 }
               }
             }
+          }
 
-            if (writeNewFeature) {
-              writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
-              tree.insert(feature);
-            }
+          if (writeNewFeature) {
+            writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
+            tree.insert(feature);
+          }
 
-            if (transformed % 10000 === 0) {
-              ctx.log.info(transformed + ' records read');
-            }
-          });
+          if (transformed % 10000 === 0) {
+            ctx.log.info(transformed + ' records read');
+          }
+          // });
         });
       })
       .on('error', err => {
@@ -731,4 +729,66 @@ exports.writeMbTiles = async function (ctx, filename, currentZoom) {
     });
   });
   //
+};
+
+// make mini ndgeojson files; 1 per each main cluster
+exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBase, lookup) {
+  ctx.process.push('divideIntoClusters');
+
+  ctx.log.info(`creating directory: ${miniNdgeojsonBase}`);
+  fs.mkdirSync(miniNdgeojsonBase);
+
+  const fileNames = {};
+  let completedFileWrites = 0;
+
+  await new Promise((resolve, reject) => {
+    fs.createReadStream(`${augmentedBase}.ndgeojson`)
+      .pipe(ndjson.parse())
+      .on('data', async function (obj) {
+        const cluster = lookup[obj.properties[idPrefix]];
+        const filename = `${miniNdgeojsonBase}/file_${cluster}.ndgeojson`;
+
+        if (!fileNames[filename]) {
+          const stream = fs
+            .createWriteStream(filename, { flags: 'a', emitClose: true })
+            .on('error', err => {
+              ctx.log.error('Error', { err: err.message, stack: err.stack });
+              reject(err);
+            })
+            .on('close', async () => {
+              ctx.log.info('write stream closed!!');
+              completedFileWrites++;
+            });
+          fileNames[filename] = stream;
+        }
+
+        fileNames[filename].write(JSON.stringify(obj) + '\n');
+      })
+      .on('error', err => {
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
+        return reject(err);
+      })
+      .on('end', async () => {
+        ctx.log.info('done writing streams');
+        return resolve();
+      });
+  });
+
+  const streams = Object.keys(fileNames);
+  streams.forEach(stream => {
+    // todo probably need to listen for last write on each stream to truly know if done
+    fileNames[stream].end();
+  });
+
+  await new Promise((resolve, reject) => {
+    const interval = setInterval(() => {
+      ctx.log.info('awaiting file writes');
+      if (streams.length === completedFileWrites) {
+        clearInterval(interval);
+        resolve('done!!');
+      }
+    }, 100);
+  });
+  unwindStack(ctx.process, 'divideIntoClusters');
+  return streams;
 };
