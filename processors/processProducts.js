@@ -24,7 +24,6 @@ const {
 const {
   convertToFormat,
   writeTileAttributes,
-  addClusterIdToGeoData,
   createClusterIdHull,
   extractPointsFromNdGeoJson,
   readTippecanoeMetadata,
@@ -372,12 +371,14 @@ exports.processProducts = async function (ctx, data) {
 
       const featureCount = points.length;
       const numClusters = Math.ceil((featureCount * propertyCount) / 2000);
-      const outputFilename = './output.json';
-      await execGolangClusters(ctx, numClusters, centroidsFilename, outputFilename);
-      throw new Error('stop here');
+      const lookupFilename = `${directories.productTempDir + ctx.directoryId}/clusterLookup.json`;
+
       // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
-      const lookup = addClusterIdToGeoData(ctx, points, propertyCount);
-      // -- end golang
+      await execGolangClusters(ctx, numClusters, centroidsFilename, lookupFilename);
+
+      ctx.log.info('reading lookup file');
+      const lookup = JSON.parse(fs.readFileSync(lookupFilename, 'utf8'));
+      ctx.log.info('lookup file read into memory');
 
       const clusterHull = await createClusterIdHull(ctx, augmentedBase, lookup);
 

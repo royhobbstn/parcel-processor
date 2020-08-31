@@ -10,13 +10,18 @@ const { promisify } = require('util');
 const writeFileAsync = promisify(fs.writeFile);
 const ndjson = require('ndjson');
 const { unwindStack, sleep } = require('../util/misc');
+const TinyQueue = require('tinyqueue');
+
+// @ts-ignore
+let queue = new TinyQueue([], (a, b) => {
+  return a.coalescability - b.coalescability;
+});
 
 exports.runAggregate = async function (ctx, derivativePath) {
   ctx.process.push('runAggregate');
 
   /*** Mutable Globals ***/
 
-  let ordered_arr = [];
   const keyed_geojson = {};
   const threshold = [];
   const written_file_promises = [];
@@ -57,9 +62,9 @@ exports.runAggregate = async function (ctx, derivativePath) {
       });
   });
 
-  // initially seed ordered_arr
+  // initially seed queue
   Object.keys(keyed_geojson).forEach(async (key, index) => {
-    computeFeature(keyed_geojson[key], tree, ordered_arr);
+    computeFeature(ctx, keyed_geojson[key], tree, queue);
     if (index % 2000 === 0) {
       ctx.log.info(`${index} features computed.`);
       await sleep(100);
@@ -74,11 +79,9 @@ exports.runAggregate = async function (ctx, derivativePath) {
   const total_time = present(); // tracks total execution time
   let cftime = 0;
   let turfUnion = 0;
-  let turfArea = 0;
-  let calcShift = 0;
-  let treeSearch = 0;
-  let treeInsert = 0;
 
+  let errors = 0;
+  let errorIds = new Set();
   const RETAINED = getRetained();
 
   /****** Setup ******/
@@ -122,35 +125,56 @@ exports.runAggregate = async function (ctx, derivativePath) {
       ctx.log.info(`aggregate progress ${progress.toFixed(2)} %`);
     }
 
-    if (!ordered_arr[0]) {
+    // lowest found, now grab it
+    let nextLowest;
+    while (queue.length && !nextLowest) {
+      const next = queue.pop();
+
+      if (next.match[0] !== -1) {
+        nextLowest = next;
+      }
+    }
+
+    if (!nextLowest) {
       // exhausted all features eligible for combining
       can_still_simplify = false;
     } else {
-      // lowest found, now grab it
-      const s = present();
-      const nextLowest = ordered_arr.shift();
-      calcShift += present() - s;
       const a_match = nextLowest.match;
 
       // we only use unique_key.  new unique_key is just old unique_keys concatenated with _
       const properties_a = keyed_geojson[a_match[0]].properties;
       const properties_b = keyed_geojson[a_match[1]].properties;
 
-      const ta = present();
       const area_a = turf.area(keyed_geojson[a_match[0]]);
       const area_b = turf.area(keyed_geojson[a_match[1]]);
-      turfArea += present() - ta;
+
       const prop_a = properties_a[idPrefix];
       const prop_b = properties_b[idPrefix];
 
       const larger_geoid = area_a > area_b ? properties_a[idPrefix] : properties_b[idPrefix];
+      const larger_feature =
+        area_a > area_b ? keyed_geojson[a_match[0]] : keyed_geojson[a_match[1]];
 
       const tu = present();
-      const combined = turf.union(keyed_geojson[a_match[0]], keyed_geojson[a_match[1]]);
+      let combined;
+      try {
+        combined = turf.union(keyed_geojson[a_match[0]], keyed_geojson[a_match[1]]);
+      } catch (e) {
+        // todo set up test with these two features
+        // so that if you preprocess them a certain way
+        // either they union, or they are filtered out.
+        console.log(e);
+        errors++;
+        errorIds.add(a_match[0]);
+        errorIds.add(a_match[1]);
+      }
       turfUnion += present() - tu;
 
+      if (!combined) {
+        combined = larger_feature;
+      }
+
       // overwrite properties with geoid of larger feature
-      // AA property is a flag for aggregated area
       combined.properties = {
         [idPrefix]: larger_geoid,
       };
@@ -169,7 +193,9 @@ exports.runAggregate = async function (ctx, derivativePath) {
       // todo shouldnt need to go through EVERYTHING!
       const associatedFeatures = new Set();
 
-      ordered_arr = ordered_arr.filter(item => {
+      // TODO this messes up the heap.
+      // think of strategies to only rebuild occasionally
+      queue.data.forEach(item => {
         const geoid_array = item.match;
 
         if (
@@ -180,18 +206,15 @@ exports.runAggregate = async function (ctx, derivativePath) {
         ) {
           associatedFeatures.add(geoid_array[0]);
           associatedFeatures.add(geoid_array[1]);
-          return false;
+          item.match = [-1, -1];
         }
-        return true;
       });
 
       associatedFeatures.delete(prop_a);
       associatedFeatures.delete(prop_b);
 
       // update index (remove previous)
-      const ts = present();
       const options = tree.search(combined);
-      treeSearch += present() - ts;
 
       options.features.forEach(option => {
         if (
@@ -203,20 +226,21 @@ exports.runAggregate = async function (ctx, derivativePath) {
       });
 
       // update index (add new)
-      const ti = present();
       tree.insert(combined);
-      treeInsert += present() - ti;
 
       // recompute features (new combined + all features linked to previous original features)
       const cf = present();
-      computeFeature(combined, tree, ordered_arr);
+      computeFeature(ctx, combined, tree, queue);
 
       associatedFeatures.forEach(id => {
-        computeFeature(keyed_geojson[id], tree, ordered_arr);
+        computeFeature(ctx, keyed_geojson[id], tree, queue);
       });
       cftime += present() - cf;
     }
   }
+
+  ctx.log.warn('errors', { errors });
+  ctx.log.warn('errorIds', { errorIds });
 
   // convert keyed geojson back to array
   const geojson_array = Object.keys(keyed_geojson).map(feature => {
@@ -238,11 +262,6 @@ exports.runAggregate = async function (ctx, derivativePath) {
   ctx.log.info(`Completed aggregation: ${present() - total_time} ms`);
   ctx.log.info(`Compute feature time: ${cftime} ms`);
   ctx.log.info(`Turf Union time: ${turfUnion} ms`);
-  ctx.log.info(`Turf Area time: ${turfArea} ms`);
-  ctx.log.info(`Calc Shift time: ${calcShift} ms`);
-  ctx.log.info(`Tree Search time: ${treeSearch} ms`);
-  ctx.log.info(`Tree Insert time: ${treeInsert} ms`);
-
   unwindStack(ctx.process, 'runAggregate');
 
   return attributeLookupFile;

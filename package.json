@@ -22,6 +22,7 @@
     "present": "^1.0.0",
     "rimraf": "^3.0.2",
     "skmeans": "^0.11.3",
+    "tinyqueue": "^2.0.3",
     "unzipper": "^0.10.11",
     "uuid": "^8.1.0",
     "winston": "^3.3.0",

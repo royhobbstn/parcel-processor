@@ -14,7 +14,7 @@ const {
   fileFormats,
   zoomLevels,
 } = require('./constants');
-const { clustersKmeans } = require('./modKmeans');
+const present = require('present');
 const { sleep, unwindStack } = require('./misc');
 
 function getOgrInfo(ctx, filePath) {
@@ -173,86 +173,120 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           throw e;
         }
 
-        flattened.features.forEach(feature => {
-          if (!feature.geometry) {
+        flattened.features.forEach(roughFeature => {
+          if (!roughFeature.geometry) {
             return;
           }
-          transformed++;
 
-          feature.properties[idPrefix] = transformed;
+          const cleanFeatures = [];
 
-          const results = tree.search(feature);
-
-          let writeNewFeature = true;
-
-          if (results.features.length) {
-            //   get outline from main feature
-
-            let featureOutline;
-
+          // @ts-ignore
+          const kinks = turf.kinks(roughFeature);
+          if (kinks.features.length) {
             try {
               // @ts-ignore
-              featureOutline = turf.polygonToLine(feature);
+              const buffer = turf.buffer(roughFeature, 0);
+              const result = turf.unkinkPolygon(buffer);
+              cleanFeatures.push(...result.features);
             } catch (e) {
-              ctx.log.error('Error in feature polygonToLine', { message: e.message, feature });
-              throw e;
+              // could not un-kink, keeping original
+              cleanFeatures.push(roughFeature);
+            }
+          } else {
+            cleanFeatures.push(roughFeature);
+          }
+
+          cleanFeatures.forEach(feature => {
+            // mutates
+            turf.truncate(feature, { precision: 5, coordinates: 2, mutate: true });
+            turf.cleanCoords(feature, { mutate: true });
+
+            // filter out impossibly tiny areas < 1m
+            if (turf.area(feature) < 1) {
+              return;
             }
 
-            for (let indexFeature of results.features) {
-              //   for each spatial index results
-              //     get outline from result
-              let indexOutline;
+            transformed++;
+
+            feature.properties[idPrefix] = transformed;
+
+            // so as to check for overlaps
+            const results = tree.search(feature);
+
+            let writeNewFeature = true;
+
+            if (results.features.length) {
+              //   get outline from main feature
+
+              let featureOutline;
+
               try {
-                indexOutline = turf.polygonToLine(indexFeature);
+                // @ts-ignore
+                featureOutline = turf.polygonToLine(feature);
               } catch (e) {
-                ctx.log.error('Error in index polygonToLine', { message: e.message, indexFeature });
+                ctx.log.error('Error in feature polygonToLine', { message: e.message, feature });
                 throw e;
               }
-              let intersection;
-              try {
-                intersection = turf.lineOverlap(featureOutline, indexOutline);
-              } catch (e) {
-                ctx.log.error('Error in lineOverlap', {
-                  message: e.message,
-                  featureOutline,
-                  indexOutline,
-                });
-                throw e;
-              }
 
-              // potentially could be within bbox but not intersecting
-              if (intersection && intersection.features && intersection.features.length) {
-                const l1 = turf.length(intersection, { units: 'kilometers' });
-                const l2 = turf.length(featureOutline, { units: 'kilometers' });
-                const lineOverlapThreshold = l1 / l2;
+              for (let indexFeature of results.features) {
+                //   for each spatial index results
+                //     get outline from result
+                let indexOutline;
+                try {
+                  indexOutline = turf.polygonToLine(indexFeature);
+                } catch (e) {
+                  ctx.log.error('Error in index polygonToLine', {
+                    message: e.message,
+                    indexFeature,
+                  });
+                  throw e;
+                }
+                let intersection;
+                try {
+                  intersection = turf.lineOverlap(featureOutline, indexOutline);
+                } catch (e) {
+                  ctx.log.error('Error in lineOverlap', {
+                    message: e.message,
+                    featureOutline,
+                    indexOutline,
+                  });
+                  throw e;
+                }
 
-                //  if line overlap from 98%+
-                if (lineOverlapThreshold > 0.98) {
-                  //  get id of index feature
-                  const id = indexFeature.properties[idPrefix];
+                // potentially could be within bbox but not intersecting
+                if (intersection && intersection.features && intersection.features.length) {
+                  const l1 = turf.length(intersection, { units: 'kilometers' });
+                  const l2 = turf.length(featureOutline, { units: 'kilometers' });
+                  const lineOverlapThreshold = l1 / l2;
 
-                  // add current features attributes to key(id): [array of additional features]
-                  if (additionalFeatures[id]) {
-                    additionalFeatures[id].push(feature.properties);
-                  } else {
-                    additionalFeatures[id] = [feature.properties];
+                  //  if line overlap from 96%+
+                  if (lineOverlapThreshold > 0.96) {
+                    //  get id of index feature
+                    const id = indexFeature.properties[idPrefix];
+
+                    // add current features attributes to key(id): [array of additional features]
+                    if (additionalFeatures[id]) {
+                      additionalFeatures[id].push(feature.properties);
+                    } else {
+                      additionalFeatures[id] = [feature.properties];
+                    }
+
+                    // dont write new feature to ndgeojson
+                    writeNewFeature = false;
                   }
-
-                  // dont write new feature to ndgeojson
-                  writeNewFeature = false;
                 }
               }
             }
-          }
 
-          if (writeNewFeature) {
-            writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
-            tree.insert(feature);
-          }
+            if (writeNewFeature) {
+              writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
+              tree.insert(feature);
+            }
 
-          if (transformed % 10000 === 0) {
-            ctx.log.info(transformed + ' records read');
-          }
+            if (transformed % 10000 === 0) {
+              ctx.log.info(transformed + ' records read');
+            }
+          });
         });
       })
       .on('error', err => {
@@ -264,31 +298,6 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
         writeStream.end();
       });
   });
-};
-
-exports.addClusterIdToGeoData = function (ctx, points, propertyCount) {
-  ctx.process.push('addClusterIdToGeoData');
-
-  // write cluster-*(.ndgeojson) with a cluster id (to be used for making tiles)
-  ctx.log.info('adding clusterId to GeoData using KMeans');
-
-  const featureCount = points.length;
-  const numberOfClusters = Math.ceil((featureCount * propertyCount) / 2000);
-  const clustered = clustersKmeans(ctx, turf.featureCollection(points), { numberOfClusters });
-  ctx.log.info('finished clustering');
-
-  // create a master lookup of __po_id to __po_cl  (idPrefix to clusterPrefix)
-  const lookup = {};
-
-  clustered.features.forEach((feature, idx) => {
-    if (idx % 10000 === 0) {
-      ctx.log.info(`creating lookup, feature # ${idx}`);
-    }
-    lookup[feature.properties[idPrefix]] = feature.properties.cluster;
-  });
-
-  unwindStack(ctx.process, 'addClusterIdToGeoData');
-  return lookup;
 };
 
 function createPointFeature(ctx, parsedFeature) {
@@ -425,7 +434,6 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
       .on('data', async function (obj) {
         const properties = obj.properties;
         properties.overlappingFeatures = additionalFeatures[properties[idPrefix]];
-        console.log(properties.overlappingFeatures);
         const prefix = lookup[properties[idPrefix]];
 
         if (!writeStreams[prefix]) {

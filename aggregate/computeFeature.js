@@ -1,19 +1,21 @@
 // @ts-check
-const fs = require('fs');
+
 const turf = require('@turf/turf');
 const { idPrefix } = require('../util/constants');
 
 // passed by reference.  will mutate
-
-exports.computeFeature = function (feature, tree, ordered_arr) {
+exports.computeFeature = function (ctx, feature, tree, queue) {
   const nearby = tree.search(feature.bbox);
   const best_match = {
     coalescability: Infinity,
     match: [],
   };
 
-  // TODO check this count again to make sure multipart to singlepart and remove overlapping are working
-  nearby.features.forEach(near_feature => {
+  // if (nearby.features.length > 50) {
+  //   ctx.log.info('trimming results list to 50 features');
+  // }
+
+  nearby.features.slice(0, 50).forEach(near_feature => {
     if (near_feature.properties[idPrefix] === feature.properties[idPrefix]) {
       // ignore self
       return;
@@ -28,8 +30,8 @@ exports.computeFeature = function (feature, tree, ordered_arr) {
         return;
       }
 
-      const l1 = turf.length(intersection, { units: 'kilometers' });
-      const l2 = turf.length(feature, { units: 'kilometers' });
+      const l1 = turf.length(intersection);
+      const l2 = turf.length(feature);
       const area = turf.area(feature);
       const matching_feature_area = turf.area(near_feature);
 
@@ -51,19 +53,6 @@ exports.computeFeature = function (feature, tree, ordered_arr) {
   });
 
   if (best_match.match.length) {
-    // todo retry binary search at some point
-    inOrder(ordered_arr, best_match);
+    queue.push(best_match);
   }
 };
-
-function inOrder(arr, item) {
-  let ix = 0;
-  while (ix < arr.length) {
-    if (item.coalescability < arr[ix].coalescability) {
-      break;
-    }
-    ix++;
-  }
-
-  arr.splice(ix, 0, item);
-}
