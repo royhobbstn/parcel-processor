@@ -4,21 +4,18 @@ const fs = require('fs');
 const path = require('path');
 const geojsonRbush = require('geojson-rbush').default;
 const { computeFeature } = require('./computeFeature.js');
-const present = require('present');
 const turf = require('@turf/turf');
-const { idPrefix, directories, zoomLevels } = require('../util/constants');
-const { promisify } = require('util');
-const writeFileAsync = promisify(fs.writeFile);
+const { idPrefix, zoomLevels } = require('../util/constants');
 const ndjson = require('ndjson');
 const { unwindStack, sleep } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
 
-// @ts-ignore
-let queue = new TinyQueue([], (a, b) => {
-  return a.coalescability - b.coalescability;
-});
+exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojsonBase) {
+  // @ts-ignore
+  let queue = new TinyQueue([], (a, b) => {
+    return a.coalescability - b.coalescability;
+  });
 
-exports.runAggregate = async function (ctx, clusterFilePath) {
   ctx.process.push('runAggregate');
 
   const extension = path.extname(clusterFilePath);
@@ -30,9 +27,7 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
 
   const keyed_geojson = {};
   const threshold = [];
-  const written_file_promises = [];
   let geojson_feature_count = 0;
-  const attributeLookupFile = {};
 
   /*** Initial index creation and calculation ***/
 
@@ -42,9 +37,6 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
     fs.createReadStream(`${clusterFilePath}`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
-        // save attributes to lookup file
-        attributeLookupFile[obj.properties[idPrefix]] = JSON.parse(JSON.stringify(obj.properties));
-
         // make a new feature with only __po_id
         obj.properties = { [idPrefix]: obj.properties[idPrefix] };
 
@@ -81,13 +73,7 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
   /********* main ************/
 
   // continually combine smaller features.
-
-  const total_time = present(); // tracks total execution time
-  let cftime = 0;
-  let turfUnion = 0;
-
   let errors = 0;
-  let errorIds = new Set();
   const RETAINED = getRetained();
 
   /****** Setup ******/
@@ -108,22 +94,30 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
 
   while (geojson_feature_count > DESIRED_NUMBER_FEATURES && can_still_simplify) {
     // a zoom level threshold has been reached.  save that zoomlevel.
-    threshold.forEach(obj => {
+    threshold.forEach(async obj => {
       if (geojson_feature_count === obj.count) {
         // convert keyed geojson back to array
         const geojson_array = Object.keys(keyed_geojson).map(feature => {
           return keyed_geojson[feature];
         });
         ctx.log.info('writing zoomlevel: ' + obj.zoom);
-        written_file_promises.push(
-          writeFileAsync(
-            `${directories.productTempDir + ctx.directoryId}/aggregated_${
-              obj.zoom
-            }|${cluster}.json`,
-            JSON.stringify(turf.featureCollection(geojson_array)),
-            'utf8',
-          ),
-        );
+
+        await new Promise((resolve, reject) => {
+          const output = fs.createWriteStream(
+            `${aggregatedNdgeojsonBase}/${obj.zoom}_${cluster}.json`,
+          );
+          output.on('error', err => {
+            reject(err);
+          });
+          output.on('finish', () => {
+            ctx.log.info(`done writing ${aggregatedNdgeojsonBase}/${obj.zoom}_${cluster}.json`);
+            resolve();
+          });
+          geojson_array.forEach(row => {
+            output.write(JSON.stringify(row) + '\n');
+          });
+          output.end();
+        });
       }
     });
 
@@ -149,16 +143,9 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
     } else {
       const a_match = nextLowest.match;
 
-      let properties_a, properties_b;
       // we only use unique_key.  new unique_key is just old unique_keys concatenated with _
-      try {
-        properties_a = keyed_geojson[a_match[0]].properties;
-        properties_b = keyed_geojson[a_match[1]].properties;
-      } catch (e) {
-        console.log(e);
-        console.log({ a_match });
-        throw e;
-      }
+      const properties_a = keyed_geojson[a_match[0]].properties;
+      const properties_b = keyed_geojson[a_match[1]].properties;
 
       const area_a = turf.area(keyed_geojson[a_match[0]]);
       const area_b = turf.area(keyed_geojson[a_match[1]]);
@@ -167,23 +154,18 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
       const prop_b = properties_b[idPrefix];
 
       const larger_geoid = area_a > area_b ? properties_a[idPrefix] : properties_b[idPrefix];
-      const larger_feature =
-        area_a > area_b ? keyed_geojson[a_match[0]] : keyed_geojson[a_match[1]];
+      const larger_feature = keyed_geojson[larger_geoid];
 
-      const tu = present();
       let combined;
       try {
         combined = turf.union(keyed_geojson[a_match[0]], keyed_geojson[a_match[1]]);
       } catch (e) {
-        // todo set up test with these two features
-        // so that if you preprocess them a certain way
-        // either they union, or they are filtered out.
+        // this is not great
+        // either they union, or the smaller is filtered out
+        // the smaller one might not be the problem geometry
         ctx.log.warn('error', { error: e.message });
         errors++;
-        errorIds.add(a_match[0]);
-        errorIds.add(a_match[1]);
       }
-      turfUnion += present() - tu;
 
       if (!combined) {
         combined = larger_feature;
@@ -204,11 +186,14 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
       // we lost a feature in this combine
       geojson_feature_count--;
 
-      // go back through all features and remove everything that was affected by the above transformation
-      // todo shouldnt need to go through EVERYTHING!
+      // go back through all features and flag everything that was affected by the above transformation
       const associatedFeatures = new Set();
 
-      // TODO this messes up the heap.
+      // go through queue and flag items with [-1, -1] that have been affected
+      // by previous transformation
+      // these will be discarded if encountered
+      // might be better to in-future: recalculate feature and updates its spot in queue
+      // rather than essentially flagging for deletion and creating new items to be inserted
       // think of strategies to only rebuild occasionally
       queue.data.forEach(item => {
         const geoid_array = item.match;
@@ -244,18 +229,17 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
       tree.insert(combined);
 
       // recompute features (new combined + all features linked to previous original features)
-      const cf = present();
       computeFeature(ctx, combined, tree, queue);
 
       associatedFeatures.forEach(id => {
         computeFeature(ctx, keyed_geojson[id], tree, queue);
       });
-      cftime += present() - cf;
     }
   }
 
-  ctx.log.warn('errors', { errors });
-  ctx.log.warn('errorIds', { errorIds });
+  if (errors > 0) {
+    ctx.log.warn('errors', { errors });
+  }
 
   // convert keyed geojson back to array
   const geojson_array = Object.keys(keyed_geojson).map(feature => {
@@ -264,24 +248,24 @@ exports.runAggregate = async function (ctx, clusterFilePath) {
 
   // presumably the lowest zoom level doesn't get reached since the loop terminates just before the count hits the target
   // so it is saved here, at the end of the program.
-  written_file_promises.push(
-    writeFileAsync(
-      `${directories.productTempDir + ctx.directoryId}/aggregated_${
-        zoomLevels.LOW
-      }|${cluster}.json`,
-      JSON.stringify(turf.featureCollection(geojson_array)),
-      'utf8',
-    ),
-  );
+  await new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(
+      `${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`,
+    );
+    output.on('error', err => {
+      reject(err);
+    });
+    output.on('finish', () => {
+      ctx.log.info(`done writing ${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`);
+      resolve();
+    });
+    geojson_array.forEach(row => {
+      output.write(JSON.stringify(row) + '\n');
+    });
+    output.end();
+  });
 
-  await Promise.all(written_file_promises);
-
-  ctx.log.info(`Completed aggregation: ${present() - total_time} ms`);
-  ctx.log.info(`Compute feature time: ${cftime} ms`);
-  ctx.log.info(`Turf Union time: ${turfUnion} ms`);
   unwindStack(ctx.process, 'runAggregate');
-
-  return attributeLookupFile;
 };
 
 // percent of features that will be retained at each zoom level

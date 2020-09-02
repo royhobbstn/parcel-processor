@@ -32,6 +32,7 @@ const {
   execGolangClusters,
   addUniqueIdNdjson,
   divideIntoClusters,
+  aggregateAggregatedClusters,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
@@ -97,6 +98,7 @@ exports.processProducts = async function (ctx, data) {
   const convertToFormatBase = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}`;
 
   const miniNdgeojsonBase = `${directories.productTempDir + ctx.directoryId}/mini`;
+  const aggregatedNdgeojsonBase = `${directories.productTempDir + ctx.directoryId}/aggregated`;
 
   ctx.log.info('paths', {
     fileNameBase,
@@ -373,7 +375,7 @@ exports.processProducts = async function (ctx, data) {
       );
 
       const featureCount = points.length;
-      const numClusters = Math.ceil((featureCount * propertyCount) / 5000);
+      const numClusters = Math.ceil(featureCount / 5000);
       const lookupFilename = `${directories.productTempDir + ctx.directoryId}/clusterLookup.json`;
 
       // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
@@ -385,19 +387,31 @@ exports.processProducts = async function (ctx, data) {
 
       const clusterHull = await createClusterIdHull(ctx, augmentedBase, lookup);
 
-      const filenames = await divideIntoClusters(ctx, augmentedBase, miniNdgeojsonBase, lookup);
+      const [filenames, featureProperties] = await divideIntoClusters(
+        ctx,
+        augmentedBase,
+        miniNdgeojsonBase,
+        lookup,
+      );
 
-      console.log(filenames);
-
-      for (let filename of filenames) {
-        const featureProperties = await runAggregate(ctx, filename);
-        // uh... what about featureProperties
+      fs.mkdirSync(aggregatedNdgeojsonBase);
+      // @ts-ignore
+      for (const [index, filename] of filenames.entries()) {
+        // loop through mini (clustered) pieces of the full ndgeojson
+        await runAggregate(ctx, filename, aggregatedNdgeojsonBase);
+        ctx.log.info(`Completed Aggregating ${index + 1}/${numClusters}`);
       }
 
       const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
       const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
-      throw new Error('okay stop');
+      // write from cluster inputs ex: /files/staging/productTemp-9258e1/aggregated
+      // where files look like:
+      // '10_0.json'  '12_0.json'  '4_0.json'  '6_0.json'  '8_0.json'
+      // '10_1.json'  '12_1.json'  '4_1.json'  '6_1.json'  '8_1.json'
+
+      // write to aggregated files ex: /files/staging/productTemp-640843/aggregated_4.json
+      await aggregateAggregatedClusters(ctx);
 
       await clusterAggregated(ctx, tilesDir, featureProperties, augmentedBase);
 
@@ -452,7 +466,7 @@ exports.processProducts = async function (ctx, data) {
           type: s3deleteType.DIRECTORY,
         });
 
-        // TODO cant you just put this into the local dir and have s3 sync take care of it?
+        // future: put this into the local dir and have s3 sync take care of it?
         // write metadata
         await putTextToS3(
           ctx,

@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const turf = require('@turf/turf');
 const { clustersKmeans } = require('../util/modKmeans.js');
 const { idPrefix, zoomLevels, directories, clusterPrefix } = require('../util/constants');
-const { unwindStack } = require('../util/misc');
+const { unwindStack, sleep } = require('../util/misc');
 const ndjson = require('ndjson');
 
 // const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
@@ -32,49 +32,38 @@ exports.clusterAggregated = async function (ctx, tilesDir, featureProperties, de
     const streamOriginalFile = currentZoom === zoomLevels.HIGH;
 
     let filtered = [];
+    let filename;
 
     if (!streamOriginalFile) {
-      ctx.log.info(
-        'reading: ' +
-          `${directories.productTempDir + ctx.directoryId}/aggregated_${currentZoom}.json`,
-      );
-      let geofile = JSON.parse(
-        fs.readFileSync(
-          `${directories.productTempDir + ctx.directoryId}/aggregated_${currentZoom}.json`,
-          'utf8',
-        ),
-      );
-
-      filtered = geofile.features.filter(feature => {
-        const exists = ids[feature.properties[idPrefix]];
-        ids[feature.properties[idPrefix]] = true;
-        return !exists;
-      });
+      // get from aggregated zoomlevel file
+      filename = `${directories.productTempDir + ctx.directoryId}/aggregated_${currentZoom}.json`;
+      ctx.log.info(`reading: ${filename}`);
     } else {
       // get from original ndgeojson
-
       ctx.log.info('Streaming original file for last aggregate diff.');
-
-      await new Promise((resolve, reject) => {
-        fs.createReadStream(`${derivativePath}.ndgeojson`)
-          .pipe(ndjson.parse())
-          .on('data', function (obj) {
-            const exists = ids[obj.properties[idPrefix]];
-            ids[obj.properties[idPrefix]] = true;
-            if (!exists) {
-              filtered.push(obj);
-            }
-          })
-          .on('error', err => {
-            ctx.log.error('Error', { err: err.message, stack: err.stack });
-            return reject(err);
-          })
-          .on('end', async () => {
-            ctx.log.info(' records read and indexed');
-            return resolve();
-          });
-      });
+      ctx.log.info(`path: ${derivativePath}.ndgeojson`);
+      filename = `${derivativePath}.ndgeojson`;
     }
+
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(filename)
+        .pipe(ndjson.parse())
+        .on('data', function (obj) {
+          const exists = ids[obj.properties[idPrefix]];
+          ids[obj.properties[idPrefix]] = true;
+          if (!exists) {
+            filtered.push(obj);
+          }
+        })
+        .on('error', err => {
+          ctx.log.error('Error', { err: err.message, stack: err.stack });
+          return reject(err);
+        })
+        .on('end', async () => {
+          ctx.log.info(' records read and indexed');
+          return resolve();
+        });
+    });
 
     const count = filtered.length;
 
@@ -122,7 +111,7 @@ exports.clusterAggregated = async function (ctx, tilesDir, featureProperties, de
     });
   }
 
-  totalClusters.forEach(cluster => {
+  for (const cluster of totalClusters) {
     const obj = {};
     console.log('building feature file for cluster: ' + cluster);
     Object.keys(cluster_obj).forEach(key => {
@@ -139,12 +128,15 @@ exports.clusterAggregated = async function (ctx, tilesDir, featureProperties, de
       }
     });
 
+    await sleep(50);
+
     for (let attr of Object.keys(obj)) {
       ctx.log.info(`writing ${cluster}__${attr}.json`);
       const buffer = zlib.gzipSync(JSON.stringify(obj[attr]));
       fs.writeFileSync(`${tilesDir}/featureAttributes/${cluster}__${attr}.json`, buffer);
+      await sleep(25);
     }
-  });
+  }
 
   // gzip and write into tile directory
   ctx.log.info('writing feature_hulls.geojson');

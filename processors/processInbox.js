@@ -143,9 +143,9 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
   collapseUnzippedDir(ctx); // this is sync
 
   // determines if file(s) are of type shapefile or geodatabase
+  // only those two types are accomodated right now
   const [fileName, fileType] = await checkForFileType(ctx);
 
-  // todo problem with geopackage as input here?
   const inputPath = `${directories.unzippedDir + ctx.directoryId}/${
     fileName + (fileType === 'shapefile' ? '.shp' : '')
   }`;

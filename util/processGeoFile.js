@@ -381,7 +381,7 @@ exports.tileJoinLayers = function (ctx, tilesDir) {
 
   return new Promise((resolve, reject) => {
     const application = 'tile-join';
-    const args = ['-e', tilesDir];
+    const args = ['-e', tilesDir, '-pk'];
     for (let i = zoomLevels.LOW; i <= zoomLevels.HIGH; i++) {
       if (i % 2 === 0) {
         args.push(`${directories.tilesDir + ctx.directoryId}/lvl_${i}.mbtiles`);
@@ -738,6 +738,7 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
   ctx.log.info(`creating directory: ${miniNdgeojsonBase}`);
   fs.mkdirSync(miniNdgeojsonBase);
 
+  const attributeLookupFile = {};
   const fileNames = {};
   let completedFileWrites = 0;
 
@@ -745,6 +746,9 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
     fs.createReadStream(`${augmentedBase}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
+        // save attributes to lookup file
+        attributeLookupFile[obj.properties[idPrefix]] = JSON.parse(JSON.stringify(obj.properties));
+
         const cluster = lookup[obj.properties[idPrefix]];
         const filename = `${miniNdgeojsonBase}/file_${cluster}.ndgeojson`;
 
@@ -756,7 +760,6 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
               reject(err);
             })
             .on('close', async () => {
-              ctx.log.info('write stream closed!!');
               completedFileWrites++;
             });
           fileNames[filename] = stream;
@@ -776,7 +779,6 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
 
   const streams = Object.keys(fileNames);
   streams.forEach(stream => {
-    // todo probably need to listen for last write on each stream to truly know if done
     fileNames[stream].end();
   });
 
@@ -790,5 +792,83 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
     }, 100);
   });
   unwindStack(ctx.process, 'divideIntoClusters');
-  return streams;
+  return [streams, attributeLookupFile];
+};
+
+// write from cluster inputs ex: /files/staging/productTemp-9258e1/aggregated
+// where files look like:
+// '10_0.json'  '12_0.json'  '4_0.json'  '6_0.json'  '8_0.json'
+// '10_1.json'  '12_1.json'  '4_1.json'  '6_1.json'  '8_1.json'
+
+// write to aggregated files ex: /files/staging/productTemp-640843/aggregated_4.json
+// `${directories.productTempDir + ctx.directoryId}/aggregated_${currentZoom}.json`
+exports.aggregateAggregatedClusters = async function (ctx) {
+  ctx.process.push('aggregateAggregatedClusters');
+
+  // loop through zoom levels by 2 and aggregate all except full zoom
+  // full zoom already available as ndgeojson, so no worries
+
+  // get all files in directory
+  const files = fs.readdirSync(
+    `${directories.productTempDir + ctx.directoryId}/aggregated`,
+    'utf8',
+  );
+
+  for (
+    let currentZoom = zoomLevels.LOW;
+    currentZoom <= zoomLevels.HIGH;
+    currentZoom = currentZoom + 2
+  ) {
+    const streamOriginalFile = currentZoom === zoomLevels.HIGH;
+
+    if (!streamOriginalFile) {
+      await new Promise(async (bigResolve, bigReject) => {
+        // designate writeStream for output file
+        const writeStream = fs.createWriteStream(
+          `${directories.productTempDir + ctx.directoryId}/aggregated_${currentZoom}.json`,
+        );
+
+        writeStream.on('error', err => {
+          bigReject(err);
+        });
+
+        writeStream.on('finish', () => {
+          ctx.log.info(
+            `writeStream to ${
+              directories.productTempDir + ctx.directoryId
+            }/aggregated_${currentZoom}.json has completed writing successfully.`,
+          );
+          bigResolve();
+        });
+
+        // find all files in directory with pattern of `${currentZoom}_`
+        const filteredFiles = files.filter(file => {
+          return file.startsWith(`${currentZoom}_`);
+        });
+
+        for (const file of filteredFiles) {
+          await new Promise((resolve, reject) => {
+            fs.createReadStream(
+              `${directories.productTempDir + ctx.directoryId}/aggregated/${file}`,
+            )
+              .pipe(ndjson.parse())
+              .on('data', function (obj) {
+                writeStream.write(JSON.stringify(obj) + '\n');
+              })
+              .on('error', err => {
+                ctx.log.error('Error', { err: err.message, stack: err.stack });
+                return reject(err);
+              })
+              .on('end', async () => {
+                return resolve();
+              });
+          });
+        }
+        writeStream.end();
+      });
+    }
+  }
+
+  ctx.log.info('finished aggregating aggregated clusters.');
+  unwindStack(ctx.process, 'aggregateAggregatedClusters');
 };

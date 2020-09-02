@@ -239,13 +239,7 @@ function App({ env }) {
         <Button
           style={{ width: '200px', margin: 'auto' }}
           disabled={
-            !(
-              urlKeyStatus &&
-              sumlevStatus &&
-              geoidStatus &&
-              sourceStatus &&
-              urlKeyVal !== 'todo make this blank'
-            )
+            !(urlKeyStatus && sumlevStatus && geoidStatus && sourceStatus && urlKeyVal !== '')
           }
           onClick={handleSubmit}
         >

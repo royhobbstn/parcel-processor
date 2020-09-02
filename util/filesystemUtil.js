@@ -81,7 +81,6 @@ function collapseUnzippedDir(ctx) {
   unwindStack(ctx.process, 'collapseUnzippedDir');
 }
 
-// todo dont know where else to put this function
 // determine if the unzipped folder contains a shapefile or FGDB
 exports.checkForFileType = function (ctx) {
   ctx.process.push('checkForFileType');
