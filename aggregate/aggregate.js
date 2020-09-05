@@ -11,12 +11,12 @@ const { unwindStack, sleep } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
 
 exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojsonBase) {
+  ctx.process.push('runAggregate');
+
   // @ts-ignore
   let queue = new TinyQueue([], (a, b) => {
     return a.coalescability - b.coalescability;
   });
-
-  ctx.process.push('runAggregate');
 
   const extension = path.extname(clusterFilePath);
   const file = path.basename(clusterFilePath, extension);
@@ -271,11 +271,11 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
 // percent of features that will be retained at each zoom level
 function getRetained() {
   return {
-    '4': 0.15,
+    '4': 0.2,
     '6': 0.3,
-    '8': 0.45,
-    '10': 0.6,
-    '12': 0.8,
+    '8': 0.4,
+    '10': 0.5,
+    '12': 0.6,
     '14': 1,
   };
 }

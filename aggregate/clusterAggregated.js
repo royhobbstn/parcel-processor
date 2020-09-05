@@ -10,7 +10,13 @@ const ndjson = require('ndjson');
 
 // const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
-exports.clusterAggregated = async function (ctx, tilesDir, featureProperties, derivativePath) {
+exports.clusterAggregated = async function (
+  ctx,
+  tilesDir,
+  featureProperties,
+  derivativePath,
+  fieldMetadata,
+) {
   ctx.process.push('clusterAggregated');
 
   // make attributes directory
@@ -118,6 +124,11 @@ exports.clusterAggregated = async function (ctx, tilesDir, featureProperties, de
       if (cluster_obj[key] === cluster) {
         for (let attr of Object.keys(featureProperties[key])) {
           if (attr === idPrefix || attr === clusterPrefix) {
+            continue;
+          }
+          if (!fieldMetadata.numeric.includes(attr) || !fieldMetadata.categorical.includes(attr)) {
+            // only create file for attributes that are mappable
+            // we previously crunched stat file to determine elgibility
             continue;
           }
           if (!obj[attr]) {

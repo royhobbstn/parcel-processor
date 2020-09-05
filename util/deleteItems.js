@@ -157,13 +157,9 @@ async function deleteFileStat(ctx, item) {
 
   const updatedKey = item.bucket_key.replace('.ndgeojson', '-stat.json');
 
-  const statItem = {
-    bucket_name: bucketName,
-    bucket_key: updatedKey,
-    env: item.env,
-  };
-
-  const output = deleteFile(ctx, statItem, s3deleteType.FILE);
+  const output = await removeS3Files(ctx, [
+    { type: s3deleteType.FILE, bucket: bucketName, key: updatedKey },
+  ]);
 
   unwindStack(ctx.process, 'deleteFileStat');
   return output;

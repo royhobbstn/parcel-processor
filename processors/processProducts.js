@@ -39,6 +39,7 @@ const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
 const { unwindStack } = require('../util/misc');
 const { runAggregate } = require('../aggregate/aggregate');
 const { clusterAggregated } = require('../aggregate/clusterAggregated');
+const { parseFieldStatistics } = require('../util/statistics');
 
 exports.processProducts = async function (ctx, data) {
   ctx.process.push('processProducts');
@@ -95,6 +96,12 @@ exports.processProducts = async function (ctx, data) {
   const fileNameBase = productKey.split('/').slice(-1)[0];
   const destPlain = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.ndgeojson.gz`;
   const destUnzipped = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.ndgeojson`;
+  const destPlainStat = `${
+    directories.productTempDir + ctx.directoryId
+  }/${fileNameBase}-stat.json.gz`;
+  const destUnzippedStat = `${
+    directories.productTempDir + ctx.directoryId
+  }/${fileNameBase}-stat.json`;
   const convertToFormatBase = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}`;
 
   const miniNdgeojsonBase = `${directories.productTempDir + ctx.directoryId}/mini`;
@@ -405,6 +412,25 @@ exports.processProducts = async function (ctx, data) {
       const dirName = `${downloadRef}-${productRef}-${productRefTiles}`;
       const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
 
+      try {
+        ctx.log.info('Streaming stat file from S3.');
+        await streamS3toFileSystem(
+          ctx,
+          config.get('Buckets.productsBucket'),
+          `${productKey}-stat.json`,
+          destPlainStat,
+          destUnzippedStat,
+        );
+      } catch (err) {
+        caughtError = true;
+        ctx.log.info(`Error streaming the file from S3.`, {
+          data: err.message,
+          stack: err.stack,
+        });
+      }
+
+      const fieldMetadata = await parseFieldStatistics(ctx, destUnzippedStat, convertToFormatBase);
+
       // write from cluster inputs ex: /files/staging/productTemp-9258e1/aggregated
       // where files look like:
       // '10_0.json'  '12_0.json'  '4_0.json'  '6_0.json'  '8_0.json'
@@ -413,7 +439,7 @@ exports.processProducts = async function (ctx, data) {
       // write to aggregated files ex: /files/staging/productTemp-640843/aggregated_4.json
       await aggregateAggregatedClusters(ctx);
 
-      await clusterAggregated(ctx, tilesDir, featureProperties, augmentedBase);
+      await clusterAggregated(ctx, tilesDir, featureProperties, augmentedBase, fieldMetadata);
 
       for (
         let currentZoom = zoomLevels.LOW;
@@ -453,6 +479,7 @@ exports.processProducts = async function (ctx, data) {
         ...meta,
         processed: new Date().toISOString(),
         generatedMetadata,
+        fieldMetadata,
       };
 
       // sync tiles

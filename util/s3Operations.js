@@ -245,6 +245,37 @@ exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3Unzippe
     const gunzip = zlib.createGunzip();
     const file = fs.createWriteStream(s3DestFile);
 
+    file.on('finish', () => {
+      ctx.log.info('okay, for reals done writing to ' + s3DestFile);
+
+      if (s3UnzippedFile) {
+        fs.createReadStream(s3DestFile)
+          .on('error', err => {
+            ctx.log.warn('Error', { err: err.message, stack: err.stack });
+            // for whatever reason, I get a :
+            // 'RangeError [ERR_INVALID_OPT_VALUE]: The value "3340558817" is invalid for option "size"
+            // Everything still works /shrug
+            // not going to reject(err)
+          })
+          .on('end', () => {
+            ctx.log.info('finished defalate read.');
+          })
+          .pipe(gunzip)
+          .pipe(fs.createWriteStream(s3UnzippedFile))
+          .on('error', err => {
+            ctx.log.warn('error gunziping to write stream');
+            return reject(err);
+          })
+          .on('finish', () => {
+            ctx.log.info('finished defalate write to ' + s3UnzippedFile);
+            unwindStack(ctx.process, 'streamS3toFileSystem');
+            return resolve();
+          });
+      } else {
+        unwindStack(ctx.process, 'streamS3toFileSystem');
+      }
+    });
+
     S3.getObject({ Bucket: bucket, Key: key })
       .on('error', function (err) {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -255,27 +286,8 @@ exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3Unzippe
       })
       .on('httpDone', function () {
         file.end();
-        ctx.log.info('downloaded file to' + s3DestFile);
-
-        if (s3UnzippedFile) {
-          fs.createReadStream(s3DestFile)
-            .on('error', err => {
-              ctx.log.warn('Error', { err: err.message, stack: err.stack });
-              // for whatever reason, I get a :
-              // 'RangeError [ERR_INVALID_OPT_VALUE]: The value "3340558817" is invalid for option "size"
-              // Everything still works /shrug
-              // not going to reject(err)
-            })
-            .on('end', () => {
-              ctx.log.info('deflated to ' + s3UnzippedFile);
-              unwindStack(ctx.process, 'streamS3toFileSystem');
-              return resolve();
-            })
-            .pipe(gunzip)
-            .pipe(fs.createWriteStream(s3UnzippedFile));
-        } else {
-          unwindStack(ctx.process, 'streamS3toFileSystem');
-        }
+        ctx.log.info('done reading from S3: ' + key);
+        ctx.log.info('waiting for write buffer to complete.');
       })
       .send();
   });
