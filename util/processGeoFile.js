@@ -14,7 +14,6 @@ const {
   fileFormats,
   zoomLevels,
 } = require('./constants');
-const present = require('present');
 const { sleep, unwindStack } = require('./misc');
 
 function getOgrInfo(ctx, filePath) {
@@ -158,10 +157,14 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
         return resolve(additionalFeatures);
       });
 
-    fs.createReadStream(`${inputPath}.ndgeojson`)
+    const readStream = fs
+      .createReadStream(`${inputPath}.ndgeojson`)
       .pipe(ndjson.parse())
-      .on('data', function (obj) {
+      .on('data', async function (obj) {
+        readStream.pause();
+
         if (!obj.geometry) {
+          readStream.resume();
           return;
         }
 
@@ -173,35 +176,14 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           throw e;
         }
 
-        flattened.features.forEach(feature => {
+        for (const feature of flattened.features) {
           if (!feature.geometry) {
-            return;
+            continue;
           }
-
-          // const cleanFeatures = [];
-
-          // const kinks = turf.kinks(roughFeature);
-          // if (kinks.features.length) {
-          //   try {
-          //     const buffer = turf.buffer(roughFeature, 0);
-          //     const result = turf.unkinkPolygon(buffer);
-          //     cleanFeatures.push(...result.features);
-          //   } catch (e) {
-          //     // could not un-kink, keeping original
-          //     cleanFeatures.push(roughFeature);
-          //   }
-          // } else {
-          //   cleanFeatures.push(roughFeature);
-          // }
-
-          // cleanFeatures.forEach(feature => {
-          // // mutates
-          // turf.truncate(feature, { precision: 5, coordinates: 2, mutate: true });
-          // turf.cleanCoords(feature, { mutate: true });
 
           // filter out impossibly tiny areas < 1m
           if (turf.area(feature) < 1) {
-            return;
+            continue;
           }
 
           transformed++;
@@ -214,7 +196,7 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           let writeNewFeature = true;
 
           if (results.features.length) {
-            //   get outline from main feature
+            // get outline from main feature
 
             let featureOutline;
 
@@ -226,9 +208,13 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
               throw e;
             }
 
-            for (let indexFeature of results.features) {
-              //   for each spatial index results
-              //     get outline from result
+            for (let [index, indexFeature] of results.features.entries()) {
+              if (index !== 0 && index % 100 === 0) {
+                // allow for visibility timeout when processing large list of results
+                await sleep(100);
+              }
+              // for each spatial index results
+              // get outline from result
               let indexOutline;
               try {
                 indexOutline = turf.polygonToLine(indexFeature);
@@ -277,15 +263,24 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           }
 
           if (writeNewFeature) {
-            writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
+            const continueWriting = writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
+            if (!continueWriting) {
+              await new Promise(resolve => writeStream.once('drain', resolve));
+            }
             tree.insert(feature);
           }
 
           if (transformed % 10000 === 0) {
+            // allow time for visibility timeout
+            await sleep(50);
+          }
+
+          if (transformed % 1000 === 0) {
             ctx.log.info(transformed + ' records read');
           }
-          // });
-        });
+        }
+
+        readStream.resume();
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -450,7 +445,13 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
             }),
           );
         }
-        writeStreams[prefix].write(JSON.stringify(properties) + '\n', 'utf8');
+        const continueWriting = writeStreams[prefix].write(
+          JSON.stringify(properties) + '\n',
+          'utf8',
+        );
+        if (!continueWriting) {
+          await new Promise(resolve => writeStreams[prefix].once('drain', resolve));
+        }
 
         transformed++;
         if (transformed % 10000 === 0) {
@@ -743,9 +744,12 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
   let completedFileWrites = 0;
 
   await new Promise((resolve, reject) => {
-    fs.createReadStream(`${augmentedBase}.ndgeojson`)
+    const readStream = fs
+      .createReadStream(`${augmentedBase}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
+        readStream.pause();
+
         // save attributes to lookup file
         attributeLookupFile[obj.properties[idPrefix]] = JSON.parse(JSON.stringify(obj.properties));
 
@@ -760,12 +764,17 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
               reject(err);
             })
             .on('close', async () => {
+              console.log('close');
               completedFileWrites++;
             });
           fileNames[filename] = stream;
         }
 
-        fileNames[filename].write(JSON.stringify(obj) + '\n');
+        const continueWriting = fileNames[filename].write(JSON.stringify(obj) + '\n');
+        if (!continueWriting) {
+          await new Promise(resolve => fileNames[filename].once('drain', resolve));
+        }
+        readStream.resume();
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -852,8 +861,11 @@ exports.aggregateAggregatedClusters = async function (ctx) {
               `${directories.productTempDir + ctx.directoryId}/aggregated/${file}`,
             )
               .pipe(ndjson.parse())
-              .on('data', function (obj) {
-                writeStream.write(JSON.stringify(obj) + '\n');
+              .on('data', async function (obj) {
+                const continueWriting = writeStream.write(JSON.stringify(obj) + '\n');
+                if (!continueWriting) {
+                  await new Promise(resolve => writeStream.once('drain', resolve));
+                }
               })
               .on('error', err => {
                 ctx.log.error('Error', { err: err.message, stack: err.stack });

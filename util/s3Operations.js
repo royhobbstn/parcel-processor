@@ -238,57 +238,51 @@ async function emptyDirectory(ctx, bucket, dir) {
 
 // streams a download to the filesystem.
 // optionally un-gzips the file to a new location
-exports.streamS3toFileSystem = function (ctx, bucket, key, s3DestFile, s3UnzippedFile = null) {
+exports.streamS3toFileSystem = async function (
+  ctx,
+  bucket,
+  key,
+  s3DestFile,
+  s3UnzippedFile = null,
+) {
   ctx.process.push('streamS3toFileSystem');
 
-  return new Promise((resolve, reject) => {
-    const gunzip = zlib.createGunzip();
-    const file = fs.createWriteStream(s3DestFile);
+  await new Promise((resolve, reject) => {
+    const outputFile = s3UnzippedFile || s3DestFile;
+    const writeStream = fs.createWriteStream(outputFile);
+    const readStream = S3.getObject({ Bucket: bucket, Key: key }).createReadStream();
 
-    file.on('finish', () => {
-      ctx.log.info('okay, for reals done writing to ' + s3DestFile);
-
-      if (s3UnzippedFile) {
-        fs.createReadStream(s3DestFile)
-          .on('error', err => {
-            ctx.log.warn('Error', { err: err.message, stack: err.stack });
-            // for whatever reason, I get a :
-            // 'RangeError [ERR_INVALID_OPT_VALUE]: The value "3340558817" is invalid for option "size"
-            // Everything still works /shrug
-            // not going to reject(err)
-          })
-          .on('end', () => {
-            ctx.log.info('finished defalate read.');
-          })
-          .pipe(gunzip)
-          .pipe(fs.createWriteStream(s3UnzippedFile))
-          .on('error', err => {
-            ctx.log.warn('error gunziping to write stream');
-            return reject(err);
-          })
-          .on('finish', () => {
-            ctx.log.info('finished defalate write to ' + s3UnzippedFile);
-            unwindStack(ctx.process, 'streamS3toFileSystem');
-            return resolve();
-          });
-      } else {
-        unwindStack(ctx.process, 'streamS3toFileSystem');
-      }
+    readStream.on('error', err => {
+      ctx.log.error('readStream error');
+      reject(err);
     });
-
-    S3.getObject({ Bucket: bucket, Key: key })
-      .on('error', function (err) {
-        ctx.log.error('Error', { err: err.message, stack: err.stack });
-        return reject(err);
-      })
-      .on('httpData', function (chunk) {
-        file.write(chunk);
-      })
-      .on('httpDone', function () {
-        file.end();
-        ctx.log.info('done reading from S3: ' + key);
-        ctx.log.info('waiting for write buffer to complete.');
-      })
-      .send();
+    readStream.on('finish', () => {
+      ctx.log.info('readStream finish');
+      ctx.log.info('done reading from S3: ' + key);
+      ctx.log.info('waiting for write buffer to complete.');
+    });
+    writeStream.on('error', err => {
+      ctx.log.error('writeStream error');
+      reject(err);
+    });
+    writeStream.on('finish', () => {
+      ctx.log.info('writeStream finish');
+      ctx.log.info('done writing S3 file to ' + outputFile);
+      unwindStack(ctx.process, 'streamS3toFileSystem');
+      resolve();
+    });
+    if (s3UnzippedFile) {
+      const gunzip = zlib.createGunzip();
+      gunzip.on('error', err => {
+        ctx.log.error('gunzip error');
+        reject(err);
+      });
+      gunzip.on('finish', () => {
+        ctx.log.info('gunzip finish');
+      });
+      readStream.pipe(gunzip).pipe(writeStream);
+    } else {
+      readStream.pipe(writeStream);
+    }
   });
 };

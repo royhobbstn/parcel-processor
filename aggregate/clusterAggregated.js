@@ -117,6 +117,7 @@ exports.clusterAggregated = async function (
     });
   }
 
+  ctx.log.info('fieldMetadata', { fieldMetadata });
   for (const cluster of totalClusters) {
     const obj = {};
     console.log('building feature file for cluster: ' + cluster);
@@ -126,7 +127,10 @@ exports.clusterAggregated = async function (
           if (attr === idPrefix || attr === clusterPrefix) {
             continue;
           }
-          if (!fieldMetadata.numeric.includes(attr) || !fieldMetadata.categorical.includes(attr)) {
+          if (
+            !Object.keys(fieldMetadata.numeric).includes(attr) &&
+            !Object.keys(fieldMetadata.categorical).includes(attr)
+          ) {
             // only create file for attributes that are mappable
             // we previously crunched stat file to determine elgibility
             continue;

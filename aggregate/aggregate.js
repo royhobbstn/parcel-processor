@@ -63,7 +63,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
   // initially seed queue
   Object.keys(keyed_geojson).forEach(async (key, index) => {
     computeFeature(ctx, keyed_geojson[key], tree, queue);
-    if (index % 2000 === 0) {
+    if (index % 5000 === 0) {
       ctx.log.info(`${index} features computed.`);
       await sleep(100);
     }
@@ -102,7 +102,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
         });
         ctx.log.info('writing zoomlevel: ' + obj.zoom);
 
-        await new Promise((resolve, reject) => {
+        await new Promise(async (resolve, reject) => {
           const output = fs.createWriteStream(
             `${aggregatedNdgeojsonBase}/${obj.zoom}_${cluster}.json`,
           );
@@ -113,9 +113,12 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
             ctx.log.info(`done writing ${aggregatedNdgeojsonBase}/${obj.zoom}_${cluster}.json`);
             resolve();
           });
-          geojson_array.forEach(row => {
-            output.write(JSON.stringify(row) + '\n');
-          });
+          for (let row of geojson_array) {
+            const continueWriting = output.write(JSON.stringify(row) + '\n');
+            if (!continueWriting) {
+              await new Promise(resolve => output.once('drain', resolve));
+            }
+          }
           output.end();
         });
       }
@@ -125,6 +128,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
       const progress =
         ((STARTING_GEOJSON_FEATURE_COUNT - geojson_feature_count) / REDUCTIONS_NEEDED) * 100;
       ctx.log.info(`aggregate progress ${progress.toFixed(2)} %`);
+      await sleep(50);
     }
 
     // lowest found, now grab it
@@ -248,7 +252,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
 
   // presumably the lowest zoom level doesn't get reached since the loop terminates just before the count hits the target
   // so it is saved here, at the end of the program.
-  await new Promise((resolve, reject) => {
+  await new Promise(async (resolve, reject) => {
     const output = fs.createWriteStream(
       `${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`,
     );
@@ -259,9 +263,12 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
       ctx.log.info(`done writing ${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`);
       resolve();
     });
-    geojson_array.forEach(row => {
-      output.write(JSON.stringify(row) + '\n');
-    });
+    for (let row of geojson_array) {
+      const continueWriting = output.write(JSON.stringify(row) + '\n');
+      if (!continueWriting) {
+        await new Promise(resolve => output.once('drain', resolve));
+      }
+    }
     output.end();
   });
 
