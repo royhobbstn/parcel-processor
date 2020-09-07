@@ -34,7 +34,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
   };
 
   let errorFlag = false;
-  const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 60000, 180);
+  const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 60000, 400);
   const databaseInterval = initiateDatabaseHeartbeat(ctx, 180);
   const progressInterval = initiateProgressHeartbeat(ctx, 30);
 

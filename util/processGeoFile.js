@@ -422,9 +422,11 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
     const writeStreams = {};
     const writePromises = [];
 
-    fs.createReadStream(`${derivativePath}.ndgeojson`)
+    const readStream = fs
+      .createReadStream(`${derivativePath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
+        readStream.pause();
         const properties = obj.properties;
         properties.overlappingFeatures = additionalFeatures[properties[idPrefix]];
         const prefix = lookup[properties[idPrefix]];
@@ -458,6 +460,8 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
           ctx.log.info(transformed + ' records processed');
           await sleep(50);
         }
+
+        readStream.resume();
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -857,15 +861,18 @@ exports.aggregateAggregatedClusters = async function (ctx) {
 
         for (const file of filteredFiles) {
           await new Promise((resolve, reject) => {
-            fs.createReadStream(
-              `${directories.productTempDir + ctx.directoryId}/aggregated/${file}`,
-            )
+            const readStream = fs
+              .createReadStream(
+                `${directories.productTempDir + ctx.directoryId}/aggregated/${file}`,
+              )
               .pipe(ndjson.parse())
               .on('data', async function (obj) {
+                readStream.pause();
                 const continueWriting = writeStream.write(JSON.stringify(obj) + '\n');
                 if (!continueWriting) {
                   await new Promise(resolve => writeStream.once('drain', resolve));
                 }
+                readStream.resume();
               })
               .on('error', err => {
                 ctx.log.error('Error', { err: err.message, stack: err.stack });
