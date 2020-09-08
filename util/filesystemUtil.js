@@ -184,14 +184,8 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
       reject(err);
     });
 
-    // pipe archive data to the file
     archive.pipe(output);
 
-    // append a file from stream
-    // var file1 = __dirname + '/file1.txt';
-    // archive.append(fs.createReadStream(file1), { name: 'file1.txt' });
-
-    // append a file
     archive.file(`${outputPath}.dbf`, {
       name: `${keyBase}.dbf`,
     });

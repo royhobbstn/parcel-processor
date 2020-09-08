@@ -2,14 +2,14 @@
 
 const fs = require('fs');
 const config = require('config');
+const { fork } = require('child_process');
 
-const { deleteMessage, initiateVisibilityHeartbeat } = require('./sqsOperations');
+const { deleteMessage } = require('./sqsOperations');
 const { putFileToS3 } = require('./s3Operations');
 const { createInstanceLogger, getUniqueLogfileName } = require('./logger');
 const { sendAlertMail } = require('./email');
 const { directories, directoryIdLength } = require('./constants');
 const { generateRef } = require('./crypto');
-const { initiateDatabaseHeartbeat } = require('./wrapQuery');
 const { initiateProgressHeartbeat, unwindStack } = require('./misc');
 const { cleanDirectory } = require('./filesystemUtil');
 
@@ -34,9 +34,12 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
   };
 
   let errorFlag = false;
-  const interval = initiateVisibilityHeartbeat(ctx, deleteParams, 60000, 400);
-  const databaseInterval = initiateDatabaseHeartbeat(ctx, 180);
+
   const progressInterval = initiateProgressHeartbeat(ctx, 30);
+
+  // fork a process to keep database alive and constantly reset sqs visibility timeout
+  const keepAlive = fork('./util/keepAlive.js');
+  keepAlive.send({ msg: 'start', data: deleteParams });
 
   try {
     ctx.log.info('starting message processor');
@@ -46,8 +49,7 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     errorFlag = true;
   } finally {
     // discontinue updating visibility timeout
-    clearInterval(interval);
-    clearInterval(databaseInterval);
+    keepAlive.send({ msg: 'end', data: null });
     clearInterval(progressInterval);
 
     if (!errorFlag) {

@@ -7,7 +7,7 @@ const { computeFeature } = require('./computeFeature.js');
 const turf = require('@turf/turf');
 const { idPrefix, zoomLevels } = require('../util/constants');
 const ndjson = require('ndjson');
-const { unwindStack, sleep } = require('../util/misc');
+const { unwindStack } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
 
 exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojsonBase) {
@@ -61,13 +61,12 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
   });
 
   // initially seed queue
-  Object.keys(keyed_geojson).forEach(async (key, index) => {
+  for (let [index, key] of Object.keys(keyed_geojson).entries()) {
     computeFeature(ctx, keyed_geojson[key], tree, queue);
-    if (index % 5000 === 0) {
+    if (index % 1000 === 0) {
       ctx.log.info(`${index} features computed.`);
-      await sleep(100);
     }
-  });
+  }
   ctx.log.info(`finished feature computation.  Ready to aggregate.`);
 
   /********* main ************/
@@ -94,7 +93,8 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
 
   while (geojson_feature_count > DESIRED_NUMBER_FEATURES && can_still_simplify) {
     // a zoom level threshold has been reached.  save that zoomlevel.
-    threshold.forEach(async obj => {
+
+    for (const obj of threshold) {
       if (geojson_feature_count === obj.count) {
         // convert keyed geojson back to array
         const geojson_array = Object.keys(keyed_geojson).map(feature => {
@@ -122,13 +122,12 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
           output.end();
         });
       }
-    });
+    }
 
-    if (geojson_feature_count % 500 === 0) {
+    if (geojson_feature_count % 100 === 0) {
       const progress =
         ((STARTING_GEOJSON_FEATURE_COUNT - geojson_feature_count) / REDUCTIONS_NEEDED) * 100;
       ctx.log.info(`aggregate progress ${progress.toFixed(2)} %`);
-      await sleep(50);
     }
 
     // lowest found, now grab it

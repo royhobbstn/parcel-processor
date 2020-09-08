@@ -14,7 +14,7 @@ const {
   fileFormats,
   zoomLevels,
 } = require('./constants');
-const { sleep, unwindStack } = require('./misc');
+const { unwindStack } = require('./misc');
 
 function getOgrInfo(ctx, filePath) {
   ctx.process.push('getOgrInfo');
@@ -209,10 +209,6 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
             }
 
             for (let [index, indexFeature] of results.features.entries()) {
-              if (index !== 0 && index % 100 === 0) {
-                // allow for visibility timeout when processing large list of results
-                await sleep(100);
-              }
               // for each spatial index results
               // get outline from result
               let indexOutline;
@@ -268,11 +264,6 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
               await new Promise(resolve => writeStream.once('drain', resolve));
             }
             tree.insert(feature);
-          }
-
-          if (transformed % 10000 === 0) {
-            // allow time for visibility timeout
-            await sleep(50);
           }
 
           if (transformed % 1000 === 0) {
@@ -458,7 +449,6 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
         transformed++;
         if (transformed % 10000 === 0) {
           ctx.log.info(transformed + ' records processed');
-          await sleep(50);
         }
 
         readStream.resume();
@@ -544,10 +534,12 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
     const barePts = [];
     let propertyCount = 1; // will be updated below.  count of property attributes per feature.  used for deciding attribute file size and number of clusters
 
-    fs.createReadStream(`${outputPath}.ndgeojson`)
+    const readStream = fs
+      .createReadStream(`${outputPath}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
-        // create a point feature
+        readStream.pause();
+
         const pt = createPointFeature(ctx, obj);
 
         if (pt) {
@@ -564,8 +556,9 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
           // may as well do this here (it will happen on feature 0 at the least)
           propertyCount = Object.keys(obj.properties).length;
           ctx.log.info(transformed + ' records processed');
-          await sleep(50);
         }
+
+        readStream.resume();
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -768,7 +761,6 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
               reject(err);
             })
             .on('close', async () => {
-              console.log('close');
               completedFileWrites++;
             });
           fileNames[filename] = stream;

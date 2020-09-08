@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const turf = require('@turf/turf');
 const { clustersKmeans } = require('../util/modKmeans.js');
 const { idPrefix, zoomLevels, directories, clusterPrefix } = require('../util/constants');
-const { unwindStack, sleep } = require('../util/misc');
+const { unwindStack } = require('../util/misc');
 const ndjson = require('ndjson');
 
 // const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
@@ -143,13 +143,10 @@ exports.clusterAggregated = async function (
       }
     });
 
-    await sleep(50);
-
     for (let attr of Object.keys(obj)) {
       ctx.log.info(`writing ${cluster}__${attr}.json`);
       const buffer = zlib.gzipSync(JSON.stringify(obj[attr]));
       fs.writeFileSync(`${tilesDir}/featureAttributes/${cluster}__${attr}.json`, buffer);
-      await sleep(25);
     }
   }
 

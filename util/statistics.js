@@ -19,19 +19,13 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
   // load stat file
   const statsFile = JSON.parse(fs.readFileSync(statsFilePath, 'utf8'));
 
-  console.log(statsFile);
-
   // get list of fields && determine which fields to use
   const fieldsFiltered = Object.keys(statsFile.fields).filter(fieldName => {
-    console.log('--' + fieldName);
     const field = statsFile.fields[fieldName];
     // rule out ID fields
     const isIdField = field.IDField === true;
-    console.log('ID: ' + isIdField);
     // rule out single value fields
     const isSingleValue = Object.keys(field.uniques).length <= 1;
-    console.log('SV: ' + isSingleValue);
-    console.log('included? ' + !(isIdField || isSingleValue));
     return !(isIdField || isSingleValue);
   });
 
@@ -87,9 +81,12 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
   let geojson_feature_count = 0;
 
   await new Promise((resolve, reject) => {
-    fs.createReadStream(`${convertToFormatBase}.ndgeojson`)
+    const readStream = fs
+      .createReadStream(`${convertToFormatBase}.ndgeojson`)
       .pipe(ndjson.parse())
       .on('data', async function (obj) {
+        readStream.pause();
+
         for (let field of numericFields) {
           const num = Number(obj.properties[field]);
           if (!Number.isNaN(num)) {
@@ -106,6 +103,7 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
         }
 
         geojson_feature_count++;
+        readStream.resume();
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
