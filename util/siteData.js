@@ -77,6 +77,7 @@ async function siteData(ctx) {
 
     // push product into proper place
     data[geoid].sources[source_id].downloads[download_id].products.push({
+      geoid,
       product_ref: row.product_ref,
       product_origin: row.product_origin,
       product_id: row.product_id,

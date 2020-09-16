@@ -63,6 +63,7 @@ exports.appRouter = async app => {
 
     try {
       await siteData(ctx);
+      // await siteMap(ctx);
       return res.json({ success: true });
     } catch (err) {
       ctx.log.error('Unable to build site data', { error: err.message, stack: err.stack });

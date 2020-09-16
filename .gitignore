@@ -34,3 +34,7 @@ parcel_dataset_inventory.json
 parcel_dataset_inventory-dev.json
 
 aggregate/*.json
+
+sitemap.xml
+
+robots.txt
