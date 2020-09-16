@@ -163,81 +163,81 @@ function calcBreaks(ctx, data) {
 
   const computed_breaks = {};
 
-  computed_breaks.ckmeans5 = [ckmeans5[4][0], ckmeans5[3][0], ckmeans5[2][0], ckmeans5[1][0]];
+  computed_breaks.ckmeans5 = [ckmeans5[1][0], ckmeans5[2][0], ckmeans5[3][0], ckmeans5[4][0]];
   computed_breaks.ckmeans7 = [
-    ckmeans7[6][0],
-    ckmeans7[5][0],
-    ckmeans7[4][0],
-    ckmeans7[3][0],
-    ckmeans7[2][0],
     ckmeans7[1][0],
+    ckmeans7[2][0],
+    ckmeans7[3][0],
+    ckmeans7[4][0],
+    ckmeans7[5][0],
+    ckmeans7[6][0],
   ];
   computed_breaks.ckmeans9 = [
-    ckmeans9[8][0],
-    ckmeans9[7][0],
-    ckmeans9[6][0],
-    ckmeans9[5][0],
-    ckmeans9[4][0],
-    ckmeans9[3][0],
-    ckmeans9[2][0],
     ckmeans9[1][0],
+    ckmeans9[2][0],
+    ckmeans9[3][0],
+    ckmeans9[4][0],
+    ckmeans9[5][0],
+    ckmeans9[6][0],
+    ckmeans9[7][0],
+    ckmeans9[8][0],
   ];
   computed_breaks.stddev7 = [
-    median + stddev * 1.5,
-    median + stddev,
-    median + stddev * 0.5,
-    median,
-    median - stddev * 0.5,
-    median - stddev,
     median - stddev * 1.5,
+    median - stddev,
+    median - stddev * 0.5,
+    median,
+    median + stddev * 0.5,
+    median + stddev,
+    median + stddev * 1.5,
   ];
   computed_breaks.stddev8 = [
-    median + stddev * 2.5,
-    median + stddev * 1.5,
-    median + stddev * 0.5,
-    median - stddev * 0.5,
-    median - stddev * 1.5,
     median - stddev * 2.5,
+    median - stddev * 1.5,
+    median - stddev * 0.5,
+    median + stddev * 0.5,
+    median + stddev * 1.5,
+    median + stddev * 2.5,
   ];
 
   computed_breaks.quantile5 = [
-    ss.quantile(thedata, 0.8),
-    ss.quantile(thedata, 0.6),
-    ss.quantile(thedata, 0.4),
     ss.quantile(thedata, 0.2),
+    ss.quantile(thedata, 0.4),
+    ss.quantile(thedata, 0.6),
+    ss.quantile(thedata, 0.8),
   ];
 
   computed_breaks.quantile7 = [
-    ss.quantile(thedata, 0.857143),
-    ss.quantile(thedata, 0.714286),
-    ss.quantile(thedata, 0.57143),
-    ss.quantile(thedata, 0.42857),
-    ss.quantile(thedata, 0.28571),
     ss.quantile(thedata, 0.14286),
+    ss.quantile(thedata, 0.28571),
+    ss.quantile(thedata, 0.42857),
+    ss.quantile(thedata, 0.57143),
+    ss.quantile(thedata, 0.714286),
+    ss.quantile(thedata, 0.857143),
   ];
 
   computed_breaks.quantile9 = [
-    ss.quantile(thedata, 0.88888),
-    ss.quantile(thedata, 0.77777),
-    ss.quantile(thedata, 0.66666),
-    ss.quantile(thedata, 0.55555),
-    ss.quantile(thedata, 0.44444),
-    ss.quantile(thedata, 0.33333),
-    ss.quantile(thedata, 0.22222),
     ss.quantile(thedata, 0.11111),
+    ss.quantile(thedata, 0.22222),
+    ss.quantile(thedata, 0.33333),
+    ss.quantile(thedata, 0.44444),
+    ss.quantile(thedata, 0.55555),
+    ss.quantile(thedata, 0.66666),
+    ss.quantile(thedata, 0.77777),
+    ss.quantile(thedata, 0.88888),
   ];
 
   computed_breaks.quantile11 = [
-    ss.quantile(thedata, 0.90909),
-    ss.quantile(thedata, 0.81818),
-    ss.quantile(thedata, 0.72727),
-    ss.quantile(thedata, 0.63636),
-    ss.quantile(thedata, 0.54545),
-    ss.quantile(thedata, 0.45454),
-    ss.quantile(thedata, 0.36364),
-    ss.quantile(thedata, 0.27273),
-    ss.quantile(thedata, 0.18182),
     ss.quantile(thedata, 0.09091),
+    ss.quantile(thedata, 0.18182),
+    ss.quantile(thedata, 0.27273),
+    ss.quantile(thedata, 0.36364),
+    ss.quantile(thedata, 0.45454),
+    ss.quantile(thedata, 0.54545),
+    ss.quantile(thedata, 0.63636),
+    ss.quantile(thedata, 0.72727),
+    ss.quantile(thedata, 0.81818),
+    ss.quantile(thedata, 0.90909),
   ];
 
   computed_breaks.min = min;
@@ -254,9 +254,3 @@ function calcBreaks(ctx, data) {
 function isNumeric(n) {
   return !isNaN(parseFloat(n)) && isFinite(n);
 }
-
-// parseFieldStatistics(
-//   { log: console, process: [] },
-//   '/files/staging/productTemp-b51530/73bbd0ad-b3ea415d-3e697f9a-48253-Jones-County-Texas-stat.json',
-//   './elpaso',
-// );
