@@ -20,9 +20,10 @@ provider:
 
 functions:
   hello:
-    handler: handler.hello
+    handler: handler.sendFeedback
 
     events:
       - http:
           path: send-feedback
           method: post
+          cors: true

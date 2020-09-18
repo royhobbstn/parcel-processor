@@ -10,7 +10,7 @@ const transporter = nodemailer.createTransport({
   }),
 });
 
-module.exports.hello = async event => {
+module.exports.sendFeedback = async event => {
   const reqBody = JSON.parse(event.body);
 
   try {
@@ -36,12 +36,20 @@ module.exports.hello = async event => {
 
     return {
       statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': true,
+      },
       body: '{"message": "Email Sent!"}',
     };
   } catch (err) {
     console.log(err);
     return {
       statusCode: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': true,
+      },
       body: '{"message": "Something went wrong"}',
     };
   }
