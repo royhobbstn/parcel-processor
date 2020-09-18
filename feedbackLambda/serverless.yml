@@ -1,0 +1,28 @@
+service: feedbacklambda
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  profile: sls-admin-user
+  region: us-east-2
+
+  package:
+    include:
+      - node_modules/**
+
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 'ses:SendEmail'
+        - 'ses:SendRawEmail'
+      Resource: '*'
+
+functions:
+  hello:
+    handler: handler.hello
+
+    events:
+      - http:
+          path: send-feedback
+          method: post

@@ -7,7 +7,7 @@ RUN curl -sL https://deb.nodesource.com/setup_14.x  | bash -
 
 RUN apt-get update && apt-get -y install git build-essential libsqlite3-dev zlib1g-dev awscli gnupg jq nodejs
 
-RUN bash < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer) && gvm install go1.15 && gvm use go1.15
+RUN ["/bin/bash", "-c", "bash < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)"] && gvm install go1.15 && gvm use go1.15
 
 # Create a directory and copy in all files
 RUN mkdir -p /tmp/tippecanoe-src
