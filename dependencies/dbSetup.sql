@@ -3,7 +3,7 @@ CREATE table sources(
    source_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
    source_name VARCHAR(500) NOT NULL,
    source_type ENUM('webpage', 'email'),
-   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
    
 CREATE UNIQUE INDEX idx_sources ON sources(source_name);
