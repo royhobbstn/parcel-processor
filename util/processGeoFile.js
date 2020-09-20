@@ -1,5 +1,4 @@
 // @ts-check
-
 const fs = require('fs');
 const spawn = require('child_process').spawn;
 const ndjson = require('ndjson');
@@ -139,6 +138,8 @@ exports.parseFileExec = async function (ctx, outputPath, inputPath, chosenLayerN
 exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
   ctx.process.push('addUniqueIdNdjson');
 
+  const tempstore = [];
+
   const tree = geojsonRbush(); // to detect duplicates
   const additionalFeatures = {}; // key[id] = [array of feature properties]  : duplicate features
 
@@ -182,7 +183,8 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           }
 
           // filter out impossibly tiny areas < 1m
-          if (turf.area(feature) < 1) {
+          const featArea = turf.area(feature);
+          if (featArea < 1) {
             continue;
           }
 
@@ -203,6 +205,27 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
             try {
               // @ts-ignore
               featureOutline = turf.polygonToLine(feature);
+              const outlineLength = turf.length(featureOutline);
+              const ratio = featArea / outlineLength;
+              const enhancedRatio = Math.sqrt(featArea) / outlineLength;
+              // excluding oddly shaped features - usually right-of-way
+              // slows down javascript processing too much
+              // can think to re-include if re-written in golang
+              if (outlineLength > 5 && (ratio < 10000 || enhancedRatio < 50)) {
+                feature.properties.ratio = ratio;
+                feature.properties.outlineLength = outlineLength;
+                feature.properties.featArea = featArea;
+                feature.properties.enhancedRatio = enhancedRatio;
+                tempstore.push(feature);
+                ctx.log.info('excluding', {
+                  featArea,
+                  outlineLength,
+                  ratio,
+                  enhancedRatio,
+                  len: tempstore.length,
+                });
+                continue;
+              }
             } catch (e) {
               ctx.log.error('Error in feature polygonToLine', { message: e.message, feature });
               throw e;
@@ -279,6 +302,8 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
       })
       .on('end', async () => {
         ctx.log.info(transformed + ' records read');
+        ctx.log.info(`excluded ${tempstore.length} oddly shaped features`);
+        // fs.writeFileSync('rati2.json', JSON.stringify(turf.featureCollection(tempstore)), 'utf8');
         writeStream.end();
       });
   });

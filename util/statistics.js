@@ -63,10 +63,10 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
           foundStringValues++;
         }
       });
-      // is > 15 because mapping a small number of numeric values doesnt make sense
+      // is > 50 because mapping a small number of numeric values doesnt make sense
       // and hints that it might be categorical
       // plus i dont want to deal with problems on trying to divide such a field into breaks
-      if (foundNumericValues >= 15 && foundStringValues === 0) {
+      if (foundNumericValues >= 50 && foundStringValues === 0) {
         numericFields.push(fieldName);
       }
     }
