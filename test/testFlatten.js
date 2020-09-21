@@ -1,11 +1,17 @@
 const { addUniqueIdNdjson } = require('../util/processGeoFile');
+const present = require('present');
 
 async function main() {
   const ctx = { log: console, process: [] };
 
-  const duplicates = await addUniqueIdNdjson(ctx, './test/Grand', './test/GrandOutput');
+  const time = present();
+  const duplicates = await addUniqueIdNdjson(ctx, './test/Summit', './test/SummitOutput');
 
-  // console.log(duplicates);
+  console.log(present() - time);
 }
 
 main();
+
+// 481173;
+// 463427;
+// 533797;

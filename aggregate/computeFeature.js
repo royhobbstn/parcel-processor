@@ -11,18 +11,34 @@ exports.computeFeature = function (ctx, feature, tree, queue) {
     match: [],
   };
 
-  // if (nearby.features.length > 50) {
-  //   ctx.log.info('trimming results list to 50 features');
-  // }
+  let line1;
+  let l2;
+  let area;
+
+  try {
+    line1 = turf.polygonToLine(feature);
+    l2 = turf.length(feature);
+    area = turf.area(feature);
+  } catch (err) {
+    console.warn('skipping feature.', { error: err.message });
+  }
 
   nearby.features.slice(0, 50).forEach(near_feature => {
     if (near_feature.properties[idPrefix] === feature.properties[idPrefix]) {
       // ignore self
       return;
     }
-    const line1 = turf.polygonToLine(feature);
-    const line2 = turf.polygonToLine(near_feature);
-    const intersection = turf.lineOverlap(line1, line2);
+
+    let line2;
+    let intersection;
+
+    try {
+      line2 = turf.polygonToLine(near_feature);
+      intersection = turf.lineOverlap(line1, line2);
+    } catch (err) {
+      // no big deal.  skipping potential match
+      return;
+    }
 
     // potentially could be within bbox but not intersecting
     if (intersection) {
@@ -31,8 +47,7 @@ exports.computeFeature = function (ctx, feature, tree, queue) {
       }
 
       const l1 = turf.length(intersection);
-      const l2 = turf.length(feature);
-      const area = turf.area(feature);
+
       const matching_feature_area = turf.area(near_feature);
 
       const pow = Math.pow(l1 / l2, 2);

@@ -10,6 +10,8 @@ const ndjson = require('ndjson');
 const { unwindStack } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
 
+const HUGE_THRESHOLD = 94684125;
+
 exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojsonBase) {
   ctx.process.push('runAggregate');
 
@@ -40,9 +42,16 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
         // make a new feature with only __po_id
         obj.properties = { [idPrefix]: obj.properties[idPrefix] };
 
-        tree.insert(obj);
+        // only "not huge" features get indexed
+        // Think Summit County's Master Parcel
+        // (all encompasing parcel that makes up all 'unused' land in County)
+        // these parcels can be very complex with hundreds of holes
+        // javascript processing cant handle them without locking for sometimes hours
+        if (turf.area(obj) < HUGE_THRESHOLD) {
+          tree.insert(obj);
+        }
 
-        if (geojson_feature_count % 2000 === 0) {
+        if (geojson_feature_count % 200 === 0) {
           ctx.log.info(`${geojson_feature_count} features indexed.`);
         }
 
@@ -62,9 +71,13 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
 
   // initially seed queue
   for (let [index, key] of Object.keys(keyed_geojson).entries()) {
-    computeFeature(ctx, keyed_geojson[key], tree, queue);
-    if (index % 1000 === 0) {
-      ctx.log.info(`${index} features computed.`);
+    // again, no "huge-ish" features allowed into aggregation process
+    // they'll eternally hang around in keyed_geojson and be added into every aggregation level
+    if (turf.area(keyed_geojson[key]) < HUGE_THRESHOLD) {
+      computeFeature(ctx, keyed_geojson[key], tree, queue);
+      if (index % 100 === 0) {
+        ctx.log.info(`${index} features computed.`);
+      }
     }
   }
   ctx.log.info(`finished feature computation.  Ready to aggregate.`);

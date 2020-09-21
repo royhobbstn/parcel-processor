@@ -1,4 +1,5 @@
 // @ts-check
+const present = require('present');
 const fs = require('fs');
 const spawn = require('child_process').spawn;
 const ndjson = require('ndjson');
@@ -14,6 +15,8 @@ const {
   zoomLevels,
 } = require('./constants');
 const { unwindStack } = require('./misc');
+
+const HUGE_THRESHOLD = 94684125;
 
 function getOgrInfo(ctx, filePath) {
   ctx.process.push('getOgrInfo');
@@ -142,6 +145,8 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
 
   const tree = geojsonRbush(); // to detect duplicates
   const additionalFeatures = {}; // key[id] = [array of feature properties]  : duplicate features
+  let additionalCount = 0;
+  let filteredOut = 0;
 
   return new Promise((resolve, reject) => {
     let transformed = 0;
@@ -154,6 +159,8 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
       })
       .on('finish', () => {
         ctx.log.info(`processing complete. autoincrement id: ${idPrefix} added.`);
+        ctx.log.info(`misc filtered out: ${filteredOut}`);
+        ctx.log.info(`additional feature count (overlaps): ${additionalCount}`);
         unwindStack(ctx.process, 'addUniqueIdNdjson');
         return resolve(additionalFeatures);
       });
@@ -165,6 +172,7 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
         readStream.pause();
 
         if (!obj.geometry) {
+          filteredOut++;
           readStream.resume();
           return;
         }
@@ -179,91 +187,101 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
 
         for (const feature of flattened.features) {
           if (!feature.geometry) {
+            filteredOut++;
             continue;
           }
 
           // filter out impossibly tiny areas < 1m
           const featArea = turf.area(feature);
           if (featArea < 1) {
+            filteredOut++;
             continue;
+          }
+
+          let featureOutline;
+
+          // get outline from main feature
+          try {
+            // @ts-ignore
+            featureOutline = turf.polygonToLine(feature);
+            const outlineLength = turf.length(featureOutline);
+            const ratio = featArea / outlineLength;
+            const enhancedRatio = Math.sqrt(featArea) / outlineLength;
+
+            const bbox = turf.bbox(feature);
+            const polygon = turf.bboxPolygon(bbox);
+            const polygonArea = turf.area(polygon);
+            const areaRatio = featArea / polygonArea;
+
+            // excluding oddly shaped features - usually right-of-way
+            // slows down javascript processing too much
+            // can think to re-include if re-written in golang
+            if (outlineLength > 5 && areaRatio < 0.3 && (ratio < 10000 || enhancedRatio < 50)) {
+              feature.properties.ratio = ratio;
+              feature.properties.outlineLength = outlineLength;
+              feature.properties.featArea = featArea;
+              feature.properties.enhancedRatio = enhancedRatio;
+              feature.properties.areaRatio = areaRatio;
+
+              tempstore.push(feature);
+              ctx.log.info('excluding', {
+                featArea,
+                outlineLength,
+                ratio,
+                enhancedRatio,
+                polygonArea,
+                areaRatio,
+              });
+
+              filteredOut++;
+
+              continue;
+            }
+          } catch (e) {
+            ctx.log.warn('Error in turf transformations.  Skipping', {
+              message: e.message,
+              feature,
+            });
+
+            filteredOut++;
+            continue;
+          }
+
+          // so as to check for overlaps
+          let results = {};
+
+          // filter out huge parcels... dont expect duplicates of those
+          // if there are, so be it.
+          // mainly concerned about filtering out stacked apartments and condos
+          if (featArea > HUGE_THRESHOLD) {
+            results.features = [];
+          } else {
+            results = tree.search(feature);
           }
 
           transformed++;
 
           feature.properties[idPrefix] = transformed;
 
-          // so as to check for overlaps
-          const results = tree.search(feature);
-
           let writeNewFeature = true;
 
           if (results.features.length) {
-            // get outline from main feature
-
-            let featureOutline;
-
-            try {
-              // @ts-ignore
-              featureOutline = turf.polygonToLine(feature);
-              const outlineLength = turf.length(featureOutline);
-              const ratio = featArea / outlineLength;
-              const enhancedRatio = Math.sqrt(featArea) / outlineLength;
-              // excluding oddly shaped features - usually right-of-way
-              // slows down javascript processing too much
-              // can think to re-include if re-written in golang
-              if (outlineLength > 5 && (ratio < 10000 || enhancedRatio < 50)) {
-                feature.properties.ratio = ratio;
-                feature.properties.outlineLength = outlineLength;
-                feature.properties.featArea = featArea;
-                feature.properties.enhancedRatio = enhancedRatio;
-                tempstore.push(feature);
-                ctx.log.info('excluding', {
-                  featArea,
-                  outlineLength,
-                  ratio,
-                  enhancedRatio,
-                  len: tempstore.length,
-                });
-                continue;
-              }
-            } catch (e) {
-              ctx.log.error('Error in feature polygonToLine', { message: e.message, feature });
-              throw e;
-            }
-
-            for (let [index, indexFeature] of results.features.entries()) {
-              // for each spatial index results
-              // get outline from result
-              let indexOutline;
-              try {
-                indexOutline = turf.polygonToLine(indexFeature);
-              } catch (e) {
-                ctx.log.error('Error in index polygonToLine', {
-                  message: e.message,
-                  indexFeature,
-                });
-                throw e;
-              }
+            for (let indexFeature of results.features) {
               let intersection;
               try {
-                intersection = turf.lineOverlap(featureOutline, indexOutline);
+                intersection = turf.intersect(feature, indexFeature);
               } catch (e) {
-                ctx.log.error('Error in lineOverlap', {
-                  message: e.message,
-                  featureOutline,
-                  indexOutline,
-                });
-                throw e;
+                ctx.log.warn('Error in turf.intersect.  This is common and ignored.');
+                continue;
               }
 
-              // potentially could be within bbox but not intersecting
-              if (intersection && intersection.features && intersection.features.length) {
-                const l1 = turf.length(intersection, { units: 'kilometers' });
-                const l2 = turf.length(featureOutline, { units: 'kilometers' });
-                const lineOverlapThreshold = l1 / l2;
+              if (intersection) {
+                const intersectionArea = turf.area(intersection);
+                const ratioArea = featArea / intersectionArea;
 
-                //  if line overlap from 96%+
-                if (lineOverlapThreshold > 0.96) {
+                if (ratioArea > 0.9 && ratioArea < 1.1) {
+                  additionalCount++;
+
                   //  get id of index feature
                   const id = indexFeature.properties[idPrefix];
 
@@ -276,6 +294,7 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
 
                   // dont write new feature to ndgeojson
                   writeNewFeature = false;
+                  break;
                 }
               }
             }
@@ -286,7 +305,11 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
             if (!continueWriting) {
               await new Promise(resolve => writeStream.once('drain', resolve));
             }
-            tree.insert(feature);
+
+            // still write the big features, but dont index them
+            if (featArea <= HUGE_THRESHOLD) {
+              tree.insert(feature);
+            }
           }
 
           if (transformed % 1000 === 0) {
