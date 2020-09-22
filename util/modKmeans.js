@@ -1,9 +1,6 @@
 // modified version of turfJS kMeans to use random starting seeds
-
-var clone = require('@turf/clone');
-var invariant = require('@turf/invariant');
-var meta = require('@turf/meta');
-var skmeans = require('skmeans');
+const turf = require('@turf/turf');
+const skmeans = require('skmeans');
 const { unwindStack } = require('./misc');
 
 exports.clustersKmeans = function (ctx, points, options) {
@@ -16,7 +13,7 @@ exports.clustersKmeans = function (ctx, points, options) {
   var mutate = options.mutate;
 
   // Input validation
-  invariant.collectionOf(points, 'Point', 'Input must contain Points');
+  turf.invariant.collectionOf(points, 'Point', 'Input must contain Points');
 
   // Default Params
   var count = points.features.length;
@@ -27,10 +24,10 @@ exports.clustersKmeans = function (ctx, points, options) {
   if (numberOfClusters > count) numberOfClusters = count;
 
   // Clone points to prevent any mutations (enabled by default)
-  if (mutate === false || mutate === undefined) points = clone(points, true);
+  if (mutate === false || mutate === undefined) points = turf.clone(points, true);
 
   // collect points coordinates
-  var data = meta.coordAll(points);
+  var data = turf.meta.coordAll(points);
 
   // create skmeans clusters
   var skmeansResult = skmeans(data, numberOfClusters, 'kmrand');
@@ -42,7 +39,7 @@ exports.clustersKmeans = function (ctx, points, options) {
   });
 
   // add associated cluster number
-  meta.featureEach(points, function (point, index) {
+  turf.meta.featureEach(points, function (point, index) {
     var clusterId = skmeansResult.idxs[index];
     point.properties.cluster = clusterId;
     point.properties.centroid = centroids[clusterId];

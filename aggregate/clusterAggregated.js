@@ -76,7 +76,7 @@ exports.clusterAggregated = async function (
     console.log(`counted ${count} features for zoomLevel ${currentZoom}`);
 
     const point_array = filtered.map(feature => {
-      return turf.centroid(feature.geometry, feature.properties);
+      return turf.centroid(feature.geometry, { properties: feature.properties });
     });
 
     const point_layer = turf.featureCollection(point_array);
