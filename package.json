@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@turf/turf": "^5.1.6",
+    "@turf/turf": "^6.2.0-alpha.2",
     "archiver": "^4.0.1",
     "aws-sdk": "^2.701.0",
     "axios": "^0.19.2",

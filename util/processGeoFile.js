@@ -269,7 +269,8 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
             for (let indexFeature of results.features) {
               let intersection;
               try {
-                intersection = turf.intersect(feature, indexFeature);
+                // @ts-ignore
+                intersection = turf.intersect(indexFeature, feature);
               } catch (e) {
                 ctx.log.warn('Error in turf.intersect.  This is common and ignored.');
                 continue;
