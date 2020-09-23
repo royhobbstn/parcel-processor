@@ -127,13 +127,15 @@ async function siteData(ctx) {
       true,
       false,
     );
-    //
+  }
+
+  // dev and prod, copy to repo folder
+  fs.copyFileSync(
+    config.get('DataExport.localPath'),
+    `../parcel-outlet/public/${config.get('DataExport.remotePath')}`,
+  );
+
+  if (config.get('env') === 'production') {
     await invalidateFiles(ctx, [`/${config.get('DataExport.remotePath')}`]);
-  } else {
-    // development reads data from local environment
-    fs.copyFileSync(
-      config.get('DataExport.localPath'),
-      `../parcel-outlet/public/${config.get('DataExport.remotePath')}`,
-    );
   }
 }

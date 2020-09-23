@@ -179,7 +179,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
         // this is not great
         // either they union, or the smaller is filtered out
         // the smaller one might not be the problem geometry
-        ctx.log.warn('error', { error: e.message });
+        ctx.log.warn('error - turf union', { error: e.message, stack: e.stack });
         errors++;
       }
 
