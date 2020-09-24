@@ -99,6 +99,9 @@ async function processSort(ctx, data) {
     await processFile(ctx, file);
   }
 
+  await createMessageRecord(ctx, ctx.messageId, JSON.stringify(messagePayload), ctx.type);
+  ctx.log.info('Message reference record was created.');
+
   ctx.log.info('done with processSort');
   unwindStack(ctx.process, 'processSort');
 
@@ -280,9 +283,6 @@ async function processSort(ctx, data) {
           `${productKey}.ndgeojson`,
           ctx.messageId,
         );
-
-        await createMessageRecord(ctx, ctx.messageId, JSON.stringify(messagePayload), ctx.type);
-        ctx.log.info('Message reference record was created.');
       } catch (err) {
         await removeS3Files(ctx, cleanupS3);
         // throwing here will cause processSort to end.
