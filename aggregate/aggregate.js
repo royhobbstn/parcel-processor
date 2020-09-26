@@ -9,6 +9,7 @@ const { idPrefix, zoomLevels } = require('../util/constants');
 const ndjson = require('ndjson');
 const { unwindStack } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
+const mapshaper = require('mapshaper');
 
 const HUGE_THRESHOLD = 94684125;
 
@@ -35,6 +36,8 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
 
   const tree = geojsonRbush();
 
+  const collection = turf.featureCollection([]);
+
   await new Promise((resolve, reject) => {
     fs.createReadStream(`${clusterFilePath}`)
       .pipe(ndjson.parse())
@@ -42,22 +45,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
         // make a new feature with only __po_id
         obj.properties = { [idPrefix]: obj.properties[idPrefix] };
 
-        // only "not huge" features get indexed
-        // Think Summit County's Master Parcel
-        // (all encompasing parcel that makes up all 'unused' land in County)
-        // these parcels can be very complex with hundreds of holes
-        // javascript processing cant handle them without locking for sometimes hours
-        if (turf.area(obj) < HUGE_THRESHOLD) {
-          tree.insert(obj);
-        }
-
-        if (geojson_feature_count % 1000 === 0) {
-          ctx.log.info(`${geojson_feature_count} features indexed.`);
-        }
-
-        keyed_geojson[obj.properties[idPrefix]] = obj;
-
-        geojson_feature_count++;
+        collection.features.push(obj);
       })
       .on('error', err => {
         ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -69,6 +57,38 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
       });
   });
 
+  // todo use mapshaper to snap and correct imperfections in dataset.
+
+  const input = { 'input.geojson': JSON.stringify(collection) };
+  const cmd = '-i input.geojson snap -clean -o output.geojson';
+
+  // using Promise
+  const output = await mapshaper.applyCommands(cmd, input);
+  const cleaned = JSON.parse(output['output.geojson'].toString()).features;
+  ctx.log.info(`cleaned ${cleaned.length} features`);
+  // todo move current processing from in initial load to here
+
+  cleaned.forEach(obj => {
+    // only "not huge" features get indexed
+    // Think Summit County's Master Parcel
+    // (all encompasing parcel that makes up all 'unused' land in County)
+    // these parcels can be very complex with hundreds of holes
+    // javascript processing cant handle them without locking for sometimes hours
+    if (turf.area(obj) < HUGE_THRESHOLD) {
+      tree.insert(obj);
+    } else {
+      ctx.log.warn('Master parcel excluded from index.');
+    }
+
+    if (geojson_feature_count % 1000 === 0) {
+      ctx.log.info(`${geojson_feature_count} features indexed.`);
+    }
+
+    keyed_geojson[obj.properties[idPrefix]] = obj;
+
+    geojson_feature_count++;
+  });
+
   // initially seed queue
   for (let [index, key] of Object.keys(keyed_geojson).entries()) {
     // again, no "huge-ish" features allowed into aggregation process
@@ -78,6 +98,8 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
       if (index % 1000 === 0) {
         ctx.log.info(`${index} features computed.`);
       }
+    } else {
+      ctx.log.warn('Feature greater than threshold.  Excluded.');
     }
   }
   ctx.log.info(`finished feature computation.  Ready to aggregate.`);
@@ -100,6 +122,11 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
   const DESIRED_NUMBER_FEATURES = Math.round(geojson_feature_count * RETAINED[zoomLevels.LOW]);
   const REDUCTIONS_NEEDED = STARTING_GEOJSON_FEATURE_COUNT - DESIRED_NUMBER_FEATURES;
 
+  ctx.log.info('level stats', {
+    STARTING_GEOJSON_FEATURE_COUNT,
+    DESIRED_NUMBER_FEATURES,
+    REDUCTIONS_NEEDED,
+  });
   let can_still_simplify = true;
 
   /****** Do this is in a loop ******/
@@ -156,6 +183,8 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
     if (!nextLowest) {
       // exhausted all features eligible for combining
       can_still_simplify = false;
+      ctx.log.error('exhausted eligible features for combining.');
+      throw new Error('unable to continue with aggregation.  ran out of features.');
     } else {
       const a_match = nextLowest.match;
 

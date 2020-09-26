@@ -66,8 +66,15 @@ func main() {
 	}
 
 	// Partition the data points into X clusters
-	km := kmeans.New()
+	km, err := kmeans.NewWithOptions(0.05, nil)
+	if err != nil {
+		panic(err)
+	}
+
 	clusters, err := km.Partition(d, inputNumClusters)
+	if err != nil {
+		panic(err)
+	}
 
 	clusterLookup := map[int32]int{}
 
