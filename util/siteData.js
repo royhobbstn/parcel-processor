@@ -11,6 +11,7 @@ const {
 const { putFileToS3 } = require('./s3Operations');
 const { invalidateFiles } = require('./cloudfrontOps');
 
+const { countyNameLookup, stateNameLookup } = require('../lookup/nameLookup');
 const { countyPopulation, totalPopulation, totalCountyCount } = require('../lookup/popLookup');
 
 exports.siteData = siteData;
@@ -134,7 +135,25 @@ async function siteData(ctx) {
     percentOfTotalCounties,
   };
 
+  // top 50 highest value additions
+  const highestValueCounties = Object.keys(countyPopulation)
+    .sort((a, b) => countyPopulation[b] - countyPopulation[a])
+    .filter(d => !data[d])
+    .map((d, i) => {
+      return {
+        geoid: d,
+        countyName: countyNameLookup(d),
+        stateName: stateNameLookup(d.slice(0, 2)),
+        rank: i + 1,
+      };
+    });
+
   fs.writeFileSync(config.get('DataExport.localPath'), JSON.stringify(data), 'utf8');
+  fs.writeFileSync(
+    config.get('DataExport.valuePath'),
+    JSON.stringify(highestValueCounties.slice(0, 50), null, '  '),
+    'utf8',
+  );
 
   // production - put data on server
   if (config.get('env') === 'production') {
