@@ -221,19 +221,28 @@ exports.cleanEFS = async function (ctx) {
   async function deleteContents(contents, root) {
     for (let entry of contents) {
       const dir = path.join(root, entry);
-      const stats = fs.statSync(dir);
 
-      const modifiedTime = stats.mtimeMs;
-      const currentTime = new Date().getTime();
-      const duration = (currentTime - modifiedTime) / 1000 / 60 / 60;
+      let duration;
+
+      try {
+        const stats = fs.statSync(dir);
+        const modifiedTime = stats.mtimeMs;
+        const currentTime = new Date().getTime();
+        duration = (currentTime - modifiedTime) / 1000 / 60 / 60;
+      } catch (err) {
+        // ignoring errors here.  most likely multiple containers tried to read / delete the same directory at once.
+        ctx.log.warn(
+          `couldnt delete directory ${dir}.  possibly a race condition with another container.  ignoring`,
+        );
+      }
 
       // if older than 4 hours
-      if (duration > 4) {
+      if (duration && duration > 4) {
         try {
           await del(dir, { force: true });
           ctx.log.info('Deleted directory:', { dir });
         } catch (err) {
-          ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
+          ctx.log.warn(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
         }
       }
     }

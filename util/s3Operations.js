@@ -177,11 +177,13 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
     const proc = spawn(application, args);
 
     proc.stdout.on('data', data => {
-      console.log(data.toString());
+      // mostly noise
+      // console.log(data.toString());
     });
 
     proc.stderr.on('data', data => {
-      console.log(data.toString());
+      // mostly noise
+      // console.log(data.toString());
     });
 
     proc.on('error', err => {

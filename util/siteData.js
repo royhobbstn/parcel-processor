@@ -11,6 +11,8 @@ const {
 const { putFileToS3 } = require('./s3Operations');
 const { invalidateFiles } = require('./cloudfrontOps');
 
+const { countyPopulation, totalPopulation, totalCountyCount } = require('../lookup/popLookup');
+
 exports.siteData = siteData;
 
 async function siteData(ctx) {
@@ -50,6 +52,7 @@ async function siteData(ctx) {
         geoname: geo[geoid].geoname,
         sumlev: geo[geoid].sumlev,
         sources: {},
+        population: countyPopulation[geoid],
       };
     }
 
@@ -98,8 +101,13 @@ async function siteData(ctx) {
     }
   });
 
+  let populationAccountedFor = 0;
+  let countiesAccountedFor = 0;
+
   // add last_download to each source.
   Object.keys(data).forEach(geoidKey => {
+    populationAccountedFor += countyPopulation[geoidKey];
+    countiesAccountedFor += 1;
     Object.keys(data[geoidKey].sources).forEach(sourceIdKey => {
       const source = data[geoidKey].sources[sourceIdKey];
       const downloads = data[geoidKey].sources[sourceIdKey].downloads;
@@ -113,6 +121,18 @@ async function siteData(ctx) {
       source.last_download = newestDate;
     });
   });
+
+  const percentOfTotalPopulation = populationAccountedFor / totalPopulation;
+  const percentOfTotalCounties = countiesAccountedFor / totalCountyCount;
+
+  data.popStats = {
+    totalPopulation,
+    totalCountyCount,
+    populationAccountedFor,
+    countiesAccountedFor,
+    percentOfTotalPopulation,
+    percentOfTotalCounties,
+  };
 
   fs.writeFileSync(config.get('DataExport.localPath'), JSON.stringify(data), 'utf8');
 

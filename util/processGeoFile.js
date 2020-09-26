@@ -432,7 +432,8 @@ exports.tileJoinLayers = function (ctx, tilesDir) {
     });
 
     proc.stderr.on('data', data => {
-      console.log(data.toString());
+      // mostly noise
+      // console.log(data.toString());
     });
 
     proc.on('error', err => {
@@ -761,7 +762,8 @@ exports.writeMbTiles = async function (ctx, filename, currentZoom) {
     });
 
     proc.stderr.on('data', data => {
-      console.log(data.toString());
+      // mostly noise
+      // console.log(data.toString());
     });
 
     proc.on('error', err => {

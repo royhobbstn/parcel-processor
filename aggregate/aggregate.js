@@ -51,7 +51,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
           tree.insert(obj);
         }
 
-        if (geojson_feature_count % 200 === 0) {
+        if (geojson_feature_count % 1000 === 0) {
           ctx.log.info(`${geojson_feature_count} features indexed.`);
         }
 
@@ -75,7 +75,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
     // they'll eternally hang around in keyed_geojson and be added into every aggregation level
     if (turf.area(keyed_geojson[key]) < HUGE_THRESHOLD) {
       computeFeature(ctx, keyed_geojson[key], tree, queue);
-      if (index % 100 === 0) {
+      if (index % 1000 === 0) {
         ctx.log.info(`${index} features computed.`);
       }
     }
