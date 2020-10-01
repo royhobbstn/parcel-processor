@@ -13,8 +13,10 @@ const mapshaper = require('mapshaper');
 
 const HUGE_THRESHOLD = 94684125;
 
-exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojsonBase) {
-  ctx.process.push('runAggregate');
+exports.runAggregate = runAggregate;
+
+async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggregationLevel = 0) {
+  ctx.process.push('runAggregate' + aggregationLevel);
 
   // @ts-ignore
   let queue = new TinyQueue([], (a, b) => {
@@ -108,7 +110,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
 
   // continually combine smaller features.
   let errors = 0;
-  const RETAINED = getRetained();
+  const RETAINED = getRetained(aggregationLevel);
 
   /****** Setup ******/
 
@@ -183,8 +185,7 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
     if (!nextLowest) {
       // exhausted all features eligible for combining
       can_still_simplify = false;
-      ctx.log.error('exhausted eligible features for combining.');
-      throw new Error('unable to continue with aggregation.  ran out of features.');
+      ctx.log.warn('exhausted eligible features for combining.');
     } else {
       const a_match = nextLowest.match;
 
@@ -282,48 +283,97 @@ exports.runAggregate = async function (ctx, clusterFilePath, aggregatedNdgeojson
     }
   }
 
-  if (errors > 0) {
-    ctx.log.warn('errors', { errors });
+  if (can_still_simplify) {
+    if (errors > 0) {
+      ctx.log.warn('errors', { errors });
+    }
+
+    // convert keyed geojson back to array
+    const geojson_array = Object.keys(keyed_geojson).map(feature => {
+      return keyed_geojson[feature];
+    });
+
+    // presumably the lowest zoom level doesn't get reached since the loop terminates just before the count hits the target
+    // so it is saved here, at the end of the program.
+    await new Promise(async (resolve, reject) => {
+      const output = fs.createWriteStream(
+        `${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`,
+      );
+      output.on('error', err => {
+        reject(err);
+      });
+      output.on('finish', () => {
+        ctx.log.info(`done writing ${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`);
+        resolve();
+      });
+      for (let row of geojson_array) {
+        const continueWriting = output.write(JSON.stringify(row) + '\n');
+        if (!continueWriting) {
+          await new Promise(resolve => output.once('drain', resolve));
+        }
+      }
+      output.end();
+    });
+
+    unwindStack(ctx.process, 'runAggregate' + aggregationLevel);
+    return;
   }
 
-  // convert keyed geojson back to array
-  const geojson_array = Object.keys(keyed_geojson).map(feature => {
-    return keyed_geojson[feature];
-  });
+  if (aggregationLevel >= 4) {
+    throw new Error('Unable to aggregate.  Ran out of aggregation targets.');
+  }
 
-  // presumably the lowest zoom level doesn't get reached since the loop terminates just before the count hits the target
-  // so it is saved here, at the end of the program.
-  await new Promise(async (resolve, reject) => {
-    const output = fs.createWriteStream(
-      `${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`,
-    );
-    output.on('error', err => {
-      reject(err);
-    });
-    output.on('finish', () => {
-      ctx.log.info(`done writing ${aggregatedNdgeojsonBase}/${zoomLevels.LOW}_${cluster}.json`);
-      resolve();
-    });
-    for (let row of geojson_array) {
-      const continueWriting = output.write(JSON.stringify(row) + '\n');
-      if (!continueWriting) {
-        await new Promise(resolve => output.once('drain', resolve));
-      }
-    }
-    output.end();
-  });
+  unwindStack(ctx.process, 'runAggregate' + aggregationLevel);
 
-  unwindStack(ctx.process, 'runAggregate');
-};
+  // if here, need to re-run with less aggressive aggregation targets
+  ctx.log.warn('Aggregate failed.  retrying at less aggressive aggregation level.');
+  await runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggregationLevel + 1);
+}
 
 // percent of features that will be retained at each zoom level
-function getRetained() {
-  return {
-    '4': 0.2,
-    '6': 0.3,
-    '8': 0.4,
-    '10': 0.6,
-    '12': 0.8,
-    '14': 1,
-  };
+function getRetained(index) {
+  const aggregationLevels = [
+    {
+      '4': 0.1,
+      '6': 0.2,
+      '8': 0.3,
+      '10': 0.5,
+      '12': 0.8,
+      '14': 1,
+    },
+    {
+      '4': 0.2,
+      '6': 0.3,
+      '8': 0.4,
+      '10': 0.6,
+      '12': 0.8,
+      '14': 1,
+    },
+    {
+      '4': 0.3,
+      '6': 0.4,
+      '8': 0.5,
+      '10': 0.7,
+      '12': 0.9,
+      '14': 1,
+    },
+    {
+      '4': 0.4,
+      '6': 0.5,
+      '8': 0.6,
+      '10': 0.8,
+      '12': 0.9,
+      '14': 1,
+    },
+    {
+      '4': 0.5,
+      '6': 0.6,
+      '8': 0.7,
+      '10': 0.8,
+      '12': 0.9,
+      '14': 1,
+    },
+  ];
+
+  return aggregationLevels[index];
 }
