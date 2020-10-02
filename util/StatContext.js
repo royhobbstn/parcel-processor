@@ -14,6 +14,7 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
     // cleanup by determining ObjectID type fields here and just
     // squashing the data down to nothing.
 
+    ctx.log.info('Squashing unique fields');
     Object.keys(this.fields).forEach(field => {
       let isUnique = true;
       for (let unique of Object.keys(this.fields[field].uniques)) {
@@ -30,16 +31,21 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
       }
     });
 
+    ctx.log.info('Processing export fields');
     Object.keys(this.fields).forEach(field => {
+      ctx.log.info(`processing field: ${field}`);
       const currentField = this.fields[field];
       if (!currentField.IDField) {
         // turn it into array
+        ctx.log.info(' - creating array');
         const arr = Object.keys(currentField.uniques).map(key => {
           return { key, value: currentField.uniques[key] };
         });
+        ctx.log.info(' - sorting array');
         arr.sort((a, b) => {
           return b.value > a.value ? 1 : -1;
         });
+        ctx.log.info(` - keeping up to ${uniquesMax} unique values`);
         // keep up to uniquesMax Limit
         const mostFrequent = arr.slice(0, uniquesMax);
         // back to keyed object
@@ -49,9 +55,11 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
         });
         // mutate original, keeping only uniquesMax values
         currentField.uniques = obj;
+        ctx.log.info(' - done with field');
       }
     });
 
+    ctx.log.info('data export from stat context completed');
     unwindStack(ctx.process, 'StatContext');
     return {
       rowCount: this.rowCount,
@@ -98,10 +106,6 @@ exports.StatContext = function (ctx, uniquesMax = 500) {
         if (value < this.fields[f].min) {
           this.fields[f].min = value;
         }
-
-        // might cause overflow here
-        this.fields[f].mean =
-          (this.fields[f].mean * (this.fields[f].numCount - 1) + value) / this.fields[f].numCount;
       }
     });
   };

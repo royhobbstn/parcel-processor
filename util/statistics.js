@@ -151,6 +151,7 @@ function calcBreaks(ctx, data) {
 
   // all values in array are 0. (presumably no bg data)  Add a '1' to the array so simplestatistics library doesnt fail computing ckmeans.
   if (max === 0) {
+    ctx.log.warn('max value of field is 0.  filling array with nonsense');
     thedata = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
   }
 
@@ -163,7 +164,14 @@ function calcBreaks(ctx, data) {
 
   const computed_breaks = {};
 
-  computed_breaks.ckmeans5 = [ckmeans5[1][0], ckmeans5[2][0], ckmeans5[3][0], ckmeans5[4][0]];
+  try {
+    computed_breaks.ckmeans5 = [ckmeans5[1][0], ckmeans5[2][0], ckmeans5[3][0], ckmeans5[4][0]];
+  } catch (e) {
+    ctx.log.info('thedata', { thedata });
+    ctx.log.info('ckmeans5', { ckmeans5 });
+    throw e;
+  }
+
   computed_breaks.ckmeans7 = [
     ckmeans7[1][0],
     ckmeans7[2][0],
