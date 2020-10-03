@@ -19,7 +19,7 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
     let transformed = 0;
     const attributes = {};
 
-    const result = await new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       fs.createReadStream(filePath)
         .pipe(ndjson.parse())
         .on('data', function (obj) {
@@ -30,7 +30,7 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
           });
 
           transformed++;
-          if (transformed % 10000 === 0) {
+          if (transformed % 50000 === 0) {
             ctx.log.info(transformed + ' init records processed');
           }
         })
@@ -61,14 +61,17 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
       };
 
       await new Promise((resolve, reject) => {
-        fs.createReadStream(filePath)
+        const readStream = fs
+          .createReadStream(filePath)
           .pipe(ndjson.parse())
           .on('data', obj => {
+            readStream.pause();
             this.countStat(obj, attribute);
             transformed++;
-            if (transformed % 10000 === 0) {
+            if (transformed % 50000 === 0) {
               ctx.log.info(`${transformed} ${attribute} records processed`);
             }
+            readStream.resume();
           })
           .on('error', err => {
             ctx.log.error(err);
@@ -86,7 +89,7 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
     unwindStack(ctx.process, 'StatContext - init');
   };
 
-  this.countStat = async (row, attribute) => {
+  this.countStat = (row, attribute) => {
     const value = row.properties[attribute];
     const type = typeof value;
     const strValue = String(value);
