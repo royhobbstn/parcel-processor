@@ -5,7 +5,7 @@ const spawn = require('child_process').spawn;
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
 const geojsonRbush = require('geojson-rbush').default;
-const { StatContext } = require('./StatContext');
+const { StatContextAttribute } = require('./StatContextAttribute');
 const {
   directories,
   tileInfoPrefix,
@@ -698,34 +698,13 @@ exports.readTippecanoeMetadata = async function (ctx, metadataFile) {
 
 exports.countStats = countStats;
 
-function countStats(ctx, path) {
+async function countStats(ctx, path) {
   ctx.process.push('countStats');
-
-  return new Promise((resolve, reject) => {
-    // read each file as ndjson and create stat object
-    let transformed = 0;
-    const statCounter = new StatContext(ctx);
-
-    fs.createReadStream(path)
-      .pipe(ndjson.parse())
-      .on('data', function (obj) {
-        statCounter.countStats(obj);
-
-        transformed++;
-        if (transformed % 10000 === 0) {
-          ctx.log.info(transformed + ' records processed');
-        }
-      })
-      .on('error', err => {
-        ctx.log.error('Error', { err: err.message, stack: err.stack });
-        return reject(err);
-      })
-      .on('end', async () => {
-        ctx.log.info(transformed + ' records processed');
-        unwindStack(ctx.process, 'countStats');
-        return resolve(statCounter.export());
-      });
-  });
+  const statCounter = new StatContextAttribute(ctx, path);
+  await statCounter.init();
+  const stats = statCounter.exportStats();
+  unwindStack(ctx.process, 'countStats');
+  return stats;
 }
 
 exports.writeMbTiles = async function (ctx, filename, currentZoom) {

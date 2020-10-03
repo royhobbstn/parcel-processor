@@ -108,7 +108,7 @@ exports.initiateVisibilityHeartbeat = function (ctx, deleteParams, intervalMS, h
     if (err) {
       ctx.log.error('Error updating Visibility Timeout', { error: err, stack: err.stack });
     } else {
-      ctx.log.info('Refreshing Visibility Timeout - Initial', { data });
+      ctx.log.info('Refreshing Visibility Timeout - Initial');
     }
   });
 
@@ -119,7 +119,7 @@ exports.initiateVisibilityHeartbeat = function (ctx, deleteParams, intervalMS, h
       if (err) {
         ctx.log.error('Error updating Visibility Timeout', { error: err, stack: err.stack });
       } else {
-        ctx.log.info('Refreshing Visibility Timeout', { data });
+        ctx.log.info('Refreshing Visibility Timeout');
       }
     });
   }, intervalMS);

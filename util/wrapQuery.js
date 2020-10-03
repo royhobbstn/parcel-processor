@@ -121,7 +121,6 @@ async function acquireConnection(ctx) {
   let connected = false;
 
   for (let i = 0; i < attempts; i++) {
-    ctx.log.info('attempting to connect to database');
     connected = await checkHealth(ctx);
     if (!connected) {
       ctx.log.info(`attempt failed.  trying again in ${seconds} seconds...`);
@@ -136,7 +135,7 @@ async function acquireConnection(ctx) {
   }
 
   unwindStack(ctx.process, 'acquireConnection');
-  ctx.log.info('connected');
+  ctx.log.info('connection to database confirmed');
 }
 
 function setPause(ctx, timer) {

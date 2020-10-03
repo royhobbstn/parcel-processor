@@ -30,7 +30,7 @@ exports.getSourceType = function (ctx, sourceNameInput) {
   }
 };
 
-exports.initiateFreeMemoryQuery = function (ctx) {
+exports.initiateFreeMemoryQuery = function (ctx, seconds) {
   ctx.process.push('initiateFreeMemoryQuery');
 
   let interval = setInterval(() => {
@@ -40,7 +40,7 @@ exports.initiateFreeMemoryQuery = function (ctx) {
     } catch (e) {
       ctx.log.info(`mem check failed`);
     }
-  }, 60000);
+  }, seconds * 1000);
   unwindStack(ctx.process, 'initiateFreeMemoryQuery');
   return interval;
 };

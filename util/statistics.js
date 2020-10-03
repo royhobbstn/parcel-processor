@@ -87,6 +87,8 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
       .on('data', async function (obj) {
         readStream.pause();
 
+        // todo we could pipe these each to write streams
+
         for (let field of numericFields) {
           const num = Number(obj.properties[field]);
           if (!Number.isNaN(num)) {
