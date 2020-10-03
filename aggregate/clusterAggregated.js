@@ -117,7 +117,6 @@ exports.clusterAggregated = async function (
     });
   }
 
-  ctx.log.info('fieldMetadata', { fieldMetadata });
   for (const cluster of totalClusters) {
     const obj = {};
     console.log('building feature file for cluster: ' + cluster);
