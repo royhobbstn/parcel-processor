@@ -319,7 +319,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     return;
   }
 
-  if (aggregationLevel >= 4) {
+  if (aggregationLevel >= 5) {
     throw new Error('Unable to aggregate.  Ran out of aggregation targets.');
   }
 
@@ -333,6 +333,14 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
 // percent of features that will be retained at each zoom level
 function getRetained(index) {
   const aggregationLevels = [
+    {
+      '4': 0.05,
+      '6': 0.1,
+      '8': 0.15,
+      '10': 0.3,
+      '12': 0.8,
+      '14': 1,
+    },
     {
       '4': 0.1,
       '6': 0.2,

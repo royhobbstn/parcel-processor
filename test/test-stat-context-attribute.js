@@ -5,12 +5,12 @@ const { StatContextAttribute } = require('../util/StatContextAttribute');
 async function main() {
   const statCounter = new StatContextAttribute(
     { log: console, process: [] },
-    `./Hartley.ndgeojson`,
+    `./california.ndgeojson`,
   );
 
   await statCounter.init();
 
-  fs.writeFileSync('./Hartley-stat.json', JSON.stringify(statCounter.exportStats()));
+  fs.writeFileSync('./californnia-stat.json', JSON.stringify(statCounter.exportStats()));
 }
 
 main().catch(err => console.log(err));

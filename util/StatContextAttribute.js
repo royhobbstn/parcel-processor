@@ -55,7 +55,7 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
       // initialize attribute
       this.fields[attribute] = {
         types: [],
-        uniques: {},
+        uniques: new Map(),
         IDField: false,
         IDSample: [],
       };
@@ -65,13 +65,12 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
           .createReadStream(filePath)
           .pipe(ndjson.parse())
           .on('data', obj => {
-            readStream.pause();
             this.countStat(obj, attribute);
+
             transformed++;
-            if (transformed % 50000 === 0) {
+            if (transformed % 100000 === 0) {
               ctx.log.info(`${transformed} ${attribute} records processed`);
             }
-            readStream.resume();
           })
           .on('error', err => {
             ctx.log.error(err);
@@ -102,11 +101,13 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
       }
     }
 
-    // increment each unique
-    if (!this.fields[attribute].uniques[strValue]) {
-      this.fields[attribute].uniques[strValue] = 1;
+    if (!this.fields[attribute].uniques.has(strValue)) {
+      this.fields[attribute].uniques.set(strValue, 1);
     } else {
-      this.fields[attribute].uniques[strValue]++;
+      this.fields[attribute].uniques.set(
+        strValue,
+        this.fields[attribute].uniques.get(strValue) + 1,
+      );
     }
 
     if (type === 'number') {
@@ -125,16 +126,18 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
 
     ctx.log.info('Squashing unique fields');
 
+    const a = new Map();
+    a.keys();
     let isUnique = true;
-    for (let unique of Object.keys(this.fields[attribute].uniques)) {
-      if (this.fields[attribute].uniques[unique] > 1) {
+    for (let unique of this.fields[attribute].uniques.keys()) {
+      if (this.fields[attribute].uniques.get(unique) > 1) {
         isUnique = false;
         break;
       }
     }
 
     if (isUnique) {
-      this.fields[attribute].IDSample = Object.keys(this.fields[attribute].uniques).slice(0, 10);
+      this.fields[attribute].IDSample = this.fields[attribute].uniques.keys().slice(0, 10);
       this.fields[attribute].uniques = {};
       this.fields[attribute].IDField = true;
     }
@@ -146,8 +149,8 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
     if (!currentField.IDField) {
       // turn it into array
       ctx.log.info(' - creating array');
-      const arr = Object.keys(currentField.uniques).map(key => {
-        return { key, value: currentField.uniques[key] };
+      const arr = Array.from(currentField.uniques.keys()).map(key => {
+        return { key, value: currentField.uniques.get(key) };
       });
       ctx.log.info(' - sorting array');
       arr.sort((a, b) => {
