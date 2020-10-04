@@ -319,7 +319,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     return;
   }
 
-  if (aggregationLevel >= 5) {
+  if (aggregationLevel >= 10) {
     throw new Error('Unable to aggregate.  Ran out of aggregation targets.');
   }
 
@@ -379,6 +379,38 @@ function getRetained(index) {
       '8': 0.7,
       '10': 0.8,
       '12': 0.9,
+      '14': 1,
+    },
+    {
+      '4': 0.6,
+      '6': 0.65,
+      '8': 0.7,
+      '10': 0.8,
+      '12': 0.9,
+      '14': 1,
+    },
+    {
+      '4': 0.65,
+      '6': 0.7,
+      '8': 0.75,
+      '10': 0.8,
+      '12': 0.9,
+      '14': 1,
+    },
+    {
+      '4': 0.7,
+      '6': 0.75,
+      '8': 0.8,
+      '10': 0.85,
+      '12': 0.9,
+      '14': 1,
+    },
+    {
+      '4': 0.75,
+      '6': 0.8,
+      '8': 0.85,
+      '10': 0.9,
+      '12': 0.95,
       '14': 1,
     },
   ];
