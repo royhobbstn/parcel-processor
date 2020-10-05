@@ -82,7 +82,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
       ctx.log.warn('Master parcel excluded from index.');
     }
 
-    if (geojson_feature_count % 1000 === 0) {
+    if (geojson_feature_count % 5000 === 0) {
       ctx.log.info(`${geojson_feature_count} features indexed.`);
     }
 
@@ -97,7 +97,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     // they'll eternally hang around in keyed_geojson and be added into every aggregation level
     if (turf.area(keyed_geojson[key]) < HUGE_THRESHOLD) {
       computeFeature(ctx, keyed_geojson[key], tree, queue);
-      if (index % 1000 === 0) {
+      if (index % 5000 === 0) {
         ctx.log.info(`${index} features computed.`);
       }
     } else {
@@ -319,7 +319,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     return;
   }
 
-  if (aggregationLevel >= 10) {
+  if (aggregationLevel >= 14) {
     throw new Error('Unable to aggregate.  Ran out of aggregation targets.');
   }
 
@@ -411,6 +411,38 @@ function getRetained(index) {
       '8': 0.85,
       '10': 0.9,
       '12': 0.95,
+      '14': 1,
+    },
+    {
+      '4': 0.8,
+      '6': 0.84,
+      '8': 0.88,
+      '10': 0.92,
+      '12': 0.96,
+      '14': 1,
+    },
+    {
+      '4': 0.85,
+      '6': 0.88,
+      '8': 0.91,
+      '10': 0.94,
+      '12': 0.97,
+      '14': 1,
+    },
+    {
+      '4': 0.9,
+      '6': 0.92,
+      '8': 0.94,
+      '10': 0.96,
+      '12': 0.98,
+      '14': 1,
+    },
+    {
+      '4': 0.95,
+      '6': 0.96,
+      '8': 0.97,
+      '10': 0.98,
+      '12': 0.99,
       '14': 1,
     },
   ];

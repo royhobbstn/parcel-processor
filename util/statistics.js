@@ -74,53 +74,57 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
 
   ctx.log.info('fields found: ', { numericFields, categoricalFields });
 
-  const fieldMetadata = { numeric: {}, categorical: {} };
+  const values = {};
 
-  // -------------
+  // loop through ndgeojson.  for each eligible field, keep track of values
+  // sample up to 100,000?s
+  let geojson_feature_count = 0;
+
+  await new Promise((resolve, reject) => {
+    const readStream = fs
+      .createReadStream(`${convertToFormatBase}.ndgeojson`)
+      .pipe(ndjson.parse())
+      .on('data', async function (obj) {
+        readStream.pause();
+
+        // todo we could pipe these each to write streams
+
+        for (let field of numericFields) {
+          const num = Number(obj.properties[field]);
+          if (!Number.isNaN(num)) {
+            if (!values[field]) {
+              values[field] = [num];
+            } else {
+              values[field].push(num);
+            }
+          }
+        }
+
+        if (geojson_feature_count % 10000 === 0) {
+          ctx.log.info(`${geojson_feature_count} features parsed for numeric values.`);
+        }
+
+        geojson_feature_count++;
+        readStream.resume();
+      })
+      .on('error', err => {
+        ctx.log.error('Error', { err: err.message, stack: err.stack });
+        return reject(err);
+      })
+      .on('end', async () => {
+        ctx.log.info('done parsing numeric data');
+        return resolve();
+      });
+  });
+
+  const fieldMetadata = { numeric: {}, categorical: {} };
 
   // numeric fields go through breaks
   for (let fieldName of numericFields) {
-    const values = [];
-
-    // loop through ndgeojson.  for each eligible field, keep track of values
-    let geojson_feature_count = 0;
-
-    await new Promise((resolve, reject) => {
-      const readStream = fs
-        .createReadStream(`${convertToFormatBase}.ndgeojson`)
-        .pipe(ndjson.parse())
-        .on('data', async function (obj) {
-          const num = Number(obj.properties[fieldName]);
-          if (!Number.isNaN(num)) {
-            values.push(num);
-          }
-
-          if (geojson_feature_count % 10000 === 0) {
-            ctx.log.info(
-              `${geojson_feature_count} features parsed for numeric value field ${fieldName}`,
-            );
-          }
-
-          geojson_feature_count++;
-        })
-        .on('error', err => {
-          ctx.log.error('Error', { err: err.message, stack: err.stack });
-          return reject(err);
-        })
-        .on('end', async () => {
-          ctx.log.info(
-            `finished parsing ${geojson_feature_count} records for numeric field ${fieldName}`,
-          );
-          return resolve();
-        });
-    });
-
     ctx.log.info('Calculating breaks for ' + fieldName);
-    const computedBreaks = calcBreaks(ctx, values);
+    const computedBreaks = calcBreaks(ctx, values[fieldName]);
     fieldMetadata.numeric[fieldName] = computedBreaks;
   }
-
-  // ----------------
 
   // categorical fields go through Up to 25 categories
   for (let fieldName of categoricalFields) {
