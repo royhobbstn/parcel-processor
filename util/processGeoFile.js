@@ -1,11 +1,10 @@
 // @ts-check
-const present = require('present');
 const fs = require('fs');
 const spawn = require('child_process').spawn;
 const ndjson = require('ndjson');
 var turf = require('@turf/turf');
 const geojsonRbush = require('geojson-rbush').default;
-const { StatContextAttribute } = require('./StatContextAttribute');
+const { StatContext } = require('./StatContext');
 const {
   directories,
   tileInfoPrefix,
@@ -700,7 +699,7 @@ exports.countStats = countStats;
 
 async function countStats(ctx, path) {
   ctx.process.push('countStats');
-  const statCounter = new StatContextAttribute(ctx, path);
+  const statCounter = new StatContext(ctx, path);
   await statCounter.init();
   const stats = statCounter.exportStats();
   unwindStack(ctx.process, 'countStats');
