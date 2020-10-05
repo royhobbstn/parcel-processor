@@ -2,9 +2,8 @@
 require('wise-inspection')(Promise);
 const config = require('config');
 const path = require('path');
-const { default: axios } = require('axios');
-const httpAdapter = require('axios/lib/adapters/http');
 const fs = require('fs');
+const ndjson = require('ndjson');
 const { generateRef } = require('../util/crypto');
 const { unwindStack } = require('../util/misc');
 const { countStats } = require('../util/processGeoFile');
@@ -23,7 +22,7 @@ const {
 } = require('../util/queries');
 const { makeS3Key, acquireConnection, lookupCleanGeoName } = require('../util/wrapQuery');
 const { createProductDownloadKey, removeS3Files } = require('../util/wrapS3');
-const { putFileToS3 } = require('../util/s3Operations');
+const { putFileToS3, streamS3toFileSystem } = require('../util/s3Operations');
 const { sendQueueMessage } = require('../util/sqsOperations');
 const { createDirectories } = require('../util/filesystemUtil');
 
@@ -34,7 +33,11 @@ async function processSort(ctx, data) {
 
   await acquireConnection(ctx);
 
-  await createDirectories(ctx, [directories.logDir, directories.subGeographiesDir]);
+  await createDirectories(ctx, [
+    directories.logDir,
+    directories.subGeographiesDir,
+    directories.productTempDir,
+  ]);
 
   // const messagePayload = {
   //   dryRun: true,
@@ -81,16 +84,17 @@ async function processSort(ctx, data) {
 
   ctx.isDryRun = messagePayload.dryRun;
   const isDryRun = messagePayload.dryRun;
-  const bucket = config.get('Buckets.productsBucket');
   const selectedFieldKey = messagePayload.selectedFieldKey;
-  const remoteFile = `https://${bucket}.s3.us-east-2.amazonaws.com/${messagePayload.selectedDownload.product_key}`;
   const geoidTranslator = messagePayload.modalStatsObj.mapping;
   const downloadId = messagePayload.selectedDownload.download_id;
   const downloadRef = messagePayload.selectedDownload.download_ref;
   const geonameLookup = keifyGeographies(ctx, messagePayload.geographies);
   const files = Array.from(new Set(Object.values(geoidTranslator)));
-  let fileWrites = [];
-  let counter = 0;
+
+  const productKey = messagePayload.selectedDownload.product_key;
+  const fileNameBase = productKey.split('/').slice(-1)[0];
+  const destPlain = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}.gz`;
+  const destUnzipped = `${directories.productTempDir + ctx.directoryId}/${fileNameBase}`;
 
   await sortData(ctx);
 
@@ -107,84 +111,68 @@ async function processSort(ctx, data) {
 
   // ---- functions only below
 
-  function sortData(ctx) {
+  async function sortData(ctx) {
     ctx.process.push('sortData');
 
-    return new Promise((resolve, reject) => {
-      const dataToProcess = [];
-      let lastChunkPiece = '';
+    try {
+      ctx.log.info('Beginning file download from S3.');
+      await streamS3toFileSystem(
+        ctx,
+        config.get('Buckets.productsBucket'),
+        `${productKey}`,
+        destPlain,
+        destUnzipped,
+      );
+    } catch (err) {
+      ctx.log.info(`Error streaming the file from S3.`, {
+        data: err.message,
+        stack: err.stack,
+      });
+      throw err;
+    }
 
-      // request the file
-      axios.get(remoteFile, { responseType: 'stream', adapter: httpAdapter }).then(response => {
-        const stream = response.data;
-        stream.on('data', chunk => {
-          const rawData = Buffer.from(chunk).toString();
-          const splitData = rawData.split('\n');
+    let fileWrites = [];
+    let counter = 0;
 
-          if (splitData.length === 0) {
-          } else if (splitData.length === 1) {
-            lastChunkPiece = lastChunkPiece + splitData[0];
-          } else {
-            dataToProcess.push(JSON.parse(lastChunkPiece + splitData[0]));
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(`${destUnzipped}`)
+        .pipe(ndjson.parse())
+        .on('data', async function (obj) {
+          counter++;
 
-            for (let s = 1; s < splitData.length - 1; s++) {
-              dataToProcess.push(JSON.parse(splitData[s]));
-            }
-            lastChunkPiece = splitData[splitData.length - 1];
+          if (counter % 10000 === 0) {
+            // filter out completed writes.  Otherwise, on large files:
+            // RangeError: Too many elements passed to Promise.all
+            fileWrites = fileWrites.filter(pr => {
+              const promiseStatus = pr.inspect();
+              return promiseStatus === 'pending';
+            });
+            ctx.log.info(counter);
           }
 
-          // filter out completed writes
-          // Otherwise, on large files:
-          // RangeError: Too many elements passed to Promise.all
-          fileWrites = fileWrites.filter(pr => {
-            const promiseStatus = pr.inspect();
-            return promiseStatus === 'pending';
-          });
+          const splitValue = obj.properties[selectedFieldKey];
+          const geoidFileTranslate = geoidTranslator[splitValue];
+          const fullPathFilename = `${
+            directories.subGeographiesDir + ctx.directoryId
+          }/${geoidFileTranslate}`;
 
-          processData(ctx, dataToProcess);
-        });
-        stream.on('error', err => {
+          // stuff json line into a file depending on the county
+          fileWrites.push(appendFileAsync(ctx, fullPathFilename, obj));
+        })
+        .on('error', err => {
           ctx.log.error('Error', { err: err.message, stack: err.stack });
           return reject(err);
-        });
-        stream.on('end', async () => {
-          // might only happen if there is no newline after last record
-          if (lastChunkPiece) {
-            dataToProcess.push(JSON.parse(lastChunkPiece));
-            processData(ctx, dataToProcess);
-          }
-
-          ctx.log.info('done reading remote file.');
-          await Promise.all(fileWrites);
-          ctx.log.info(`processed ${counter} lines`);
-          unwindStack(ctx.process, 'sortData');
+        })
+        .on('end', async () => {
+          ctx.log.info(counter + ' records sorted');
           return resolve();
         });
-      });
     });
-  }
 
-  function processData(ctx, dataArr) {
-    while (dataArr.length) {
-      processLine(ctx, dataArr.pop());
-    }
-  }
-
-  async function processLine(ctx, obj) {
-    counter++;
-
-    if (counter % 10000 === 0) {
-      ctx.log.info(counter);
-    }
-
-    const splitValue = obj.properties[selectedFieldKey];
-    const geoidFileTranslate = geoidTranslator[splitValue];
-    const fullPathFilename = `${
-      directories.subGeographiesDir + ctx.directoryId
-    }/${geoidFileTranslate}`;
-
-    // stuff json line into a file depending on the county
-    fileWrites.push(appendFileAsync(ctx, fullPathFilename, obj));
+    ctx.log.info('done reading main ndgeojson file.  waiting for writes to complete.');
+    await Promise.all(fileWrites);
+    ctx.log.info(`processed ${counter} lines`);
+    unwindStack(ctx.process, 'sortData');
   }
 
   async function processFile(ctx, file) {
@@ -272,7 +260,7 @@ async function processSort(ctx, data) {
         });
 
         // writes just one record.  no transaction needed.  it works or it doesnt
-        const product_id = await queryCreateProductRecord(
+        await queryCreateProductRecord(
           ctx,
           downloadId,
           productRef,

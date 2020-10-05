@@ -143,7 +143,6 @@ exports.clusterAggregated = async function (
     });
 
     for (let attr of Object.keys(obj)) {
-      ctx.log.info(`writing ${cluster}__${attr}.json`);
       const buffer = zlib.gzipSync(JSON.stringify(obj[attr]));
       fs.writeFileSync(`${tilesDir}/featureAttributes/${cluster}__${attr}.json`, buffer);
     }

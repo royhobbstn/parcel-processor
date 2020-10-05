@@ -5,7 +5,8 @@ const { unwindStack } = require('./misc');
 
 // gather field statistics for a dataset
 
-exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
+// please keep uniquesMax at 500 or higher, else sort could be affected
+exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 500) {
   this.rowCount = 0;
   this.fields = {};
   this.filePath = filePath;
@@ -137,7 +138,10 @@ exports.StatContextAttribute = function (ctx, filePath, uniquesMax = 100) {
     }
 
     if (isUnique) {
-      this.fields[attribute].IDSample = this.fields[attribute].uniques.keys().slice(0, 10);
+      this.fields[attribute].IDSample = Array.from(this.fields[attribute].uniques.keys()).slice(
+        0,
+        10,
+      );
       this.fields[attribute].uniques = {};
       this.fields[attribute].IDField = true;
     }

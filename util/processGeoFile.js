@@ -708,7 +708,7 @@ async function countStats(ctx, path) {
 }
 
 exports.writeMbTiles = async function (ctx, filename, currentZoom) {
-  //
+  // //
   ctx.process.push('writeMbTiles');
 
   ctx.log.info('Writing tile level ' + currentZoom);
