@@ -6,10 +6,10 @@ const stream = require('stream');
 const zlib = require('zlib');
 const spawn = require('child_process').spawn;
 const S3 = new AWS.S3({ apiVersion: '2006-03-01', region: 'us-east-2' });
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, useGzip) {
-  ctx.process.push('putTextToS3');
+  ctx.process.push({ name: 'putTextToS3', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const objectParams = {
@@ -35,7 +35,7 @@ exports.putTextToS3 = function (ctx, bucketName, keyName, text, contentType, use
       .then(data => {
         ctx.log.info(`Successfully uploaded data to s3://${bucketName}/${keyName}`);
         ctx.log.info('upload response', { data });
-        unwindStack(ctx.process, 'putTextToS3');
+        unwindStack(ctx, 'putTextToS3');
         return resolve();
       })
       .catch(err => {
@@ -54,7 +54,7 @@ exports.putFileToS3 = function (
   useGzip,
   contentDisposition,
 ) {
-  ctx.process.push('putFileToS3');
+  ctx.process.push({ name: 'putFileToS3', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     ctx.log.info(
@@ -100,7 +100,7 @@ exports.putFileToS3 = function (
           `uploading (${filePathToUpload} as s3://${bucket}/${key}) completed successfully.`,
         );
         ctx.log.info('result', result);
-        unwindStack(ctx.process, 'putFileToS3');
+        unwindStack(ctx, 'putFileToS3');
         return resolve();
       })
       .catch(err => {
@@ -114,7 +114,7 @@ exports.putFileToS3 = function (
 };
 
 exports.getObject = function (ctx, bucket, key) {
-  ctx.process.push('getObject');
+  ctx.process.push({ name: 'getObject', timestamp: getTimestamp() });
 
   ctx.log.info('getting s3 object', { bucket, key });
   return new Promise((resolve, reject) => {
@@ -139,18 +139,18 @@ exports.getObject = function (ctx, bucket, key) {
               return reject(err);
             }
             if (data.ContentType === 'text/plain') {
-              unwindStack(ctx.process, 'getObject');
+              unwindStack(ctx, 'getObject');
               return resolve(fileBuffer.toString('utf-8'));
             }
-            unwindStack(ctx.process, 'getObject');
+            unwindStack(ctx, 'getObject');
             return resolve(JSON.parse(fileBuffer.toString('utf-8')));
           });
         } else {
           if (data.ContentType === 'text/plain') {
-            unwindStack(ctx.process, 'getObject');
+            unwindStack(ctx, 'getObject');
             return resolve(data.Body.toString('utf-8'));
           }
-          unwindStack(ctx.process, 'getObject');
+          unwindStack(ctx, 'getObject');
           return resolve(JSON.parse(data.Body.toString('utf-8')));
         }
       },
@@ -159,7 +159,7 @@ exports.getObject = function (ctx, bucket, key) {
 };
 
 exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFolder) {
-  ctx.process.push('s3Sync');
+  ctx.process.push({ name: 's3Sync', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const application = 'aws';
@@ -193,7 +193,7 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
 
     proc.on('close', code => {
       ctx.log.info(`completed copying tiles from   ${currentTilesDir} to s3://${bucketName}`);
-      unwindStack(ctx.process, 's3Sync');
+      unwindStack(ctx, 's3Sync');
       resolve({ command });
     });
   });
@@ -202,7 +202,7 @@ exports.s3Sync = async function (ctx, currentTilesDir, bucketName, destinationFo
 exports.emptyS3Directory = emptyDirectory;
 
 async function emptyDirectory(ctx, bucket, dir) {
-  ctx.process.push('emptyDirectory');
+  ctx.process.push({ name: 'emptyDirectory', timestamp: getTimestamp() });
 
   const listParams = {
     Bucket: bucket,
@@ -212,7 +212,7 @@ async function emptyDirectory(ctx, bucket, dir) {
   const listedObjects = await S3.listObjectsV2(listParams).promise();
 
   if (listedObjects.Contents.length === 0) {
-    unwindStack(ctx.process, 'emptyDirectory');
+    unwindStack(ctx, 'emptyDirectory');
     return;
   }
 
@@ -235,7 +235,7 @@ async function emptyDirectory(ctx, bucket, dir) {
     await emptyDirectory(ctx, bucket, dir);
   }
 
-  unwindStack(ctx.process, 'emptyDirectory');
+  unwindStack(ctx, 'emptyDirectory');
 }
 
 // streams a download to the filesystem.
@@ -247,7 +247,7 @@ exports.streamS3toFileSystem = async function (
   s3DestFile,
   s3UnzippedFile = null,
 ) {
-  ctx.process.push('streamS3toFileSystem');
+  ctx.process.push({ name: 'streamS3toFileSystem', timestamp: getTimestamp() });
 
   await new Promise((resolve, reject) => {
     const outputFile = s3UnzippedFile || s3DestFile;
@@ -270,7 +270,7 @@ exports.streamS3toFileSystem = async function (
     writeStream.on('finish', () => {
       ctx.log.info('writeStream finish');
       ctx.log.info('done writing S3 file to ' + outputFile);
-      unwindStack(ctx.process, 'streamS3toFileSystem');
+      unwindStack(ctx, 'streamS3toFileSystem');
       resolve();
     });
     if (s3UnzippedFile) {

@@ -1,10 +1,12 @@
+// @ts-check
+
 // modified version of turfJS kMeans to use random starting seeds
 const turf = require('@turf/turf');
 const skmeans = require('skmeans');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 exports.clustersKmeans = function (ctx, points, options) {
-  ctx.process.push('clustersKmeans');
+  ctx.process.push({ name: 'clustersKmeans', timestamp: getTimestamp() });
 
   // Optional parameters
   options = options || {};
@@ -45,6 +47,6 @@ exports.clustersKmeans = function (ctx, points, options) {
     point.properties.centroid = centroids[clusterId];
   });
 
-  unwindStack(ctx.process, 'clustersKmeans');
+  unwindStack(ctx, 'clustersKmeans');
   return points;
 };

@@ -14,7 +14,7 @@ const inboxQueueUrl = config.get('SQS.inboxQueueUrl');
 const sortQueueUrl = config.get('SQS.sortQueueUrl');
 const productQueueUrl = config.get('SQS.productQueueUrl');
 
-const baseCtx = { log: console, process: [] };
+const baseCtx = { log: console, process: [], timeStack: [], timeBank: {} };
 
 let tries = 0;
 

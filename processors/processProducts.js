@@ -36,13 +36,13 @@ const {
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
-const { unwindStack } = require('../util/misc');
+const { unwindStack, getTimestamp } = require('../util/misc');
 const { runAggregate } = require('../aggregate/aggregate');
 const { clusterAggregated } = require('../aggregate/clusterAggregated');
 const { parseFieldStatistics } = require('../util/statistics');
 
 exports.processProducts = async function (ctx, data) {
-  ctx.process.push('processProducts');
+  ctx.process.push({ name: 'processProducts', timestamp: getTimestamp() });
 
   await acquireConnection(ctx);
 
@@ -537,5 +537,5 @@ exports.processProducts = async function (ctx, data) {
     throw new Error('There were issues with one or more products.  See logs.');
   }
 
-  unwindStack(ctx.process, 'processProducts');
+  unwindStack(ctx, 'processProducts');
 };

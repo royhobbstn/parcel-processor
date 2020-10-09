@@ -10,7 +10,7 @@ const transporter = nodemailer.createTransport({
 });
 
 exports.sendAlertMail = function (ctx, subject, content) {
-  ctx.process.push('sendAlertMail');
+  ctx.process.push({ name: 'sendAlertMail', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     transporter.sendMail(
@@ -26,7 +26,7 @@ exports.sendAlertMail = function (ctx, subject, content) {
           return reject(err);
         } else {
           console.log('Sent Email');
-          unwindStack(ctx.process, 'sendAlertMail');
+          unwindStack(ctx, 'sendAlertMail');
           return resolve();
         }
       },

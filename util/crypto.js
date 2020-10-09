@@ -5,19 +5,17 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const zlib = require('zlib');
 const { tileInfoPrefix } = require('./constants');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 exports.generateRef = function (ctx, digits) {
-  ctx.process.push('generateRef');
   const uuid = uuidv4();
   // @ts-ignore
   const plainString = uuid.replace(/-,/g);
-  unwindStack(ctx.process, 'generateRef');
   return plainString.slice(0, digits);
 };
 
 exports.computeHash = function (ctx, filePath) {
-  ctx.process.push('computeHash');
+  ctx.process.push({ name: 'computeHash', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     ctx.log.info('processing file...');
@@ -38,14 +36,14 @@ exports.computeHash = function (ctx, filePath) {
     stream.on('end', () => {
       const computedHash = hash.digest('hex');
       ctx.log.info(`Computed Hash: ${computedHash}`);
-      unwindStack(ctx.process, 'computeHash');
+      unwindStack(ctx, 'computeHash');
       return resolve(computedHash);
     });
   });
 };
 
 exports.gzipTileAttributes = async function (ctx, directory) {
-  ctx.process.push('gzipTileAttributes');
+  ctx.process.push({ name: 'gzipTileAttributes', timestamp: getTimestamp() });
 
   const arrayOfFiles = fs.readdirSync(directory);
 
@@ -64,11 +62,11 @@ exports.gzipTileAttributes = async function (ctx, directory) {
   await Promise.all(copiedFiles);
 
   ctx.log.info('All tile information files have been gzipped');
-  unwindStack(ctx.process, 'gzipTileAttributes');
+  unwindStack(ctx, 'gzipTileAttributes');
 };
 
 function convertToGzip(ctx, oldPath, newPath) {
-  ctx.process.push('convertToGzip');
+  ctx.process.push({ name: 'convertToGzip', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     var readStream = fs.createReadStream(oldPath);
@@ -87,7 +85,7 @@ function convertToGzip(ctx, oldPath, newPath) {
       fs.unlink(oldPath, () => {});
     });
     writeStream.on('close', function () {
-      unwindStack(ctx.process, 'convertToGzip');
+      unwindStack(ctx, 'convertToGzip');
       return resolve();
     });
 

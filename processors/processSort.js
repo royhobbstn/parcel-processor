@@ -1,11 +1,11 @@
 // @ts-check
-require('wise-inspection')(Promise);
+require('wise-inspection')(Promise); // augments promises with inspection
 const config = require('config');
 const path = require('path');
 const fs = require('fs');
 const ndjson = require('ndjson');
 const { generateRef } = require('../util/crypto');
-const { unwindStack } = require('../util/misc');
+const { unwindStack, getTimestamp } = require('../util/misc');
 const { countStats } = require('../util/processGeoFile');
 const {
   directories,
@@ -29,7 +29,7 @@ const { createDirectories } = require('../util/filesystemUtil');
 exports.processSort = processSort;
 
 async function processSort(ctx, data) {
-  ctx.process.push('processSort');
+  ctx.process.push({ name: 'processSort', timestamp: getTimestamp() });
 
   await acquireConnection(ctx);
 
@@ -107,12 +107,12 @@ async function processSort(ctx, data) {
   ctx.log.info('Message reference record was created.');
 
   ctx.log.info('done with processSort');
-  unwindStack(ctx.process, 'processSort');
+  unwindStack(ctx, 'processSort');
 
   // ---- functions only below
 
   async function sortData(ctx) {
-    ctx.process.push('sortData');
+    ctx.process.push({ name: 'sortData', timestamp: getTimestamp() });
 
     try {
       ctx.log.info('Beginning file download from S3.');
@@ -172,11 +172,11 @@ async function processSort(ctx, data) {
     ctx.log.info('done reading main ndgeojson file.  waiting for writes to complete.');
     await Promise.all(fileWrites);
     ctx.log.info(`processed ${counter} lines`);
-    unwindStack(ctx.process, 'sortData');
+    unwindStack(ctx, 'sortData');
   }
 
   async function processFile(ctx, file) {
-    ctx.process.push('processFile');
+    ctx.process.push({ name: 'processFile', timestamp: getTimestamp() });
 
     ctx.log.info(`processing: ${geonameLookup[file]}`);
 
@@ -193,7 +193,7 @@ async function processSort(ctx, data) {
       ctx.log.info(
         `Product ${fileFormats.NDGEOJSON.extension} has already been created for geoid: ${file}.  Skipping.`,
       );
-      unwindStack(ctx.process, 'processFile');
+      unwindStack(ctx, 'processFile');
       return;
     }
 
@@ -301,7 +301,7 @@ async function processSort(ctx, data) {
       await sendQueueMessage(ctx, productsQueueUrl, payload);
     }
 
-    unwindStack(ctx.process, 'processFile');
+    unwindStack(ctx, 'processFile');
   }
 }
 

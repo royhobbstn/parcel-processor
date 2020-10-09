@@ -1,6 +1,6 @@
 // @ts-check
 const config = require('config');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 const slsAuroraClient = require('data-api-client')({
   secretArn: config.get('RDS.secretArn'),
@@ -85,7 +85,7 @@ exports.queryCreateProductRecord = async function (
   messageId,
   transactionId,
 ) {
-  ctx.process.push('queryCreateProductRecord');
+  ctx.process.push({ name: 'queryCreateProductRecord', timestamp: getTimestamp() });
 
   const query = await slsAuroraClient.query({
     sql:
@@ -107,7 +107,7 @@ exports.queryCreateProductRecord = async function (
   const product_id = query.insertId;
   ctx.log.info('ProductId of created record: ' + product_id);
 
-  unwindStack(ctx.process, 'queryCreateProductRecord');
+  unwindStack(ctx, 'queryCreateProductRecord');
   return product_id;
 };
 
@@ -180,30 +180,24 @@ exports.rollbackTransaction = function (ctx, transactionId) {
 };
 
 exports.checkForProduct = async function (ctx, geoid, downloadId, format, returnBool) {
-  ctx.process.push('checkForProduct');
-
+  ctx.process.push({ name: 'checkForProduct', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
       'select * from products where products.geoid = :geoid and products.download_id = :downloadId and products.product_type = :format',
     parameters: { geoid, downloadId, format },
   });
-
-  unwindStack(ctx.process, 'checkForProduct');
-
+  unwindStack(ctx, 'checkForProduct');
   return query.records.length > 0;
 };
 
 exports.checkForProducts = async function (ctx, geoid, downloadId) {
-  ctx.process.push('checkForProducts');
-
+  ctx.process.push({ name: 'checkForProducts', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
       'select * from products where products.geoid = :geoid and products.download_id = :downloadId',
     parameters: { geoid, downloadId },
   });
-
-  unwindStack(ctx.process, 'checkForProducts');
-
+  unwindStack(ctx, 'checkForProducts');
   return query.records;
 };
 
@@ -238,98 +232,98 @@ exports.searchLogsByReference = function (ctx, ref) {
 };
 
 exports.getDownloadsData = async function (ctx) {
-  ctx.process.push('getDownloadsData');
+  ctx.process.push({ name: 'getDownloadsData', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql: 'SELECT download_id, source_id, created, download_ref, raw_key FROM downloads',
   });
-  unwindStack(ctx.process, 'getDownloadsData');
+  unwindStack(ctx, 'getDownloadsData');
   return query.records;
 };
 
 exports.getSourceData = async function (ctx) {
-  ctx.process.push('getSourceData');
+  ctx.process.push({ name: 'getSourceData', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
       'SELECT sources.source_id, sources.source_name, sources.source_type, source_checks.last_checked, source_checks.disposition FROM sources join source_checks ON sources.source_id = source_checks.source_id',
   });
-  unwindStack(ctx.process, 'getSourceData');
+  unwindStack(ctx, 'getSourceData');
   return query.records;
 };
 
 exports.getProductsData = async function (ctx) {
-  ctx.process.push('getProductsData');
+  ctx.process.push({ name: 'getProductsData', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
       'SELECT product_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key, download_id FROM products',
   });
-  unwindStack(ctx.process, 'getProductsData');
+  unwindStack(ctx, 'getProductsData');
   return query.records;
 };
 
 exports.getGeoIdentifiersData = async function (ctx) {
-  ctx.process.push('getGeoIdentifiersData');
+  ctx.process.push({ name: 'getGeoIdentifiersData', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
       'SELECT geoid, geoname, sumlev FROM geographic_identifiers WHERE geoid IN (SELECT DISTINCT geoid FROM products)',
   });
-  unwindStack(ctx.process, 'getGeoIdentifiersData');
+  unwindStack(ctx, 'getGeoIdentifiersData');
   return query.records;
 };
 
 exports.getSQSMessagesByGeoidAndType = async function (ctx, messageType, geoid) {
-  ctx.process.push('getSQSMessagesByGeoidAndType');
+  ctx.process.push({ name: 'getSQSMessagesByGeoidAndType', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
       'SELECT messages.created, messages.message_id, messages.message_type, messages.message_body, products.geoid FROM messages JOIN products ON messages.message_id = products.message_id WHERE message_type=:messageType AND geoid LIKE :geoid ORDER BY messages.created DESC LIMIT 300',
     parameters: { messageType, geoid: `%${geoid}%` },
   });
-  unwindStack(ctx.process, 'getSQSMessagesByGeoidAndType');
+  unwindStack(ctx, 'getSQSMessagesByGeoidAndType');
   return query.records;
 };
 
 exports.queryProductByIndividualRef = async function (ctx, individualRef) {
-  ctx.process.push('queryProductByIndividualRef');
+  ctx.process.push({ name: 'queryProductByIndividualRef', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql: 'SELECT * from products where individual_ref=:individualRef',
     parameters: { individualRef },
   });
-  unwindStack(ctx.process, 'queryProductByIndividualRef');
+  unwindStack(ctx, 'queryProductByIndividualRef');
   return query.records;
 };
 
 exports.queryProductsByProductRef = async function (ctx, productRef) {
-  ctx.process.push('queryProductsByProductRef');
+  ctx.process.push({ name: 'queryProductsByProductRef', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql: 'SELECT * from products where product_ref=:productRef',
     parameters: { productRef },
   });
-  unwindStack(ctx.process, 'queryProductsByProductRef');
+  unwindStack(ctx, 'queryProductsByProductRef');
   return query.records;
 };
 
 exports.getProductsByDownloadRef = async function (ctx, downloadRef) {
-  ctx.process.push('getProductsByDownloadRef');
+  ctx.process.push({ name: 'getProductsByDownloadRef', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
       'SELECT * from products JOIN downloads on products.download_id = downloads.download_id where download_ref=:downloadRef',
     parameters: { downloadRef },
   });
-  unwindStack(ctx.process, 'getProductsByDownloadRef');
+  unwindStack(ctx, 'getProductsByDownloadRef');
   return query.records;
 };
 
 exports.getDownloadsByDownloadRef = async function (ctx, downloadRef) {
-  ctx.process.push('getDownloadsByDownloadRef');
+  ctx.process.push({ name: 'getDownloadsByDownloadRef', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql: 'SELECT * from downloads where download_ref=:downloadRef',
     parameters: { downloadRef },
   });
-  unwindStack(ctx.process, 'getDownloadsByDownloadRef');
+  unwindStack(ctx, 'getDownloadsByDownloadRef');
   return query.records;
 };
 
 exports.deleteRecordById = async function (ctx, table, idName, value) {
-  ctx.process.push('deleteRecordById');
+  ctx.process.push({ name: 'deleteRecordById', timestamp: getTimestamp() });
   let query = await slsAuroraClient.query(`DELETE FROM ::table WHERE ::fieldName = :id`, {
     table,
     fieldName: idName,
@@ -346,6 +340,6 @@ exports.deleteRecordById = async function (ctx, table, idName, value) {
     ctx.log.error({ err: err.message, stack: err.stack });
     response = 'There was an error a database row.';
   }
-  unwindStack(ctx.process, 'deleteRecordById');
+  unwindStack(ctx, 'deleteRecordById');
   return response;
 };

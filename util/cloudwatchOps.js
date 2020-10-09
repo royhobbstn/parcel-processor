@@ -1,12 +1,13 @@
+// @ts-check
 const AWS = require('aws-sdk');
 const cloudwatchlogs = new AWS.CloudWatchLogs({ apiVersion: '2014-03-28', region: 'us-east-2' });
 const config = require('config');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 exports.getTaskLogs = getTaskLogs;
 
 function getTaskLogs(ctx, taskId) {
-  ctx.process.push('getTaskLogs');
+  ctx.process.push({ name: 'getTaskLogs', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const logGroupName = config.get('ECS.logGroupName');
@@ -28,7 +29,7 @@ function getTaskLogs(ctx, taskId) {
         };
       });
 
-      unwindStack(ctx.process, 'getTaskLogs');
+      unwindStack(ctx, 'getTaskLogs');
       return resolve(mapped);
     });
   });

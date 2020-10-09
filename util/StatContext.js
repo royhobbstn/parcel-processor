@@ -1,20 +1,18 @@
 // @ts-check
 const fs = require('fs');
 const ndjson = require('ndjson');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 // gather field statistics for a dataset
 
 exports.StatContext = function (ctx, filePath, uniquesMax = 500) {
-  ctx.process.push('StatContext');
-
   this.rowCount = 0;
   this.fields = {};
   this.filePath = filePath;
 
   this.init = async () => {
     // get attribute list & count total records
-    ctx.process.push('StatContext - init');
+    ctx.process.push({ name: 'StatContext - init', timestamp: getTimestamp() });
     ctx.log.info('starting stat context init');
 
     await new Promise((resolve, reject) => {
@@ -41,7 +39,7 @@ exports.StatContext = function (ctx, filePath, uniquesMax = 500) {
     });
 
     ctx.log.info('Done processing attributes, ready for export.');
-    unwindStack(ctx.process, 'StatContext - init');
+    unwindStack(ctx, 'StatContext - init');
   };
 
   this.crunchAttributes = () => {

@@ -9,12 +9,12 @@ const fsExtra = require('fs-extra');
 const del = require('del');
 const { directories } = require('./constants');
 const { generateRef } = require('./crypto');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 exports.createDirectories = createDirectories;
 
 async function createDirectories(ctx, dirs) {
-  ctx.process.push('createDirectories');
+  ctx.process.push({ name: 'createDirectories', timestamp: getTimestamp() });
 
   for (let dir of dirs) {
     const newDir = `${dir}${ctx.directoryId || ''}`;
@@ -22,11 +22,11 @@ async function createDirectories(ctx, dirs) {
     ctx.log.info(`Created directory: ${newDir}`);
   }
   ctx.log.info('Done creating staging directories.');
-  unwindStack(ctx.process, 'createDirectories');
+  unwindStack(ctx, 'createDirectories');
 }
 
 exports.extractZip = function (ctx, filePath) {
-  ctx.process.push('extractZip');
+  ctx.process.push({ name: 'extractZip', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     fs.createReadStream(filePath)
@@ -37,7 +37,7 @@ exports.extractZip = function (ctx, filePath) {
       })
       .on('close', () => {
         ctx.log.info(`Finished unzipping file: ${filePath}`);
-        unwindStack(ctx.process, 'extractZip');
+        unwindStack(ctx, 'extractZip');
         return resolve();
       });
   });
@@ -46,7 +46,7 @@ exports.extractZip = function (ctx, filePath) {
 exports.collapseUnzippedDir = collapseUnzippedDir;
 
 function collapseUnzippedDir(ctx) {
-  ctx.process.push('collapseUnzippedDir');
+  ctx.process.push({ name: 'collapseUnzippedDir', timestamp: getTimestamp() });
 
   const root = directories.unzippedDir + ctx.directoryId;
   const arrayOfFiles = fs.readdirSync(root);
@@ -74,16 +74,16 @@ function collapseUnzippedDir(ctx) {
   }
 
   if (movedFlag) {
-    unwindStack(ctx.process, 'collapseUnzippedDir');
+    unwindStack(ctx, 'collapseUnzippedDir');
     return collapseUnzippedDir;
   }
 
-  unwindStack(ctx.process, 'collapseUnzippedDir');
+  unwindStack(ctx, 'collapseUnzippedDir');
 }
 
 // determine if the unzipped folder contains a shapefile or FGDB
 exports.checkForFileType = function (ctx) {
-  ctx.process.push('checkForFileType');
+  ctx.process.push({ name: 'checkForFileType', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const arrayOfFiles = fs.readdirSync(directories.unzippedDir + ctx.directoryId);
@@ -112,7 +112,7 @@ exports.checkForFileType = function (ctx) {
     }
 
     if (gdbFilenames.size === 1) {
-      unwindStack(ctx.process, 'checkForFileType');
+      unwindStack(ctx, 'checkForFileType');
       return resolve([Array.from(gdbFilenames)[0], 'geodatabase']);
     }
 
@@ -122,7 +122,7 @@ exports.checkForFileType = function (ctx) {
     }
 
     if (shpFilenames.size === 1) {
-      unwindStack(ctx.process, 'checkForFileType');
+      unwindStack(ctx, 'checkForFileType');
       return resolve([Array.from(shpFilenames)[0], 'shapefile']);
     }
 
@@ -140,7 +140,7 @@ exports.checkForFileType = function (ctx) {
 };
 
 exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
-  ctx.process.push('zipShapefile');
+  ctx.process.push({ name: 'zipShapefile', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const keyBase = path.parse(productKeySHP).base;
@@ -157,7 +157,7 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
     output.on('close', function () {
       ctx.log.info(archive.pointer() + ' total bytes');
       ctx.log.info('archiver has been finalized and the output file descriptor has closed.');
-      unwindStack(ctx.process, 'zipShapefile');
+      unwindStack(ctx, 'zipShapefile');
       resolve();
     });
 
@@ -205,7 +205,7 @@ exports.zipShapefile = async function (ctx, outputPath, productKeySHP) {
 };
 
 exports.cleanEFS = async function (ctx) {
-  ctx.process.push('cleanEFS');
+  ctx.process.push({ name: 'cleanEFS', timestamp: getTimestamp() });
 
   // create the root directories if they doesn't exist, so we dont get an error when we try to read from it
   // there is an EFS and local root directory.  Tiles are done locally becaust the latency
@@ -248,16 +248,17 @@ exports.cleanEFS = async function (ctx) {
     }
   }
 
-  unwindStack(ctx.process, 'cleanEFS');
+  unwindStack(ctx, 'cleanEFS');
 };
 
 exports.cleanDirectory = async function (ctx, dir) {
-  ctx.process.push('cleanDirectory');
+  ctx.process.push({ name: 'cleanDirectory', timestamp: getTimestamp() });
+
   try {
     await del(dir, { force: true });
     ctx.log.info('Deleted directory:', { dir });
   } catch (err) {
     ctx.log.error(`Error while deleting ${dir}.`, { error: err.message, stack: err.stack });
   }
-  unwindStack(ctx.process, 'cleanDirectory');
+  unwindStack(ctx, 'cleanDirectory');
 };

@@ -7,7 +7,7 @@ const { computeFeature } = require('./computeFeature.js');
 const turf = require('@turf/turf');
 const { idPrefix, zoomLevels } = require('../util/constants');
 const ndjson = require('ndjson');
-const { unwindStack } = require('../util/misc');
+const { unwindStack, getTimestamp } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
 const mapshaper = require('mapshaper');
 
@@ -16,7 +16,7 @@ const HUGE_THRESHOLD = 94684125;
 exports.runAggregate = runAggregate;
 
 async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggregationLevel = 0) {
-  ctx.process.push('runAggregate' + aggregationLevel);
+  ctx.process.push({ name: 'runAggregate' + aggregationLevel, timestamp: getTimestamp() });
 
   // @ts-ignore
   let queue = new TinyQueue([], (a, b) => {
@@ -315,7 +315,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
       output.end();
     });
 
-    unwindStack(ctx.process, 'runAggregate' + aggregationLevel);
+    unwindStack(ctx, 'runAggregate' + aggregationLevel);
     return;
   }
 
@@ -323,7 +323,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     throw new Error('Unable to aggregate.  Ran out of aggregation targets.');
   }
 
-  unwindStack(ctx.process, 'runAggregate' + aggregationLevel);
+  unwindStack(ctx, 'runAggregate' + aggregationLevel);
 
   // if here, need to re-run with less aggressive aggregation targets
   ctx.log.warn('Aggregate failed.  retrying at less aggressive aggregation level.');

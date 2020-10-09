@@ -31,12 +31,12 @@ const {
   lookupCleanGeoName,
   DBWrites,
 } = require('../util/wrapQuery');
-const { unwindStack } = require('../util/misc');
+const { unwindStack, getTimestamp } = require('../util/misc');
 
 exports.processInbox = processInbox;
 
 async function processInbox(ctx, data) {
-  ctx.process.push('processInbox');
+  ctx.process.push({ name: 'processInbox', timestamp: getTimestamp() });
 
   await acquireConnection(ctx);
   await createDirectories(ctx, [
@@ -103,11 +103,11 @@ async function processInbox(ctx, data) {
     // rethrow to send email
     throw new Error('Error in main function.  See logs.');
   }
-  unwindStack(ctx.process, 'processInbox');
+  unwindStack(ctx, 'processInbox');
 }
 
 async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
-  ctx.process.push('runMain');
+  ctx.process.push({ name: 'runMain', timestamp: getTimestamp() });
 
   const sourceNameInput = messagePayload.sourceVal;
 
@@ -211,7 +211,7 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
     productKey,
   };
 
-  unwindStack(ctx.process, 'runMain');
+  unwindStack(ctx, 'runMain');
 
   // dont create derivative products for state-level datasets
   if (fipsDetails.SUMLEV === '040') {
@@ -223,7 +223,7 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
 
 // https://stackoverflow.com/a/61269447/8896489
 async function downloadFile(ctx, fileUrl, outputLocationPath) {
-  ctx.process.push('downloadFile');
+  ctx.process.push({ name: 'downloadFile', timestamp: getTimestamp() });
 
   ctx.log.info('Downloading file: ', { file: fileUrl });
 
@@ -248,7 +248,7 @@ async function downloadFile(ctx, fileUrl, outputLocationPath) {
       writer.on('close', () => {
         if (!error) {
           ctx.log.info('File downloaded to: ', { outputLocationPath });
-          unwindStack(ctx.process, 'downloadFile');
+          unwindStack(ctx, 'downloadFile');
           resolve(true);
         }
         // no need to call the reject here, as it will have been called in the

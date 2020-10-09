@@ -20,7 +20,7 @@ const {
   rollbackTransaction,
   createMessageRecord,
 } = require('./queries');
-const { getSourceType, unwindStack } = require('./misc');
+const { getSourceType, unwindStack, getTimestamp } = require('./misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
 
 exports.DBWrites = async function (
@@ -36,7 +36,7 @@ exports.DBWrites = async function (
   individualRef,
   messagePayload,
 ) {
-  ctx.process.push('DBWrites');
+  ctx.process.push({ name: 'DBWrites', timestamp: getTimestamp() });
 
   let sourceLine;
   const transactionId = await startTransaction(ctx);
@@ -71,7 +71,7 @@ exports.DBWrites = async function (
     );
     ctx.log.info(`Created download record.`, { downloadId });
 
-    const product_id = await queryCreateProductRecord(
+    await queryCreateProductRecord(
       ctx,
       downloadId,
       productRef,
@@ -101,7 +101,7 @@ exports.DBWrites = async function (
     ctx.log.info(`Recorded source check as disposition: 'viewed'`);
     ctx.log.info(`created record in 'downloads' table.  ref: ${downloadRef}`);
     ctx.log.info(`wrote NDgeoJSON product record.  ref: ${productRef}`);
-    unwindStack(ctx.process, 'DBWrites');
+    unwindStack(ctx, 'DBWrites');
     return downloadId;
   } catch (err) {
     ctx.log.error('Error', { err: err.message, stack: err.stack });
@@ -114,7 +114,7 @@ exports.DBWrites = async function (
 exports.acquireConnection = acquireConnection;
 
 async function acquireConnection(ctx) {
-  ctx.process.push('acquireConnection');
+  ctx.process.push({ name: 'acquireConnection', timestamp: getTimestamp() });
 
   const seconds = 10;
   let attempts = 5;
@@ -134,7 +134,7 @@ async function acquireConnection(ctx) {
     throw new Error('unable to establish database connection');
   }
 
-  unwindStack(ctx.process, 'acquireConnection');
+  unwindStack(ctx, 'acquireConnection');
   ctx.log.info('connection to database confirmed');
 }
 
@@ -158,7 +158,7 @@ async function checkHealth(ctx) {
 exports.recordSourceCheck = recordSourceCheck;
 
 async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
-  ctx.process.push('recordSourceCheck');
+  ctx.process.push({ name: 'recordSourceCheck', timestamp: getTimestamp() });
 
   if (sourceType !== sourceTypes.EMAIL && sourceType !== sourceTypes.WEBPAGE) {
     throw new Error('unexpected sourceType');
@@ -168,18 +168,18 @@ async function recordSourceCheck(ctx, sourceId, sourceType, transactionId) {
     sourceType === sourceTypes.EMAIL ? dispositions.RECEIVED : dispositions.VIEWED;
   const query = await queryWriteSourceCheck(ctx, sourceId, disposition, transactionId);
 
-  unwindStack(ctx.process, 'recordSourceCheck');
+  unwindStack(ctx, 'recordSourceCheck');
   return query.insertId;
 }
 
 exports.fetchSourceIdIfExists = fetchSourceIdIfExists;
 
 async function fetchSourceIdIfExists(ctx, pageName) {
-  ctx.process.push('fetchSourceIdIfExists');
+  ctx.process.push({ name: 'fetchSourceIdIfExists', timestamp: getTimestamp() });
 
   const query = await querySource(ctx, pageName);
 
-  unwindStack(ctx.process, 'fetchSourceIdIfExists');
+  unwindStack(ctx, 'fetchSourceIdIfExists');
 
   if (query.records.length) {
     return [query.records[0].source_id, query.records[0].source_type];
@@ -190,27 +190,27 @@ async function fetchSourceIdIfExists(ctx, pageName) {
 exports.createSource = createSource;
 
 async function createSource(ctx, sourceName, sourceType, transactionId) {
-  ctx.process.push('createSource');
+  ctx.process.push({ name: 'createSource', timestamp: getTimestamp() });
 
   const query = await queryWriteSource(ctx, sourceName, sourceType, transactionId);
   if (query.numberOfRecordsUpdated === 1) {
-    unwindStack(ctx.process, 'createSource');
+    unwindStack(ctx, 'createSource');
     return query.insertId;
   }
   throw new Error(`unable to create page record for: ${sourceName}`);
 }
 
 exports.doesHashExist = async function (ctx, computedHash) {
-  ctx.process.push('doesHashExist');
+  ctx.process.push({ name: 'doesHashExist', timestamp: getTimestamp() });
 
   const query = await queryHash(ctx, computedHash);
   if (query.records.length) {
     ctx.log.info('Hash exists in database.  File has already been processed.');
-    unwindStack(ctx.process, 'doesHashExist');
+    unwindStack(ctx, 'doesHashExist');
     return true;
   }
   ctx.log.info('Hash is unique.  Processing new download.');
-  unwindStack(ctx.process, 'doesHashExist');
+  unwindStack(ctx, 'doesHashExist');
   return false;
 };
 
@@ -227,7 +227,7 @@ async function constructDownloadRecord(
   messageId,
   transactionId,
 ) {
-  ctx.process.push('constructDownloadRecord');
+  ctx.process.push({ name: 'constructDownloadRecord', timestamp: getTimestamp() });
 
   const originalFilename = path.parse(filePath).base;
 
@@ -247,7 +247,7 @@ async function constructDownloadRecord(
     throw new Error('unexpected result from create download request');
   }
 
-  unwindStack(ctx.process, 'constructDownloadRecord');
+  unwindStack(ctx, 'constructDownloadRecord');
   return query.insertId;
 }
 
@@ -258,7 +258,7 @@ function makeS3Key(ctx, str) {
 }
 
 exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
-  ctx.process.push('lookupCleanGeoName');
+  ctx.process.push({ name: 'lookupCleanGeoName', timestamp: getTimestamp() });
 
   const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
 
@@ -291,12 +291,12 @@ exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
   // Alter geo name to be s3 key friendly (all non alphanumeric become -)
   const geoName = makeS3Key(ctx, rawGeoName);
 
-  unwindStack(ctx.process, 'lookupCleanGeoName');
+  unwindStack(ctx, 'lookupCleanGeoName');
   return { geoid, geoName };
 };
 
 exports.getSplittableDownloads = async function (ctx, geoid) {
-  ctx.process.push('getSplittableDownloads');
+  ctx.process.push({ name: 'getSplittableDownloads', timestamp: getTimestamp() });
 
   let query;
 
@@ -310,34 +310,35 @@ exports.getSplittableDownloads = async function (ctx, geoid) {
     throw new Error(`Problem running getSplittableDownlods Query`);
   }
 
-  unwindStack(ctx.process, 'getSplittableDownloads');
+  unwindStack(ctx, 'getSplittableDownloads');
   return { rows: query.records };
 };
 
 exports.getCountiesByState = async function (ctx, geoid) {
-  ctx.process.push('getCountiesByState');
+  ctx.process.push({ name: 'getCountiesByState', timestamp: getTimestamp() });
 
   const query = await queryAllCountiesFromState(ctx, geoid);
   if (!query) {
     throw new Error(`Problem running queryAllCountiesFromState Query`);
   }
 
-  unwindStack(ctx.process, 'getCountiesByState');
+  unwindStack(ctx, 'getCountiesByState');
   return query.records;
 };
 
 exports.querySourceNameExact = async function (ctx, sourceName) {
-  ctx.process.push('querySourceNameExact');
+  ctx.process.push({ name: 'querySourceNameExact', timestamp: getTimestamp() });
+
   const query = await querySource(ctx, sourceName);
   if (!query) {
     throw new Error(`Problem running querySourceNameExact Query`);
   }
-  unwindStack(ctx.process, 'querySourceNameExact');
+  unwindStack(ctx, 'querySourceNameExact');
   return query.records;
 };
 
 exports.querySourceNames = async function (ctx, sourceName) {
-  ctx.process.push('querySourceNames');
+  ctx.process.push({ name: 'querySourceNames', timestamp: getTimestamp() });
 
   // take root of http source, or domain of email sources
 
@@ -363,12 +364,12 @@ exports.querySourceNames = async function (ctx, sourceName) {
     throw new Error(`Problem running querySourceNames Query`);
   }
 
-  unwindStack(ctx.process, 'querySourceNames');
+  unwindStack(ctx, 'querySourceNames');
   return query.records;
 };
 
 exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
-  ctx.process.push('initiateDatabaseHeartbeat');
+  ctx.process.push({ name: 'initiateDatabaseHeartbeat', timestamp: getTimestamp() });
 
   let interval = setInterval(() => {
     // meant to be non-blocking
@@ -376,6 +377,6 @@ exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
     acquireConnection(ctx);
   }, seconds * 1000);
 
-  unwindStack(ctx.process, 'initiateDatabaseHeartbeat');
+  unwindStack(ctx, 'initiateDatabaseHeartbeat');
   return interval;
 };

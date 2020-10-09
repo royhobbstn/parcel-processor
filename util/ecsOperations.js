@@ -1,14 +1,13 @@
 // @ts-check
-
 const AWS = require('aws-sdk');
 const config = require('config');
 const ecs = new AWS.ECS({ apiVersion: '2014-11-13', region: 'us-east-2' });
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 exports.getTaskInfo = getTaskInfo;
 
 function getTaskInfo(ctx) {
-  ctx.process.push('getTaskInfo');
+  ctx.process.push({ name: 'getTaskInfo', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     let family = 'processor-dev';
@@ -44,10 +43,10 @@ function getTaskInfo(ctx) {
             taskDefinitionArn: task.taskDefinitionArn,
           };
         });
-        unwindStack(ctx.process, 'getTaskInfo');
+        unwindStack(ctx, 'getTaskInfo');
         return resolve(taskArray);
       } else {
-        unwindStack(ctx.process, 'getTaskInfo');
+        unwindStack(ctx, 'getTaskInfo');
         return resolve([]);
       }
     });
@@ -57,7 +56,7 @@ function getTaskInfo(ctx) {
 exports.describeTasks = describeTasks;
 
 function describeTasks(ctx, taskArns) {
-  ctx.process.push('describeTasks');
+  ctx.process.push({ name: 'describeTasks', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const params = {
@@ -69,7 +68,7 @@ function describeTasks(ctx, taskArns) {
       if (err) {
         return reject(err);
       }
-      unwindStack(ctx.process, 'describeTasks');
+      unwindStack(ctx, 'describeTasks');
       resolve(data);
     });
   });
@@ -78,7 +77,7 @@ function describeTasks(ctx, taskArns) {
 exports.runProcessorTask = runProcessorTask;
 
 async function runProcessorTask(ctx) {
-  ctx.process.push('runProcessorTask');
+  ctx.process.push({ name: 'runProcessorTask', timestamp: getTimestamp() });
 
   const taskDefinition = config.get('ECS.taskDefinition');
 
@@ -102,7 +101,7 @@ async function runProcessorTask(ctx) {
       if (err) {
         return reject(err);
       }
-      unwindStack(ctx.process, 'runProcessorTask');
+      unwindStack(ctx, 'runProcessorTask');
       return resolve(data);
     });
   });

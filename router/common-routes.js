@@ -10,13 +10,13 @@ const { log } = require('../util/logger');
 exports.commonRouter = async app => {
   //
   app.get('/health', function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     ctx.log.info('Health ok');
     return res.json({ status: 'ok' });
   });
 
   app.get('/acquireConnection', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     try {
       await acquireConnection(ctx);
       ctx.log.info('connected to database');
@@ -28,7 +28,7 @@ exports.commonRouter = async app => {
   });
 
   app.get('/databaseHealth', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     try {
       await queryHealth(ctx);
       ctx.log.info('database health check passed');
@@ -44,7 +44,7 @@ exports.commonRouter = async app => {
   });
 
   app.get('/status', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const status = await getStatus(ctx);
     return res.json(status);
   });

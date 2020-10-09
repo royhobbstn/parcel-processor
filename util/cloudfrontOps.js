@@ -1,12 +1,13 @@
+// @ts-check
 const AWS = require('aws-sdk');
 const cloudfront = new AWS.CloudFront({ apiVersion: '2020-05-31' });
 const config = require('config');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 exports.invalidateFiles = invalidateFiles;
 
 function invalidateFiles(ctx, filenamesArray) {
-  ctx.process.push('invalidateFiles');
+  ctx.process.push({ name: 'invalidateFiles', timestamp: getTimestamp() });
 
   const params = {
     DistributionId: config.get('Cloudfront.websiteDistributionId'),
@@ -26,7 +27,7 @@ function invalidateFiles(ctx, filenamesArray) {
         return reject(err);
       } else {
         ctx.log.info('cloudwatch invalidation initiated', { data });
-        unwindStack(ctx.process, 'invalidateFiles');
+        unwindStack(ctx, 'invalidateFiles');
         return resolve(data);
       }
     });

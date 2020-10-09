@@ -3,7 +3,7 @@
 const fs = require('fs');
 const ss = require('simple-statistics');
 const ndjson = require('ndjson');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 const { sampleSize } = require('lodash');
 
 const SAMPLE = 25000;
@@ -11,7 +11,7 @@ const SAMPLE = 25000;
 exports.parseFieldStatistics = parseFieldStatistics;
 
 async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
-  ctx.process.push('parseFieldStatistics');
+  ctx.process.push({ name: 'parseFieldStatistics', timestamp: getTimestamp() });
 
   ctx.log.info('statsFilePath', { statsFilePath });
   ctx.log.info('convertToFormatBase', { convertToFormatBase });
@@ -139,15 +139,14 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
     fieldMetadata.categorical[fieldName] = topUniques;
   }
 
-  unwindStack(ctx.process, 'parseFieldStatistics');
+  unwindStack(ctx, 'parseFieldStatistics');
 
   return fieldMetadata;
 }
 
 function calcBreaks(ctx, data) {
   let thedata = sampleSize(data, SAMPLE);
-
-  ctx.process.push('calcBreaks');
+  ctx.process.push({ name: 'calcBreaks', timestamp: getTimestamp() });
 
   const max = ss.max(thedata);
 
@@ -256,7 +255,7 @@ function calcBreaks(ctx, data) {
   computed_breaks.median = median;
   computed_breaks.stddev = stddev;
 
-  unwindStack(ctx.process, 'calcBreaks');
+  unwindStack(ctx, 'calcBreaks');
 
   return computed_breaks;
 }

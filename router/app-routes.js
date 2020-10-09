@@ -39,7 +39,7 @@ const { siteData } = require('../util/siteData');
 exports.appRouter = async app => {
   //
   app.post('/deleteSelectedItems', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const items = req.body;
     const output = [];
     const sortedItems = items.sort((a, z) => {
@@ -59,7 +59,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/triggerSiteData', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
 
     try {
       await siteData(ctx);
@@ -72,7 +72,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/downloadsByDownloadRef', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
 
     const downloadRef = req.query.ref;
 
@@ -86,7 +86,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/productsByDownloadRef', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
 
     const downloadRef = req.query.ref;
 
@@ -100,7 +100,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getTaskLogs', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
 
     const taskId = req.query.id;
 
@@ -114,7 +114,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/runProcessorTask', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
 
     try {
       const taskInfo = await runProcessorTask(ctx);
@@ -126,7 +126,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getTaskInfo', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
 
     try {
       const taskInfo = await getTaskInfo(ctx);
@@ -138,7 +138,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getQueueStats', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
 
     const URL_ROOT = 'https://sqs.us-east-2.amazonaws.com/000009394762/';
     const queueStructure = ['inbox', 'sortByGeography', 'createProducts'];
@@ -176,7 +176,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/searchLogsByType', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const type = req.query.type;
     try {
       const query = await searchLogsByType(ctx, type);
@@ -188,7 +188,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/searchLogsByGeoid', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const geoid = req.query.geoid;
     try {
       const query = await searchLogsByGeoid(ctx, geoid);
@@ -200,7 +200,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/searchLogsByReference', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const ref = req.query.ref;
     try {
       const query = await searchLogsByReference(ctx, ref);
@@ -212,7 +212,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getLogfile', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const messageId = req.query.messageId;
     const messageType = req.query.messageType;
     const s3Key = `${messageId}-${messageType}.log`;
@@ -228,67 +228,67 @@ exports.appRouter = async app => {
   });
 
   app.post('/replay/viewInboxDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.inboxQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.post('/replay/viewSortDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.sortQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.post('/replay/viewProductDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const payload = req.body;
     const originalQueueUrl = config.get('SQS.productQueueUrl');
     return replayDlq(ctx, res, originalQueueUrl, payload);
   });
 
   app.get('/viewInboxDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.get('/viewSortDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.get('/viewProductDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
     return readDlq(ctx, res, queueUrl);
   });
 
   app.post('/delete/viewInboxDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.inboxQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.post('/delete/viewSortDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.sortQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.post('/delete/viewProductDlq', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const payload = req.body;
     const queueUrl = config.get('SQS.productQueueUrl') + '-dlq';
     return deleteDlq(ctx, res, queueUrl, payload);
   });
 
   app.get('/queryStatFiles', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const geoid = req.query.geoid;
     try {
       await acquireConnection(ctx);
@@ -300,7 +300,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/proxyS3File', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const key = decodeURIComponent(req.query.key);
     const bucket = decodeURIComponent(req.query.bucket);
     try {
@@ -312,7 +312,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getSubGeographies', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const geoid = req.query.geoid;
     try {
       await acquireConnection(ctx);
@@ -324,7 +324,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/querySources', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const sourceName = decodeURIComponent(req.query.name);
     try {
       await acquireConnection(ctx);
@@ -336,7 +336,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/checkSourceExists', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const sourceName = decodeURIComponent(req.query.sourceName);
     try {
       await acquireConnection(ctx);
@@ -352,7 +352,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/proxyHeadRequest', function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const url = decodeURIComponent(req.query.url);
     axios
       .head(url)
@@ -375,7 +375,7 @@ exports.appRouter = async app => {
   });
 
   app.post('/sendInboxSQS', async function (req, res) {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     let inboxQueueUrl = config.get('SQS.inboxQueueUrl');
     const envOverride = req.query.env;
     if (envOverride) {
@@ -386,7 +386,7 @@ exports.appRouter = async app => {
   });
 
   app.post('/sendSortSQS', (req, res) => {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     let sortQueueUrl = config.get('SQS.sortQueueUrl');
     const envOverride = req.query.env;
     if (envOverride) {
@@ -397,7 +397,7 @@ exports.appRouter = async app => {
   });
 
   app.post('/sendProductSQS', (req, res) => {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     let productQueueUrl = config.get('SQS.productQueueUrl');
     const envOverride = req.query.env;
     if (envOverride) {
@@ -408,7 +408,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/getSQSMessageBody', async (req, res) => {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const messageType = req.query.type;
     const geoid = req.query.geoid;
     try {
@@ -421,7 +421,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/byProductIndividualRef', async (req, res) => {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const productIndividualRef = req.query.ref;
     console.log({ productIndividualRef });
     try {
@@ -434,7 +434,7 @@ exports.appRouter = async app => {
   });
 
   app.get('/byProductRef', async (req, res) => {
-    const ctx = { log, process: [] };
+    const ctx = { log, process: [], timeBank: {}, timeStack: [] };
     const productRef = req.query.ref;
     console.log({ productRef });
     try {

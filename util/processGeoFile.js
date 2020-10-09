@@ -13,12 +13,12 @@ const {
   fileFormats,
   zoomLevels,
 } = require('./constants');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 const HUGE_THRESHOLD = 94684125;
 
 function getOgrInfo(ctx, filePath) {
-  ctx.process.push('getOgrInfo');
+  ctx.process.push({ name: 'getOgrInfo', timestamp: getTimestamp() });
   let textOutput = '';
 
   return new Promise((resolve, reject) => {
@@ -45,7 +45,7 @@ function getOgrInfo(ctx, filePath) {
 
     proc.on('close', code => {
       ctx.log.info(`completed gathering ogrinfo.`);
-      unwindStack(ctx.process, 'getOgrInfo');
+      unwindStack(ctx, 'getOgrInfo');
       ctx.log.info('command', { command });
       ctx.log.info('ogrinfo', { textOutput });
       return resolve(textOutput);
@@ -54,7 +54,7 @@ function getOgrInfo(ctx, filePath) {
 }
 
 function parseOgrOutput(ctx, textOutput) {
-  ctx.process.push('parseOgrOutput');
+  ctx.process.push({ name: 'parseOgrOutput', timestamp: getTimestamp() });
 
   const layers = [];
   let cursor = 0;
@@ -81,12 +81,12 @@ function parseOgrOutput(ctx, textOutput) {
     cursor = brFC;
   } while (true);
 
-  unwindStack(ctx.process, 'parseOgrOutput');
+  unwindStack(ctx, 'parseOgrOutput');
   return layers;
 }
 
 exports.inspectFileExec = async function (ctx, inputPath) {
-  ctx.process.push('inspectFileExec');
+  ctx.process.push({ name: 'inspectFileExec', timestamp: getTimestamp() });
 
   ctx.log.info(`opening from ${inputPath}`);
 
@@ -119,12 +119,12 @@ exports.inspectFileExec = async function (ctx, inputPath) {
 
   const chosenLayerName = layerSelection[0].name;
 
-  unwindStack(ctx.process, 'inspectFileExec');
+  unwindStack(ctx, 'inspectFileExec');
   return chosenLayerName;
 };
 
 exports.parseFileExec = async function (ctx, outputPath, inputPath, chosenLayerName) {
-  ctx.process.push('parseFileExec');
+  ctx.process.push({ name: 'parseFileExec', timestamp: getTimestamp() });
 
   // convert from whatever to newline delimited geojson
   await convertToFormat(ctx, fileFormats.NDGEOJSON, outputPath, inputPath, chosenLayerName);
@@ -133,12 +133,12 @@ exports.parseFileExec = async function (ctx, outputPath, inputPath, chosenLayerN
 
   fs.writeFileSync(outputPath + '.json', JSON.stringify(stats), 'utf8');
 
-  unwindStack(ctx.process, 'parseFileExec');
+  unwindStack(ctx, 'parseFileExec');
   return;
 };
 
 exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
-  ctx.process.push('addUniqueIdNdjson');
+  ctx.process.push({ name: 'addUniqueIdNdjson', timestamp: getTimestamp() });
 
   const tempstore = [];
 
@@ -160,7 +160,7 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
         ctx.log.info(`processing complete. autoincrement id: ${idPrefix} added.`);
         ctx.log.info(`misc filtered out: ${filteredOut}`);
         ctx.log.info(`additional feature count (overlaps): ${additionalCount}`);
-        unwindStack(ctx.process, 'addUniqueIdNdjson');
+        unwindStack(ctx, 'addUniqueIdNdjson');
         return resolve(additionalFeatures);
       });
 
@@ -355,8 +355,7 @@ exports.parseOutputPath = function (ctx, fileName, fileType) {
 exports.convertToFormat = convertToFormat;
 
 function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerName = '') {
-  ctx.process.push('convertToFormat');
-  ctx.process.push(format.extension);
+  ctx.process.push({ name: 'convertToFormat ' + format.extension, timestamp: getTimestamp() });
 
   // convert from anything into ndgeojson, geojson, gpkg, shp, etc
 
@@ -403,15 +402,14 @@ function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerNam
     proc.on('close', code => {
       ctx.log.info(`completed creating format: ${format.driver}.`);
       ctx.process.pop();
-      unwindStack(ctx.process, format.extension);
-      unwindStack(ctx.process, 'convertToFormat');
+      unwindStack(ctx, 'convertToFormat ' + format.extension);
       return resolve({ command });
     });
   });
 }
 
 exports.tileJoinLayers = function (ctx, tilesDir) {
-  ctx.process.push('tileJoinLayers');
+  ctx.process.push({ name: 'tileJoinLayers', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const application = 'tile-join';
@@ -442,14 +440,14 @@ exports.tileJoinLayers = function (ctx, tilesDir) {
 
     proc.on('close', code => {
       ctx.log.info(`finished creating directory of tiles. code ${code}`);
-      unwindStack(ctx.process, 'tileJoinLayers');
+      unwindStack(ctx, 'tileJoinLayers');
       resolve({ command });
     });
   });
 };
 
 exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, additionalFeatures) {
-  ctx.process.push('writeTileAttributes');
+  ctx.process.push({ name: 'writeTileAttributes', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     ctx.log.info('processing attributes...');
@@ -522,7 +520,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
         await Promise.all(writePromises)
           .then(() => {
             ctx.log.info('write streams have all closed successfully');
-            unwindStack(ctx.process, 'writeTileAttributes');
+            unwindStack(ctx, 'writeTileAttributes');
             resolve('end');
           })
           .catch(err => {
@@ -533,7 +531,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
 };
 
 exports.execGolangClusters = async function (ctx, numClusters, inputFilename, outputFilename) {
-  ctx.process.push('execGolangClusters');
+  ctx.process.push({ name: 'execGolangClusters', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     const application = 'go';
@@ -564,14 +562,14 @@ exports.execGolangClusters = async function (ctx, numClusters, inputFilename, ou
 
     proc.on('close', code => {
       ctx.log.info(`finished running golang clusters script. code ${code}`);
-      unwindStack(ctx.process, 'execGolangClusters');
+      unwindStack(ctx, 'execGolangClusters');
       resolve({ command });
     });
   });
 };
 
 exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
-  ctx.process.push('extractPointsFromNdGeoJson');
+  ctx.process.push({ name: 'extractPointsFromNdGeoJson', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     ctx.log.info('extracting points from ndgeojson...');
@@ -615,7 +613,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
-        unwindStack(ctx.process, 'extractPointsFromNdGeoJson');
+        unwindStack(ctx, 'extractPointsFromNdGeoJson');
         const centroidsFilename = `${directories.productTempDir + ctx.directoryId}/centroids.json`;
         fs.writeFileSync(centroidsFilename, JSON.stringify(barePts));
         return resolve([points, propertyCount, centroidsFilename]);
@@ -624,7 +622,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
 };
 
 exports.createClusterIdHull = async function (ctx, outputPath, lookup) {
-  ctx.process.push('createClusterIdHull');
+  ctx.process.push({ name: 'createClusterIdHull', timestamp: getTimestamp() });
 
   return new Promise((resolve, reject) => {
     ctx.log.info('creating clusterID Hull');
@@ -665,14 +663,15 @@ exports.createClusterIdHull = async function (ctx, outputPath, lookup) {
           return layer;
         });
         // fs.writeFileSync('./clusterio.geojson', JSON.stringify(turf.featureCollection(hulls)));
-        unwindStack(ctx.process, 'createClusterIdHull');
+        unwindStack(ctx, 'createClusterIdHull');
         resolve(turf.featureCollection(hulls));
       });
   });
 };
 
 exports.readTippecanoeMetadata = async function (ctx, metadataFile) {
-  ctx.process.push('readTippecanoeMetadata');
+  ctx.process.push({ name: 'readTippecanoeMetadata', timestamp: getTimestamp() });
+
   let metadataContents;
 
   try {
@@ -691,24 +690,23 @@ exports.readTippecanoeMetadata = async function (ctx, metadataFile) {
     );
   }
 
-  unwindStack(ctx.process, 'readTippecanoeMetadata');
+  unwindStack(ctx, 'readTippecanoeMetadata');
   return metadataContents;
 };
 
 exports.countStats = countStats;
 
 async function countStats(ctx, path) {
-  ctx.process.push('countStats');
+  ctx.process.push({ name: 'countStats', timestamp: getTimestamp() });
   const statCounter = new StatContext(ctx, path);
   await statCounter.init();
   const stats = statCounter.exportStats();
-  unwindStack(ctx.process, 'countStats');
+  unwindStack(ctx, 'countStats');
   return stats;
 }
 
 exports.writeMbTiles = async function (ctx, filename, currentZoom) {
-  // //
-  ctx.process.push('writeMbTiles');
+  ctx.process.push({ name: 'writeMbTiles', timestamp: getTimestamp() });
 
   ctx.log.info('Writing tile level ' + currentZoom);
 
@@ -751,7 +749,7 @@ exports.writeMbTiles = async function (ctx, filename, currentZoom) {
 
     proc.on('close', code => {
       ctx.log.info(`completed creating tiles. code ${code}`);
-      unwindStack(ctx.process, 'writeMbTiles');
+      unwindStack(ctx, 'writeMbTiles');
       resolve({ command, layername });
     });
   });
@@ -760,7 +758,7 @@ exports.writeMbTiles = async function (ctx, filename, currentZoom) {
 
 // make mini ndgeojson files; 1 per each main cluster
 exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBase, lookup) {
-  ctx.process.push('divideIntoClusters');
+  ctx.process.push({ name: 'divideIntoClusters', timestamp: getTimestamp() });
 
   ctx.log.info(`creating directory: ${miniNdgeojsonBase}`);
   fs.mkdirSync(miniNdgeojsonBase);
@@ -825,7 +823,7 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
       }
     }, 100);
   });
-  unwindStack(ctx.process, 'divideIntoClusters');
+  unwindStack(ctx, 'divideIntoClusters');
   return [streams, attributeLookupFile];
 };
 
@@ -837,7 +835,7 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
 // write to aggregated files ex: /files/staging/productTemp-640843/aggregated_4.json
 // `${directories.productTempDir + ctx.directoryId}/aggregated_${currentZoom}.json`
 exports.aggregateAggregatedClusters = async function (ctx) {
-  ctx.process.push('aggregateAggregatedClusters');
+  ctx.process.push({ name: 'aggregateAggregatedClusters', timestamp: getTimestamp() });
 
   // loop through zoom levels by 2 and aggregate all except full zoom
   // full zoom already available as ndgeojson, so no worries
@@ -910,5 +908,5 @@ exports.aggregateAggregatedClusters = async function (ctx) {
   }
 
   ctx.log.info('finished aggregating aggregated clusters.');
-  unwindStack(ctx.process, 'aggregateAggregatedClusters');
+  unwindStack(ctx, 'aggregateAggregatedClusters');
 };

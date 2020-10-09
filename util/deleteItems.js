@@ -1,6 +1,6 @@
 // @ts-check
 
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 const { removeS3Files } = require('./wrapS3');
 const { s3deleteType } = require('./constants');
 const { deleteRecordById } = require('./queries');
@@ -8,7 +8,7 @@ const { deleteRecordById } = require('./queries');
 exports.deleteItem = deleteItem;
 
 async function deleteItem(ctx, item) {
-  ctx.process.push('deleteItem');
+  ctx.process.push({ name: 'deleteItem', timestamp: getTimestamp() });
 
   let output;
   switch (item.task_name) {
@@ -134,23 +134,23 @@ async function deleteItem(ctx, item) {
       throw new Error('unexpected delete item task name');
   }
 
-  unwindStack(ctx.process, 'deleteItem');
+  unwindStack(ctx, 'deleteItem');
   return output;
 }
 
 async function deleteFile(ctx, item, type) {
-  ctx.process.push('deleteFile');
+  ctx.process.push({ name: 'deleteFile', timestamp: getTimestamp() });
 
   const bucketName =
     item.bucket_name + (item.env === 'development' || item.env === 'test' ? '-dev' : '');
   const output = await removeS3Files(ctx, [{ type, bucket: bucketName, key: item.bucket_key }]);
 
-  unwindStack(ctx.process, 'deleteFile');
+  unwindStack(ctx, 'deleteFile');
   return output;
 }
 
 async function deleteFileStat(ctx, item) {
-  ctx.process.push('deleteFileStat');
+  ctx.process.push({ name: 'deleteFileStat', timestamp: getTimestamp() });
 
   const bucketName =
     item.bucket_name + (item.env === 'development' || item.env === 'test' ? '-dev' : '');
@@ -161,6 +161,6 @@ async function deleteFileStat(ctx, item) {
     { type: s3deleteType.FILE, bucket: bucketName, key: updatedKey },
   ]);
 
-  unwindStack(ctx.process, 'deleteFileStat');
+  unwindStack(ctx, 'deleteFileStat');
   return output;
 }
