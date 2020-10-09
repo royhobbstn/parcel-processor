@@ -1,12 +1,12 @@
 // @ts-check
 
 const fs = require('fs');
-const unzipper = require('unzipper');
 const archiver = require('archiver');
 const path = require('path');
 const mkdirp = require('mkdirp');
 const fsExtra = require('fs-extra');
 const del = require('del');
+const { execSync } = require('child_process');
 const { directories } = require('./constants');
 const { generateRef } = require('./crypto');
 const { unwindStack, getTimestamp } = require('./misc');
@@ -27,20 +27,18 @@ async function createDirectories(ctx, dirs) {
 
 exports.extractZip = function (ctx, filePath) {
   ctx.process.push({ name: 'extractZip', timestamp: getTimestamp() });
-
-  return new Promise((resolve, reject) => {
-    fs.createReadStream(filePath)
-      .pipe(unzipper.Extract({ path: directories.unzippedDir + ctx.directoryId }))
-      .on('error', err => {
-        ctx.log.error(`Error unzipping file: ${filePath}`, { err: err.message, stack: err.stack });
-        return reject(err);
-      })
-      .on('close', () => {
-        ctx.log.info(`Finished unzipping file: ${filePath}`);
-        unwindStack(ctx, 'extractZip');
-        return resolve();
-      });
-  });
+  try {
+    const targetDir = directories.unzippedDir + ctx.directoryId;
+    mkdirp.sync(targetDir);
+    const output = execSync(`unzip ${filePath} -d ${targetDir}`);
+    ctx.log.info('Zip Log: ' + output.toString());
+  } catch (e) {
+    ctx.log.info(
+      `unzipping from ${filePath} to ${directories.unzippedDir + ctx.directoryId} failed`,
+    );
+    throw e;
+  }
+  unwindStack(ctx, 'extractZip');
 };
 
 exports.collapseUnzippedDir = collapseUnzippedDir;

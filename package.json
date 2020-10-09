@@ -26,7 +26,6 @@
     "simple-statistics": "^7.2.0",
     "skmeans": "^0.11.3",
     "tinyqueue": "^2.0.3",
-    "unzipper": "^0.10.11",
     "uuid": "^8.1.0",
     "winston": "^3.3.0",
     "wise-inspection": "^1.0.1"

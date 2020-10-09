@@ -63,21 +63,16 @@ exports.StatContext = function (ctx, filePath, uniquesMax = 500) {
         this.fields[f].IDField = true;
       }
 
-      ctx.log.info('Processing export fields');
-
       ctx.log.info(`processing field: ${f}`);
       const currentField = this.fields[f];
       if (!currentField.IDField) {
         // turn it into array
-        ctx.log.info(' - creating array');
         const arr = Array.from(currentField.uniques.keys()).map(key => {
           return { key, value: currentField.uniques.get(key) };
         });
-        ctx.log.info(' - sorting array');
         arr.sort((a, b) => {
           return b.value > a.value ? 1 : -1;
         });
-        ctx.log.info(` - keeping up to ${uniquesMax} unique values`);
         // keep up to uniquesMax Limit
         const mostFrequent = arr.slice(0, uniquesMax);
         // back to keyed object
@@ -87,7 +82,6 @@ exports.StatContext = function (ctx, filePath, uniquesMax = 500) {
         });
         // mutate original, keeping only uniquesMax values
         currentField.uniques = obj;
-        ctx.log.info(`done crunching ${f}`);
       }
     });
   };

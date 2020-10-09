@@ -1,6 +1,6 @@
 const AWS = require('aws-sdk');
 const nodemailer = require('nodemailer');
-const { unwindStack } = require('./misc');
+const { unwindStack, getTimestamp } = require('./misc');
 
 const transporter = nodemailer.createTransport({
   SES: new AWS.SES({
