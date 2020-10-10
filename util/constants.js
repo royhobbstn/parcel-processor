@@ -4,11 +4,11 @@ exports.directories = {
   EFSroot: '/files/staging',
   SCRATCHroot: './files/staging',
   outputDir: './files/staging/output-',
-  rawDir: './files/staging/raw-',
-  unzippedDir: './files/staging/unzipped-',
+  rawDir: '/files/staging/raw-', // EFS
+  unzippedDir: '/files/staging/unzipped-', // EFS
   tilesDir: './files/staging/tiles-',
   subGeographiesDir: './files/staging/subGeographies-',
-  productTempDir: './files/staging/productTemp-',
+  productTempDir: '/files/staging/productTemp-', // EFS
   logDir: './files/staging/logs-',
 };
 
