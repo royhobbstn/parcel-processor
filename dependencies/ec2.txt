@@ -1,0 +1,11 @@
+fresh ec2 setup
+--------------
+sudo apt-get update
+sudo snap install docker
+sudo apt-get install awscli
+aws configure
+sudo $(aws ecr get-login --no-include-email --region us-east-2)
+sudo docker pull 000009394762.dkr.ecr.us-east-2.amazonaws.com/parcel-outlet:latest
+sudo docker run -d -v $HOME/.aws/credentials:/root/.aws/credentials:ro 000009394762.dkr.ecr.us-east-2.amazonaws.com/parcel-outlet:latest npm run worker-dev
+
+fargate becomes viable again when EFS goes away because ephemeral storage in fargate container increases (or EBS)

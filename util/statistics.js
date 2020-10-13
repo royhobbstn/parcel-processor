@@ -44,9 +44,12 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
 
     const field = statsFile.fields[fieldName];
     if (field.types.includes('number')) {
+      // numeric always added to categorical just in case
       numericFields.push(fieldName);
+      categoricalFields.push(fieldName);
     } else if (field.types.includes('string')) {
       categoricalFields.push(fieldName);
+
       // possibility that numeric value is encoded as string.
       // if thats the case, we'll add it to both number and string field arrays
       // (in case the number is not ordinal - like in the case of a categorical number key)
@@ -63,10 +66,10 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
           foundStringValues++;
         }
       });
-      // is > 50 because mapping a small number of numeric values doesnt make sense
+      // is > 20 because mapping a small number of numeric values doesnt make sense
       // and hints that it might be categorical
       // plus i dont want to deal with problems on trying to divide such a field into breaks
-      if (foundNumericValues >= 50 && foundStringValues === 0) {
+      if (foundNumericValues >= 20 && foundStringValues === 0) {
         numericFields.push(fieldName);
       }
     }
@@ -81,6 +84,9 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
   let geojson_feature_count = 0;
 
   await new Promise((resolve, reject) => {
+    const ERR_LIMIT = 5;
+    let err_count = 0;
+
     const readStream = fs
       .createReadStream(`${convertToFormatBase}.ndgeojson`)
       .pipe(ndjson.parse())
@@ -108,8 +114,11 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
         readStream.resume();
       })
       .on('error', err => {
-        ctx.log.error('Error', { err: err.message, stack: err.stack });
-        return reject(err);
+        ctx.log.warn('Error', { err: err.message, stack: err.stack });
+        err_count++;
+        if (err_count >= ERR_LIMIT) {
+          return reject(err);
+        }
       })
       .on('end', async () => {
         ctx.log.info('done parsing numeric data');

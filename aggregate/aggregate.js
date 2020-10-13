@@ -40,6 +40,9 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
 
   const collection = turf.featureCollection([]);
 
+  const ERR_LIMIT = 5;
+  let err_count = 0;
+
   await new Promise((resolve, reject) => {
     fs.createReadStream(`${clusterFilePath}`)
       .pipe(ndjson.parse())
@@ -50,8 +53,11 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
         collection.features.push(obj);
       })
       .on('error', err => {
-        ctx.log.error('Error', { err: err.message, stack: err.stack });
-        return reject(err);
+        ctx.log.warn('Error', { err: err.message, stack: err.stack });
+        err_count++;
+        if (err_count >= ERR_LIMIT) {
+          return reject(err);
+        }
       })
       .on('end', async () => {
         ctx.log.info(geojson_feature_count + ' records read and indexed');

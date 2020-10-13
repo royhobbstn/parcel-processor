@@ -51,6 +51,9 @@ exports.clusterAggregated = async function (
       filename = `${derivativePath}.ndgeojson`;
     }
 
+    const ERR_LIMIT = 5;
+    let err_count = 0;
+
     await new Promise((resolve, reject) => {
       fs.createReadStream(filename)
         .pipe(ndjson.parse())
@@ -62,8 +65,11 @@ exports.clusterAggregated = async function (
           }
         })
         .on('error', err => {
-          ctx.log.error('Error', { err: err.message, stack: err.stack });
-          return reject(err);
+          ctx.log.warn('Error', { err: err.message, stack: err.stack });
+          err_count++;
+          if (err_count >= ERR_LIMIT) {
+            return reject(err);
+          }
         })
         .on('end', async () => {
           ctx.log.info(' records read and indexed');
