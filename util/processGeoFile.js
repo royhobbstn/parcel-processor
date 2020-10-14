@@ -164,12 +164,9 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
         return resolve(additionalFeatures);
       });
 
-    const ERR_LIMIT = 5;
-    let err_count = 0;
-
     const readStream = fs
       .createReadStream(`${inputPath}.ndgeojson`)
-      .pipe(ndjson.parse())
+      .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         readStream.pause();
 
@@ -324,10 +321,7 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
       })
       .on('error', err => {
         ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        err_count++;
-        if (err_count >= ERR_LIMIT) {
-          return reject(err);
-        }
+        return reject(err);
       })
       .on('end', async () => {
         ctx.log.info(transformed + ' records read');
@@ -466,12 +460,9 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
     const writeStreams = {};
     const writePromises = [];
 
-    const ERR_LIMIT = 5;
-    let err_count = 0;
-
     const readStream = fs
       .createReadStream(`${derivativePath}.ndgeojson`)
-      .pipe(ndjson.parse())
+      .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         readStream.pause();
         const properties = obj.properties;
@@ -511,10 +502,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
       })
       .on('error', err => {
         ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        err_count++;
-        if (err_count >= ERR_LIMIT) {
-          return reject(err);
-        }
+        return reject(err);
       })
       .on('end', async end => {
         ctx.log.info(transformed + ' records processed');
@@ -593,12 +581,9 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
     const barePts = [];
     let propertyCount = 1; // will be updated below.  count of property attributes per feature.  used for deciding attribute file size and number of clusters
 
-    const ERR_LIMIT = 5;
-    let err_count = 0;
-
     const readStream = fs
       .createReadStream(`${outputPath}.ndgeojson`)
-      .pipe(ndjson.parse())
+      .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         readStream.pause();
 
@@ -624,10 +609,7 @@ exports.extractPointsFromNdGeoJson = async function (ctx, outputPath) {
       })
       .on('error', err => {
         ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        err_count++;
-        if (err_count >= ERR_LIMIT) {
-          return reject(err);
-        }
+        return reject(err);
       })
       .on('end', end => {
         ctx.log.info(transformed + ' records processed');
@@ -647,11 +629,9 @@ exports.createClusterIdHull = async function (ctx, outputPath, lookup) {
 
     let transformed = 0;
     const clusterGeo = {};
-    const ERR_LIMIT = 5;
-    let err_count = 0;
 
     fs.createReadStream(`${outputPath}.ndgeojson`)
-      .pipe(ndjson.parse())
+      .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         // add clusterId
         const cluster = lookup[obj.properties[idPrefix]];
@@ -671,10 +651,7 @@ exports.createClusterIdHull = async function (ctx, outputPath, lookup) {
       })
       .on('error', err => {
         ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        err_count++;
-        if (err_count >= ERR_LIMIT) {
-          return reject(err);
-        }
+        return reject(err);
       })
       .on('end', end => {
         ctx.log.info('end', { end });
@@ -789,13 +766,11 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
   const attributeLookupFile = {};
   const fileNames = {};
   let completedFileWrites = 0;
-  const ERR_LIMIT = 5;
-  let err_count = 0;
 
   await new Promise((resolve, reject) => {
     const readStream = fs
       .createReadStream(`${augmentedBase}.ndgeojson`)
-      .pipe(ndjson.parse())
+      .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         readStream.pause();
 
@@ -826,10 +801,7 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
       })
       .on('error', err => {
         ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        err_count++;
-        if (err_count >= ERR_LIMIT) {
-          return reject(err);
-        }
+        return reject(err);
       })
       .on('end', async () => {
         ctx.log.info('done writing streams');
@@ -908,14 +880,11 @@ exports.aggregateAggregatedClusters = async function (ctx) {
 
         for (const file of filteredFiles) {
           await new Promise((resolve, reject) => {
-            const ERR_LIMIT = 5;
-            let err_count = 0;
-
             const readStream = fs
               .createReadStream(
                 `${directories.productTempDir + ctx.directoryId}/aggregated/${file}`,
               )
-              .pipe(ndjson.parse())
+              .pipe(ndjson.parse({ strict: false }))
               .on('data', async function (obj) {
                 readStream.pause();
                 const continueWriting = writeStream.write(JSON.stringify(obj) + '\n');
@@ -926,10 +895,7 @@ exports.aggregateAggregatedClusters = async function (ctx) {
               })
               .on('error', err => {
                 ctx.log.warn('Error', { err: err.message, stack: err.stack });
-                err_count++;
-                if (err_count >= ERR_LIMIT) {
-                  return reject(err);
-                }
+                return reject(err);
               })
               .on('end', async () => {
                 return resolve();

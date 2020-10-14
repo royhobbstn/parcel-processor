@@ -16,12 +16,9 @@ exports.StatContext = function (ctx, filePath, uniquesMax = 500) {
     ctx.log.info('starting stat context init');
 
     await new Promise((resolve, reject) => {
-      const ERR_LIMIT = 5;
-      let err_count = 0;
-
       const readStream = fs
         .createReadStream(filePath)
-        .pipe(ndjson.parse())
+        .pipe(ndjson.parse({ strict: false }))
         .on('data', obj => {
           this.countStats(obj);
 
@@ -31,10 +28,7 @@ exports.StatContext = function (ctx, filePath, uniquesMax = 500) {
         })
         .on('error', err => {
           ctx.log.warn('Error', { err: err.message, stack: err.stack });
-          err_count++;
-          if (err_count >= ERR_LIMIT) {
-            return reject(err);
-          }
+          return reject(err);
         })
         .on('end', () => {
           ctx.log.info(`reading complete. beginning to process...`);

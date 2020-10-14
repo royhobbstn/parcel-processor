@@ -382,7 +382,7 @@ exports.processProducts = async function (ctx, data) {
       );
 
       const featureCount = points.length;
-      const numClusters = Math.ceil(featureCount / 5000);
+      const numClusters = Math.ceil(featureCount / 2500);
       const lookupFilename = `${directories.productTempDir + ctx.directoryId}/clusterLookup.json`;
 
       // run kmeans geo cluster on data and create a lookup of idPrefix to clusterPrefix
@@ -405,7 +405,10 @@ exports.processProducts = async function (ctx, data) {
       // @ts-ignore
       for (const [index, filename] of filenames.entries()) {
         // loop through mini (clustered) pieces of the full ndgeojson
-        await runAggregate(ctx, filename, aggregatedNdgeojsonBase);
+        let nextLevel = 0;
+        do {
+          nextLevel = await runAggregate(ctx, filename, aggregatedNdgeojsonBase, nextLevel);
+        } while (nextLevel !== undefined);
         ctx.log.info(`Completed Aggregating ${index + 1}/${numClusters}`);
       }
 

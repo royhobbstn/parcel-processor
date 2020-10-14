@@ -40,12 +40,9 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
 
   const collection = turf.featureCollection([]);
 
-  const ERR_LIMIT = 5;
-  let err_count = 0;
-
   await new Promise((resolve, reject) => {
     fs.createReadStream(`${clusterFilePath}`)
-      .pipe(ndjson.parse())
+      .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         // make a new feature with only __po_id
         obj.properties = { [idPrefix]: obj.properties[idPrefix] };
@@ -54,10 +51,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
       })
       .on('error', err => {
         ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        err_count++;
-        if (err_count >= ERR_LIMIT) {
-          return reject(err);
-        }
+        return reject(err);
       })
       .on('end', async () => {
         ctx.log.info(geojson_feature_count + ' records read and indexed');
@@ -96,6 +90,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
 
     geojson_feature_count++;
   });
+  ctx.log.info(`${cleaned.length} features indexed.`);
 
   // initially seed queue
   for (let [index, key] of Object.keys(keyed_geojson).entries()) {
@@ -110,6 +105,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
       ctx.log.warn('Feature greater than threshold.  Excluded.');
     }
   }
+  ctx.log.info(`${Object.keys(keyed_geojson).length} features computed.`);
   ctx.log.info(`finished feature computation.  Ready to aggregate.`);
 
   /********* main ************/
@@ -329,11 +325,12 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     throw new Error('Unable to aggregate.  Ran out of aggregation targets.');
   }
 
-  unwindStack(ctx, 'runAggregate' + aggregationLevel);
-
   // if here, need to re-run with less aggressive aggregation targets
   ctx.log.warn('Aggregate failed.  retrying at less aggressive aggregation level.');
-  await runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggregationLevel + 1);
+
+  unwindStack(ctx, 'runAggregate' + aggregationLevel);
+
+  return aggregationLevel + 1;
 }
 
 // percent of features that will be retained at each zoom level

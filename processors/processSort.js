@@ -134,12 +134,9 @@ async function processSort(ctx, data) {
     let fileWrites = [];
     let counter = 0;
 
-    const ERR_LIMIT = 5;
-    let err_count = 0;
-
     await new Promise((resolve, reject) => {
       fs.createReadStream(`${destUnzipped}`)
-        .pipe(ndjson.parse())
+        .pipe(ndjson.parse({ strict: false }))
         .on('data', async function (obj) {
           counter++;
 
@@ -164,10 +161,7 @@ async function processSort(ctx, data) {
         })
         .on('error', err => {
           ctx.log.warn('Error', { err: err.message, stack: err.stack });
-          err_count++;
-          if (err_count >= ERR_LIMIT) {
-            return reject(err);
-          }
+          return reject(err);
         })
         .on('end', async () => {
           ctx.log.info(counter + ' records sorted');

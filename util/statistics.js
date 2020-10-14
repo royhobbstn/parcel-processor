@@ -84,12 +84,9 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
   let geojson_feature_count = 0;
 
   await new Promise((resolve, reject) => {
-    const ERR_LIMIT = 5;
-    let err_count = 0;
-
     const readStream = fs
       .createReadStream(`${convertToFormatBase}.ndgeojson`)
-      .pipe(ndjson.parse())
+      .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         readStream.pause();
 
@@ -115,10 +112,7 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
       })
       .on('error', err => {
         ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        err_count++;
-        if (err_count >= ERR_LIMIT) {
-          return reject(err);
-        }
+        return reject(err);
       })
       .on('end', async () => {
         ctx.log.info('done parsing numeric data');
