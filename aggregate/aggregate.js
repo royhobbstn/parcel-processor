@@ -11,8 +11,6 @@ const { unwindStack, getTimestamp } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
 const mapshaper = require('mapshaper');
 
-const HUGE_THRESHOLD = 94684125;
-
 exports.runAggregate = runAggregate;
 
 async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggregationLevel = 0) {
@@ -33,6 +31,8 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
   const keyed_geojson = {};
   const threshold = [];
   let geojson_feature_count = 0;
+  const excludedFeatures = []; // features previously marked as __frozen which will not be aggregated, but which will be included in output
+  let excludedCount = 0;
 
   /*** Initial index creation and calculation ***/
 
@@ -44,8 +44,11 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     fs.createReadStream(`${clusterFilePath}`)
       .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
-        // make a new feature with only __po_id
-        obj.properties = { [idPrefix]: obj.properties[idPrefix] };
+        // make a new feature with only __po_id, __frozen
+        obj.properties = {
+          [idPrefix]: obj.properties[idPrefix],
+          __frozen: obj.properties.__frozen,
+        };
 
         collection.features.push(obj);
       })
@@ -59,50 +62,41 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
       });
   });
 
-  // todo use mapshaper to snap and correct imperfections in dataset.
-
+  // use mapshaper to snap and correct imperfections in dataset.
   const input = { 'input.geojson': JSON.stringify(collection) };
   const cmd = '-i input.geojson snap -clean -o output.geojson';
-
-  // using Promise
   const output = await mapshaper.applyCommands(cmd, input);
   const cleaned = JSON.parse(output['output.geojson'].toString()).features;
   ctx.log.info(`cleaned ${cleaned.length} features`);
-  // todo move current processing from in initial load to here
 
+  ctx.log.info(`0 features indexed.`);
   cleaned.forEach(obj => {
     // only "not huge" features get indexed
     // Think Summit County's Master Parcel
     // (all encompasing parcel that makes up all 'unused' land in County)
     // these parcels can be very complex with hundreds of holes
     // javascript processing cant handle them without locking for sometimes hours
-    if (turf.area(obj) < HUGE_THRESHOLD) {
+    if (!obj.properties.__frozen) {
       tree.insert(obj);
+      keyed_geojson[obj.properties[idPrefix]] = obj;
+      geojson_feature_count++;
     } else {
-      ctx.log.warn('Master parcel excluded from index.');
+      excludedFeatures.push(obj);
+      excludedCount++;
     }
 
-    if (geojson_feature_count % 5000 === 0) {
+    if ((geojson_feature_count + excludedCount) % 5000 === 0) {
       ctx.log.info(`${geojson_feature_count} features indexed.`);
     }
-
-    keyed_geojson[obj.properties[idPrefix]] = obj;
-
-    geojson_feature_count++;
   });
   ctx.log.info(`${cleaned.length} features indexed.`);
+  ctx.log.info(`${excludedCount} features were too complex for quick aggregation`);
 
   // initially seed queue
   for (let [index, key] of Object.keys(keyed_geojson).entries()) {
-    // again, no "huge-ish" features allowed into aggregation process
-    // they'll eternally hang around in keyed_geojson and be added into every aggregation level
-    if (turf.area(keyed_geojson[key]) < HUGE_THRESHOLD) {
-      computeFeature(ctx, keyed_geojson[key], tree, queue);
-      if (index % 5000 === 0) {
-        ctx.log.info(`${index} features computed.`);
-      }
-    } else {
-      ctx.log.warn('Feature greater than threshold.  Excluded.');
+    computeFeature(ctx, keyed_geojson[key], tree, queue);
+    if (index % 5000 === 0) {
+      ctx.log.info(`${index} features computed.`);
     }
   }
   ctx.log.info(`${Object.keys(keyed_geojson).length} features computed.`);
@@ -157,13 +151,16 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
             ctx.log.info(`done writing ${aggregatedNdgeojsonBase}/${obj.zoom}_${cluster}.json`);
             resolve();
           });
+
+          ctx.log.info(`sending ${geojson_array.length} features to write stream`);
           for (let row of geojson_array) {
-            const continueWriting = output.write(JSON.stringify(row) + '\n');
-            if (!continueWriting) {
-              await new Promise(resolve => output.once('drain', resolve));
-            }
+            output.write(JSON.stringify(row) + '\n');
+          }
+          for (let excludedFeature of excludedFeatures) {
+            output.write(JSON.stringify(excludedFeature) + '\n');
           }
           output.end();
+          ctx.log.info('sent all geojson features to write stream.');
         });
       }
     }
@@ -309,10 +306,10 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
         resolve();
       });
       for (let row of geojson_array) {
-        const continueWriting = output.write(JSON.stringify(row) + '\n');
-        if (!continueWriting) {
-          await new Promise(resolve => output.once('drain', resolve));
-        }
+        output.write(JSON.stringify(row) + '\n');
+      }
+      for (let excludedFeature of excludedFeatures) {
+        output.write(JSON.stringify(excludedFeature) + '\n');
       }
       output.end();
     });

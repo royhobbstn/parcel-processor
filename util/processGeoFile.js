@@ -15,7 +15,7 @@ const {
 } = require('./constants');
 const { unwindStack, getTimestamp } = require('./misc');
 
-const HUGE_THRESHOLD = 94684125;
+const HUGE_THRESHOLD = 50000000;
 
 function getOgrInfo(ctx, filePath) {
   ctx.process.push({ name: 'getOgrInfo', timestamp: getTimestamp() });
@@ -140,8 +140,6 @@ exports.parseFileExec = async function (ctx, outputPath, inputPath, chosenLayerN
 exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
   ctx.process.push({ name: 'addUniqueIdNdjson', timestamp: getTimestamp() });
 
-  const tempstore = [];
-
   const tree = geojsonRbush(); // to detect duplicates
   const additionalFeatures = {}; // key[id] = [array of feature properties]  : duplicate features
   let additionalCount = 0;
@@ -197,53 +195,9 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
             continue;
           }
 
-          let featureOutline;
-
-          // get outline from main feature
-          try {
-            // @ts-ignore
-            featureOutline = turf.polygonToLine(feature);
-            const outlineLength = turf.length(featureOutline);
-            const ratio = featArea / outlineLength;
-            const enhancedRatio = Math.sqrt(featArea) / outlineLength;
-
-            const bbox = turf.bbox(feature);
-            const polygon = turf.bboxPolygon(bbox);
-            const polygonArea = turf.area(polygon);
-            const areaRatio = featArea / polygonArea;
-
-            // excluding oddly shaped features - usually right-of-way
-            // slows down javascript processing too much
-            // can think to re-include if re-written in golang
-            if (outlineLength > 3 && areaRatio < 0.4 && (ratio < 12000 || enhancedRatio < 60)) {
-              feature.properties.ratio = ratio;
-              feature.properties.outlineLength = outlineLength;
-              feature.properties.featArea = featArea;
-              feature.properties.enhancedRatio = enhancedRatio;
-              feature.properties.areaRatio = areaRatio;
-
-              tempstore.push(feature);
-              ctx.log.info('excluding', {
-                featArea,
-                outlineLength,
-                ratio,
-                enhancedRatio,
-                polygonArea,
-                areaRatio,
-              });
-
-              filteredOut++;
-
-              continue;
-            }
-          } catch (e) {
-            ctx.log.warn('Error in turf transformations.  Skipping', {
-              message: e.message,
-              feature,
-            });
-
-            filteredOut++;
-            continue;
+          // freeze large features
+          if (featArea > HUGE_THRESHOLD) {
+            feature.properties.__frozen = true;
           }
 
           // so as to check for overlaps
@@ -252,20 +206,27 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           // filter out huge parcels... dont expect duplicates of those
           // if there are, so be it.
           // mainly concerned about filtering out stacked apartments and condos
-          if (featArea > HUGE_THRESHOLD) {
+          if (feature.properties.__frozen) {
             results.features = [];
           } else {
             results = tree.search(feature);
           }
 
+          // assign ID
           transformed++;
-
           feature.properties[idPrefix] = transformed;
 
           let writeNewFeature = true;
 
           if (results.features.length) {
             for (let indexFeature of results.features) {
+              const ifArea = turf.area(indexFeature);
+              const ratioIfAreaFeatArea = featArea / ifArea;
+              if (ratioIfAreaFeatArea < 0.9 || ratioIfAreaFeatArea > 1.1) {
+                // avoid running intersection if dont have to
+                continue;
+              }
+
               let intersection;
               try {
                 // @ts-ignore
@@ -300,14 +261,21 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
             }
           }
 
+          // add frozen status to all features with > 30 vertices
+          // frozen means we don't involve these features in aggregation
+          const points = turf.coordAll(feature);
+          if (points.length > 30) {
+            feature.properties.__frozen = true;
+          }
+
           if (writeNewFeature) {
             const continueWriting = writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
             if (!continueWriting) {
               await new Promise(resolve => writeStream.once('drain', resolve));
             }
 
-            // still write the big features, but dont index them
-            if (featArea <= HUGE_THRESHOLD) {
+            // still write the frozen features, but dont index them
+            if (!feature.properties.__frozen) {
               tree.insert(feature);
             }
           }
@@ -325,8 +293,6 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
       })
       .on('end', async () => {
         ctx.log.info(transformed + ' records read');
-        ctx.log.info(`excluded ${tempstore.length} oddly shaped features`);
-        // fs.writeFileSync('rati2.json', JSON.stringify(turf.featureCollection(tempstore)), 'utf8');
         writeStream.end();
       });
   });
@@ -686,7 +652,7 @@ exports.readTippecanoeMetadata = async function (ctx, metadataFile) {
     fs.unlinkSync(metadataFile);
   } catch (err) {
     ctx.log.warn(
-      `Proble deleting tippecanoe metadata file from disk.  Path ${metadataFile}. Not critical.  Will continue. `,
+      `Problem deleting tippecanoe metadata file from disk.  Path ${metadataFile}. Not critical.  Will continue. `,
     );
   }
 

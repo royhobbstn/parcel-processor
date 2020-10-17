@@ -2,6 +2,7 @@ fresh ec2 setup
 --------------
 sudo apt-get update
 sudo snap install docker
+OR sudo apt-get install docker.io
 sudo apt-get install awscli
 aws configure
 sudo $(aws ecr get-login --no-include-email --region us-east-2)

@@ -46,8 +46,6 @@ exports.StatContext = function (ctx, filePath, uniquesMax = 500) {
     // squashing the data down to nothing.
 
     Object.keys(this.fields).forEach(f => {
-      ctx.log.info('Squashing unique field ' + f);
-
       let isUnique = true;
       for (let unique of this.fields[f].uniques.keys()) {
         if (this.fields[f].uniques.get(unique) > 1) {
