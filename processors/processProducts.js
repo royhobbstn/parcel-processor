@@ -68,6 +68,7 @@ exports.processProducts = async function (ctx, data) {
   //     STATEFIPS: '15',
   //     COUNTYFIPS: '007',
   //     PLACEFIPS: '',
+  //     COUNTYSUBFIPS: '',
   //   },
   //   geoid: '15007',
   //   geoName: 'Kauai-County',

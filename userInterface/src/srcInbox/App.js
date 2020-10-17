@@ -40,6 +40,8 @@ function App({ env }) {
 
     const PLACEFIPS = sumlevVal === '160' ? geoidVal.slice(2) : '';
 
+    const COUNTYSUBFIPS = sumlevVal === '060' ? geoidVal.slice(2) : '';
+
     const sourceExists = await checkSourceExists(sourceVal);
 
     if (!sourceExists) {
@@ -60,6 +62,7 @@ function App({ env }) {
       STATEFIPS,
       COUNTYFIPS,
       PLACEFIPS,
+      COUNTYSUBFIPS,
     };
 
     fetch(`http://localhost:4000/sendInboxSQS`, {
@@ -143,6 +146,12 @@ function App({ env }) {
             }
           } else if (sumlevVal === '050') {
             if (data.value.length === 5) {
+              updateGeoidStatus(true);
+            } else {
+              updateGeoidStatus(false);
+            }
+          } else if (sumlevVal === '060') {
+            if (data.value.length === 10) {
               updateGeoidStatus(true);
             } else {
               updateGeoidStatus(false);

@@ -145,6 +145,15 @@ exports.queryAllCountiesFromState = function (ctx, geoid) {
   });
 };
 
+exports.queryAllCountySubdivisionsFromState = function (ctx, geoid) {
+  return slsAuroraClient.query({
+    sql: `SELECT geoid, geoname FROM geographic_identifiers WHERE LEFT(geoid, 2) = :geoid and sumlev = "060" order by geoname asc;`,
+    parameters: {
+      geoid,
+    },
+  });
+};
+
 exports.queryAllOriginalRecentDownloads = function (ctx) {
   return slsAuroraClient.query(
     'select geographic_identifiers.geoid, geoname, source_name, source_type, downloads.download_id, download_ref, product_id, product_ref, last_checked, product_key, original_filename  from downloads left join products on products.download_id = downloads.download_id join source_checks on source_checks.check_id = downloads.check_id join sources on sources.source_id = downloads.source_id join geographic_identifiers on geographic_identifiers.geoid = products.geoid where products.product_type = "ndgeojson" and products.product_origin="original" AND geographic_identifiers.sumlev = "040" ORDER BY products.created DESC LIMIT 10',

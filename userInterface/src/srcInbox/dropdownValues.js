@@ -51,6 +51,11 @@ export const summaryLevels = [
     text: 'Place',
     value: '160',
   },
+  {
+    key: '060',
+    text: 'County Subdivision',
+    value: '060',
+  },
 ];
 
 export const queueEnvironments = [

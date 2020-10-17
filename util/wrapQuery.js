@@ -12,6 +12,7 @@ const {
   queryGeographicIdentifier,
   queryAllOriginalRecentDownloads,
   queryAllCountiesFromState,
+  queryAllCountySubdivisionsFromState,
   queryAllOriginalRecentDownloadsWithGeoid,
   queryCreateProductRecord,
   querySourceNamesLike,
@@ -323,6 +324,18 @@ exports.getCountiesByState = async function (ctx, geoid) {
   }
 
   unwindStack(ctx, 'getCountiesByState');
+  return query.records;
+};
+
+exports.getCountySubdivisionsByState = async function (ctx, geoid) {
+  ctx.process.push({ name: 'getCountySubdivisionsByState', timestamp: getTimestamp() });
+
+  const query = await queryAllCountySubdivisionsFromState(ctx, geoid);
+  if (!query) {
+    throw new Error(`Problem running getCountySubdivisionsByState Query`);
+  }
+
+  unwindStack(ctx, 'getCountySubdivisionsByState');
   return query.records;
 };
 

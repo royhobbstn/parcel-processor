@@ -11,8 +11,14 @@ const {
 const { putFileToS3 } = require('./s3Operations');
 const { invalidateFiles } = require('./cloudfrontOps');
 
-const { countyNameLookup, stateNameLookup } = require('../lookup/nameLookup');
-const { countyPopulation, totalPopulation, totalCountyCount } = require('../lookup/popLookup');
+const { countyNameLookup, stateNameLookup, countySubNameLookup } = require('../lookup/nameLookup');
+const {
+  countyPopulation,
+  totalPopulation,
+  totalAreasCount,
+  countySubPopulation,
+} = require('../lookup/popLookup');
+const { CostExplorer } = require('aws-sdk');
 
 exports.siteData = siteData;
 
@@ -53,7 +59,7 @@ async function siteData(ctx) {
         geoname: geo[geoid].geoname,
         sumlev: geo[geoid].sumlev,
         sources: {},
-        population: countyPopulation[geoid],
+        population: getPopulation(ctx, geoid, geo[geoid].sumlev),
       };
     }
 
@@ -103,12 +109,12 @@ async function siteData(ctx) {
   });
 
   let populationAccountedFor = 0;
-  let countiesAccountedFor = 0;
+  let areasAccountedFor = 0;
 
   // add last_download to each source.
   Object.keys(data).forEach(geoidKey => {
-    populationAccountedFor += countyPopulation[geoidKey];
-    countiesAccountedFor += 1;
+    populationAccountedFor += getPopulation(ctx, geoidKey);
+    areasAccountedFor += 1;
     Object.keys(data[geoidKey].sources).forEach(sourceIdKey => {
       const source = data[geoidKey].sources[sourceIdKey];
       const downloads = data[geoidKey].sources[sourceIdKey].downloads;
@@ -124,25 +130,38 @@ async function siteData(ctx) {
   });
 
   const percentOfTotalPopulation = populationAccountedFor / totalPopulation;
-  const percentOfTotalCounties = countiesAccountedFor / totalCountyCount;
+  const percentOfTotalAreas = areasAccountedFor / totalAreasCount;
 
   data.popStats = {
     totalPopulation,
-    totalCountyCount,
+    totalAreasCount,
     populationAccountedFor,
-    countiesAccountedFor,
+    areasAccountedFor,
     percentOfTotalPopulation,
-    percentOfTotalCounties,
+    percentOfTotalAreas,
   };
 
   // top 50 highest value additions
-  const highestValueCounties = Object.keys(countyPopulation)
-    .sort((a, b) => countyPopulation[b] - countyPopulation[a])
+  const highestValueAreas = [
+    ...Object.keys(countyPopulation).filter(d => {
+      const state = d.slice(0, 2);
+      return (
+        state !== '09' &&
+        state !== '23' &&
+        state !== '25' &&
+        state !== '44' &&
+        state !== '30' &&
+        state !== '50'
+      );
+    }),
+    ...Object.keys(countySubPopulation),
+  ]
+    .sort((a, b) => getPopulation(ctx, b) - getPopulation(ctx, a))
     .filter(d => !data[d])
     .map((d, i) => {
       return {
         geoid: d,
-        countyName: countyNameLookup(d),
+        areaName: getAreaName(d),
         stateName: stateNameLookup(d.slice(0, 2)),
         rank: i + 1,
       };
@@ -151,7 +170,7 @@ async function siteData(ctx) {
   fs.writeFileSync(config.get('DataExport.localPath'), JSON.stringify(data), 'utf8');
   fs.writeFileSync(
     config.get('DataExport.valuePath'),
-    JSON.stringify(highestValueCounties.slice(0, 50), null, '  '),
+    JSON.stringify(highestValueAreas.slice(0, 50), null, '  '),
     'utf8',
   );
 
@@ -176,5 +195,34 @@ async function siteData(ctx) {
 
   if (config.get('env') === 'production') {
     await invalidateFiles(ctx, [`/${config.get('DataExport.remotePath')}`]);
+  }
+}
+
+function getPopulation(ctx, geoid, sumlev) {
+  if (!sumlev) {
+    if (geoid.length === 5) {
+      sumlev = '050';
+    } else if (geoid.length === 10) {
+      sumlev = '060';
+    }
+  }
+
+  if (sumlev === '050') {
+    return countyPopulation[geoid];
+  } else if (sumlev === '060') {
+    return countySubPopulation[geoid];
+  } else {
+    // other geo's don't factor into coverage count
+    return 0;
+  }
+}
+
+function getAreaName(geoid) {
+  if (geoid.length === 5) {
+    return countyNameLookup(geoid);
+  } else if (geoid.length === 10) {
+    return countySubNameLookup(geoid);
+  } else {
+    throw new Error(`Unexpected geoid: ${geoid}`);
   }
 }

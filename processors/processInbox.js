@@ -125,8 +125,9 @@ async function runMain(ctx, cleanupS3, filePath, isDryRun, messagePayload) {
   const fipsDetails = {
     SUMLEV: messagePayload.sumlevVal,
     STATEFIPS: messagePayload.STATEFIPS,
-    COUNTYFIPS: messagePayload.COUNTYFIPS,
+    COUNTYFIPS: messagePayload.COUNTYFIPS, // 3
     PLACEFIPS: messagePayload.PLACEFIPS,
+    COUNTYSUBFIPS: messagePayload.COUNTYSUBFIPS, // 8
   };
 
   // get geoname corresponding to FIPS

@@ -56,6 +56,7 @@ async function processSort(ctx, data) {
   //     original_filename: 'tmk_state.shp.zip',
   //   },
   //   modalStatsObj: {
+  //     sortIntoSummaryLevel: '050',
   //     missingAttributes: [],
   //     missingGeoids: ['15005'],
   //     countOfPossible: 5,
@@ -86,6 +87,7 @@ async function processSort(ctx, data) {
   const isDryRun = messagePayload.dryRun;
   const selectedFieldKey = messagePayload.selectedFieldKey;
   const geoidTranslator = messagePayload.modalStatsObj.mapping;
+  const sumlev = messagePayload.modalStatsObj.sortIntoSummaryLevel;
   const downloadId = messagePayload.selectedDownload.download_id;
   const downloadRef = messagePayload.selectedDownload.download_ref;
   const geonameLookup = keifyGeographies(ctx, messagePayload.geographies);
@@ -207,7 +209,7 @@ async function processSort(ctx, data) {
     // create product ref
     const productRef = generateRef(ctx, referenceIdLength);
     const individualRef = generateRef(ctx, referenceIdLength);
-    const fipsDetails = createFipsDetailsForCounty(ctx, file);
+    const fipsDetails = createFipsDetailsForArea(ctx, file, sumlev);
 
     const { geoid, geoName } = await lookupCleanGeoName(ctx, fipsDetails);
 
@@ -326,11 +328,32 @@ function keifyGeographies(ctx, geographies) {
   return obj;
 }
 
-function createFipsDetailsForCounty(ctx, geoid) {
-  return {
-    SUMLEV: '050',
-    STATEFIPS: geoid.slice(0, 2),
-    COUNTYFIPS: geoid.slice(2),
-    PLACEFIPS: '',
-  };
+function createFipsDetailsForArea(ctx, geoid, sumlev) {
+  if (sumlev === '050') {
+    return {
+      SUMLEV: '050',
+      STATEFIPS: geoid.slice(0, 2),
+      COUNTYFIPS: geoid.slice(2),
+      PLACEFIPS: '',
+      COUNTYSUBFIPS: '',
+    };
+  } else if (sumlev === '160') {
+    return {
+      SUMLEV: '160',
+      STATEFIPS: geoid.slice(0, 2),
+      COUNTYFIPS: '',
+      PLACEFIPS: geoid.slice(2),
+      COUNTYSUBFIPS: '',
+    };
+  } else if (sumlev === '060') {
+    return {
+      SUMLEV: '060',
+      STATEFIPS: geoid.slice(0, 2),
+      COUNTYFIPS: '',
+      PLACEFIPS: '',
+      COUNTYSUBFIPS: geoid.slice(2),
+    };
+  } else {
+    throw new Error('Unexpected or missing summary level');
+  }
 }

@@ -10,6 +10,7 @@ const {
   acquireConnection,
   getSplittableDownloads,
   getCountiesByState,
+  getCountySubdivisionsByState,
   querySourceNames,
   querySourceNameExact,
 } = require('../util/wrapQuery');
@@ -316,7 +317,23 @@ exports.appRouter = async app => {
     const geoid = req.query.geoid;
     try {
       await acquireConnection(ctx);
-      const rows = await getCountiesByState(ctx, geoid);
+
+      let rows;
+      if (
+        geoid === '09' ||
+        geoid === '23' ||
+        geoid === '25' ||
+        geoid === '44' ||
+        geoid === '33' ||
+        geoid === '50'
+      ) {
+        // if new england, return county subdivisions
+        rows = await getCountySubdivisionsByState(ctx, geoid);
+      } else {
+        // everywhere else return counties
+        rows = await getCountiesByState(ctx, geoid);
+      }
+
       return res.json(rows);
     } catch (err) {
       return res.status(500).send(err.message);
