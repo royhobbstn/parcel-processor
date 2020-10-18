@@ -10,6 +10,7 @@ const {
 } = require('./queries');
 const { putFileToS3 } = require('./s3Operations');
 const { invalidateFiles } = require('./cloudfrontOps');
+const { isNewEngland } = require('./misc');
 
 const { countyNameLookup, stateNameLookup, countySubNameLookup } = require('../lookup/nameLookup');
 const {
@@ -145,14 +146,7 @@ async function siteData(ctx) {
   const highestValueAreas = [
     ...Object.keys(countyPopulation).filter(d => {
       const state = d.slice(0, 2);
-      return (
-        state !== '09' &&
-        state !== '23' &&
-        state !== '25' &&
-        state !== '44' &&
-        state !== '30' &&
-        state !== '50'
-      );
+      return !isNewEngland(state);
     }),
     ...Object.keys(countySubPopulation),
   ]

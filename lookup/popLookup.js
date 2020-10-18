@@ -1,3 +1,5 @@
+const { isNewEngland } = require('../util/misc');
+
 const countyPopulation = {
   '15005': 86,
   '48301': 169,
@@ -4772,14 +4774,7 @@ exports.countySubPopulation = countySubPopulation;
 
 const countyPopCount = Object.keys(countyPopulation).reduce((acc, current) => {
   const state = current.slice(0, 2);
-  if (
-    state !== '09' &&
-    state !== '23' &&
-    state !== '25' &&
-    state !== '44' &&
-    state !== '33' &&
-    state !== '50'
-  ) {
+  if (!isNewEngland(state)) {
     acc += countyPopulation[current];
   }
 
@@ -4795,14 +4790,7 @@ exports.totalPopulation = countyPopCount + countySubPopCount;
 
 const totalCountyCount = Object.keys(countyPopulation).filter(d => {
   const state = d.slice(0, 2);
-  return (
-    state !== '09' &&
-    state !== '23' &&
-    state !== '25' &&
-    state !== '44' &&
-    state !== '30' &&
-    state !== '50'
-  );
+  return !isNewEngland(state);
 }).length;
 
 const totalCountySubCount = Object.keys(countySubPopulation).length;

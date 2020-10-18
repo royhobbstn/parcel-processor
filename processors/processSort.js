@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const ndjson = require('ndjson');
 const { generateRef } = require('../util/crypto');
-const { unwindStack, getTimestamp } = require('../util/misc');
+const { unwindStack, getTimestamp, isNewEngland } = require('../util/misc');
 const { countStats } = require('../util/processGeoFile');
 const {
   directories,
@@ -56,7 +56,6 @@ async function processSort(ctx, data) {
   //     original_filename: 'tmk_state.shp.zip',
   //   },
   //   modalStatsObj: {
-  //     sortIntoSummaryLevel: '050',
   //     missingAttributes: [],
   //     missingGeoids: ['15005'],
   //     countOfPossible: 5,
@@ -87,7 +86,6 @@ async function processSort(ctx, data) {
   const isDryRun = messagePayload.dryRun;
   const selectedFieldKey = messagePayload.selectedFieldKey;
   const geoidTranslator = messagePayload.modalStatsObj.mapping;
-  const sumlev = messagePayload.modalStatsObj.sortIntoSummaryLevel;
   const downloadId = messagePayload.selectedDownload.download_id;
   const downloadRef = messagePayload.selectedDownload.download_ref;
   const geonameLookup = keifyGeographies(ctx, messagePayload.geographies);
@@ -209,6 +207,10 @@ async function processSort(ctx, data) {
     // create product ref
     const productRef = generateRef(ctx, referenceIdLength);
     const individualRef = generateRef(ctx, referenceIdLength);
+
+    const state = file.slice(0, 2);
+    const sumlev = isNewEngland(state) ? '060' : '050';
+
     const fipsDetails = createFipsDetailsForArea(ctx, file, sumlev);
 
     const { geoid, geoName } = await lookupCleanGeoName(ctx, fipsDetails);

@@ -116,3 +116,14 @@ exports.initiateProgressHeartbeat = function (ctx, seconds) {
   unwindStack(ctx, 'initiateProgressHeartbeat');
   return interval;
 };
+
+exports.isNewEngland = stateFips => {
+  return (
+    stateFips === '09' ||
+    stateFips === '23' ||
+    stateFips === '25' ||
+    stateFips === '44' ||
+    stateFips === '30' ||
+    stateFips === '50'
+  );
+};

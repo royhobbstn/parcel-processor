@@ -36,6 +36,7 @@ const { getTaskInfo, runProcessorTask } = require('../util/ecsOperations');
 const { getTaskLogs } = require('../util/cloudwatchOps');
 const { deleteItem } = require('../util/deleteItems');
 const { siteData } = require('../util/siteData');
+const { isNewEngland } = require('../util/misc');
 
 exports.appRouter = async app => {
   //
@@ -319,14 +320,7 @@ exports.appRouter = async app => {
       await acquireConnection(ctx);
 
       let rows;
-      if (
-        geoid === '09' ||
-        geoid === '23' ||
-        geoid === '25' ||
-        geoid === '44' ||
-        geoid === '33' ||
-        geoid === '50'
-      ) {
+      if (isNewEngland(geoid)) {
         // if new england, return county subdivisions
         rows = await getCountySubdivisionsByState(ctx, geoid);
       } else {

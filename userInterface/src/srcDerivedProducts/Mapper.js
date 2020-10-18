@@ -22,6 +22,7 @@ function Mapper({ statsInfo, selectedFieldKey, geoid, selectedDownload }) {
 
   const handleClick = (evt, data, geoid) => {
     fieldMap[rowMarker] = geoid;
+    updateFieldMap([...fieldMap]);
     const numItems = Object.keys(statsInfo.fields[selectedFieldKey].uniques).length;
     if (rowMarker === numItems - 1) {
       updateRowMarker(0);

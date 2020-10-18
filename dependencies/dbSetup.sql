@@ -56,7 +56,7 @@ CREATE table products(
    individual_ref VARCHAR(16),
    product_type ENUM('ndgeojson', 'shp', 'gdb', 'geojson', 'gpkg', 'pbf'),
    product_origin ENUM('original', 'derived'),
-   geoid VARCHAR(7),
+   geoid VARCHAR(20),
    product_key VARCHAR(500),
    message_id VARCHAR(100),
    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

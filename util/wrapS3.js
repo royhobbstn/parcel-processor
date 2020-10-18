@@ -96,6 +96,8 @@ exports.createRawDownloadKey = function (ctx, fipsDetails, geoid, geoName, downl
     key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${geoid}-${geoName}`;
   } else if (fipsDetails.SUMLEV === '050') {
     key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${geoid}-${geoName}-${stateName}`;
+  } else if (fipsDetails.SUMLEV === '060') {
+    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYSUBFIPS}-${geoName}/${downloadRef}-${geoid}-${geoName}-${stateName}`;
   } else if (fipsDetails.SUMLEV === '160') {
     key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.PLACEFIPS}-${geoName}/${downloadRef}-${geoid}-${geoName}-${stateName}`;
   } else {
@@ -125,6 +127,8 @@ exports.createProductDownloadKey = function (
     key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${productRef}-${individualRef}-${geoid}-${geoName}`;
   } else if (fipsDetails.SUMLEV === '050') {
     key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYFIPS}-${geoName}/${downloadRef}-${productRef}-${individualRef}-${geoid}-${geoName}-${stateName}`;
+  } else if (fipsDetails.SUMLEV === '060') {
+    key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.COUNTYSUBFIPS}-${geoName}/${downloadRef}-${productRef}-${individualRef}-${geoid}-${geoName}-${stateName}`;
   } else if (fipsDetails.SUMLEV === '160') {
     key = `${fipsDetails.STATEFIPS}-${stateName}/${fipsDetails.PLACEFIPS}-${geoName}/${downloadRef}-${productRef}-${individualRef}-${geoid}-${geoName}-${stateName}`;
   } else {

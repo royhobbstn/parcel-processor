@@ -261,7 +261,7 @@ function makeS3Key(ctx, str) {
 exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
   ctx.process.push({ name: 'lookupCleanGeoName', timestamp: getTimestamp() });
 
-  const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS } = fipsDetails;
+  const { SUMLEV, STATEFIPS, COUNTYFIPS, PLACEFIPS, COUNTYSUBFIPS } = fipsDetails;
 
   let geoid;
 
@@ -269,6 +269,8 @@ exports.lookupCleanGeoName = async function (ctx, fipsDetails) {
     geoid = STATEFIPS;
   } else if (SUMLEV === '050') {
     geoid = `${STATEFIPS}${COUNTYFIPS}`;
+  } else if (SUMLEV === '060') {
+    geoid = `${STATEFIPS}${COUNTYSUBFIPS}`;
   } else if (SUMLEV === '160') {
     geoid = `${STATEFIPS}${PLACEFIPS}`;
   } else {

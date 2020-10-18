@@ -284,7 +284,7 @@ exports.getSQSMessagesByGeoidAndType = async function (ctx, messageType, geoid) 
   const query = await slsAuroraClient.query({
     sql:
       'SELECT messages.created, messages.message_id, messages.message_type, messages.message_body, products.geoid FROM messages JOIN products ON messages.message_id = products.message_id WHERE message_type=:messageType AND geoid LIKE :geoid ORDER BY messages.created DESC LIMIT 300',
-    parameters: { messageType, geoid: `%${geoid}%` },
+    parameters: { messageType, geoid: `${geoid}%` },
   });
   unwindStack(ctx, 'getSQSMessagesByGeoidAndType');
   return query.records;

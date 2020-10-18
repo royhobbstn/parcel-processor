@@ -246,6 +246,9 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
                   //  get id of index feature
                   const id = indexFeature.properties[idPrefix];
 
+                  // don't need this showing up in attributes file
+                  delete feature.properties.__frozen;
+
                   // add current features attributes to key(id): [array of additional features]
                   if (additionalFeatures[id]) {
                     additionalFeatures[id].push(feature.properties);
@@ -432,6 +435,7 @@ exports.writeTileAttributes = function (ctx, derivativePath, tilesDir, lookup, a
       .on('data', async function (obj) {
         readStream.pause();
         const properties = obj.properties;
+        delete properties.__frozen;
         properties.overlappingFeatures = additionalFeatures[properties[idPrefix]];
         const prefix = lookup[properties[idPrefix]];
 

@@ -478,7 +478,6 @@ exports.processProducts = async function (ctx, data) {
       const generatedMetadata = await readTippecanoeMetadata(ctx, `${tilesDir}/metadata.json`);
 
       const metadata = {
-        layername: '',
         ...commandInput,
         ...meta,
         processed: new Date().toISOString(),
