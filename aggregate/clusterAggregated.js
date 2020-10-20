@@ -52,9 +52,12 @@ exports.clusterAggregated = async function (
     }
 
     await new Promise((resolve, reject) => {
+      let readCount = 0;
+
       fs.createReadStream(filename)
         .pipe(ndjson.parse({ strict: false }))
         .on('data', function (obj) {
+          readCount++;
           const exists = ids[obj.properties[idPrefix]];
           ids[obj.properties[idPrefix]] = true;
           if (!exists) {
@@ -66,12 +69,17 @@ exports.clusterAggregated = async function (
           return reject(err);
         })
         .on('end', async () => {
-          ctx.log.info(' records read and indexed');
+          ctx.log.info(`${readCount} total records read`);
           return resolve();
         });
     });
 
     const count = filtered.length;
+
+    if (!count) {
+      ctx.log.info('no features. skipping.');
+      continue;
+    }
 
     console.log(`counted ${count} features for zoomLevel ${currentZoom}`);
 

@@ -259,11 +259,12 @@ exports.getSourceData = async function (ctx) {
   return query.records;
 };
 
-exports.getProductsData = async function (ctx) {
+exports.getProductsData = async function (ctx, fips) {
   ctx.process.push({ name: 'getProductsData', timestamp: getTimestamp() });
   const query = await slsAuroraClient.query({
     sql:
-      'SELECT product_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key, download_id FROM products',
+      'SELECT product_id, product_ref, individual_ref, product_type, product_origin, geoid, product_key, download_id FROM products WHERE geoid LIKE :fips',
+    parameters: { fips: `${fips}%` },
   });
   unwindStack(ctx, 'getProductsData');
   return query.records;

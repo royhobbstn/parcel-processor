@@ -148,15 +148,17 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
 }
 
 function calcBreaks(ctx, data) {
-  let thedata = sampleSize(data, SAMPLE);
+  let thedata = data.length > 100 ? sampleSize(data, SAMPLE) : data;
   ctx.process.push({ name: 'calcBreaks', timestamp: getTimestamp() });
 
   const max = ss.max(thedata);
 
   // all values in array are 0. (presumably no bg data)  Add a '1' to the array so simplestatistics library doesnt fail computing ckmeans.
-  if (max === 0) {
+  // if sample size is small, also add dummy data so calcs dont fail
+  // TODO, shouldnt these have never been attributes?
+  if (max === 0 || thedata.length < 12) {
     ctx.log.warn('max value of field is 0.  filling array with nonsense');
-    thedata = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+    thedata.push(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
   }
 
   const min = ss.min(thedata);

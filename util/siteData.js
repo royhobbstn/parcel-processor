@@ -1,13 +1,8 @@
 // @ts-check
 const fs = require('fs');
 const config = require('config');
-const { acquireConnection } = require('./wrapQuery');
-const {
-  getDownloadsData,
-  getSourceData,
-  getProductsData,
-  getGeoIdentifiersData,
-} = require('./queries');
+const { acquireConnection, getProductsDataWrapper } = require('./wrapQuery');
+const { getDownloadsData, getSourceData, getGeoIdentifiersData } = require('./queries');
 const { putFileToS3 } = require('./s3Operations');
 const { invalidateFiles } = require('./cloudfrontOps');
 const { isNewEngland } = require('./misc');
@@ -26,10 +21,15 @@ exports.siteData = siteData;
 async function siteData(ctx) {
   await acquireConnection(ctx);
 
+  console.log('a');
   const downloads_data = await getDownloadsData(ctx);
+  console.log('b');
   const source_data = await getSourceData(ctx);
-  const products_data = await getProductsData(ctx);
+  console.log('c');
   const geo_data = await getGeoIdentifiersData(ctx);
+  console.log('d');
+  const products_data = await getProductsDataWrapper(ctx);
+  console.log('e');
 
   const downloads = {};
   downloads_data.forEach(row => {
@@ -202,9 +202,9 @@ function getPopulation(ctx, geoid, sumlev) {
   }
 
   if (sumlev === '050') {
-    return countyPopulation[geoid];
+    return countyPopulation[geoid] || 0;
   } else if (sumlev === '060') {
-    return countySubPopulation[geoid];
+    return countySubPopulation[geoid] || 0;
   } else {
     // other geo's don't factor into coverage count
     return 0;

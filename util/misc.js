@@ -123,7 +123,7 @@ exports.isNewEngland = stateFips => {
     stateFips === '23' ||
     stateFips === '25' ||
     stateFips === '44' ||
-    stateFips === '30' ||
+    stateFips === '33' ||
     stateFips === '50'
   );
 };

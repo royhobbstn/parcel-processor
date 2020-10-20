@@ -20,6 +20,7 @@ const {
   commitTransaction,
   rollbackTransaction,
   createMessageRecord,
+  getProductsData,
 } = require('./queries');
 const { getSourceType, unwindStack, getTimestamp } = require('./misc');
 const { sourceTypes, dispositions, fileFormats, productOrigins } = require('./constants');
@@ -394,4 +395,19 @@ exports.initiateDatabaseHeartbeat = function (ctx, seconds) {
 
   unwindStack(ctx, 'initiateDatabaseHeartbeat');
   return interval;
+};
+
+exports.getProductsDataWrapper = async function (ctx) {
+  ctx.process.push({ name: 'getProductsDataWrapper', timestamp: getTimestamp() });
+
+  const allProducts = [];
+  const stateFips = ['0', '1', '2', '3', '4', '5'];
+
+  for (let fips of stateFips) {
+    const products = await getProductsData(ctx, fips);
+    allProducts.push(...products);
+  }
+
+  unwindStack(ctx, 'getProductsDataWrapper');
+  return allProducts;
 };
