@@ -6,7 +6,6 @@ const skmeans = require('skmeans');
 const { unwindStack, getTimestamp } = require('./misc');
 
 exports.clustersKmeans = function (ctx, points, options) {
-  console.log({ points, options });
   ctx.process.push({ name: 'clustersKmeans', timestamp: getTimestamp() });
 
   // Optional parameters
@@ -32,8 +31,6 @@ exports.clustersKmeans = function (ctx, points, options) {
   // collect points coordinates
   var data = turf.meta.coordAll(points);
 
-  console.log({ data: data.length });
-  console.log({ numberOfClusters });
   // create skmeans clusters
   var skmeansResult = skmeans(data, numberOfClusters, 'kmrand');
 
