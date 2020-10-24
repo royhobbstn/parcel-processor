@@ -7,7 +7,7 @@ const { computeFeature } = require('./computeFeature.js');
 const turf = require('@turf/turf');
 const { idPrefix, zoomLevels } = require('../util/constants');
 const ndjson = require('ndjson');
-const { unwindStack, getTimestamp } = require('../util/misc');
+const { unwindStack, getTimestamp, sleep } = require('../util/misc');
 const TinyQueue = require('tinyqueue');
 const mapshaper = require('mapshaper');
 
@@ -15,6 +15,16 @@ exports.runAggregate = runAggregate;
 
 async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggregationLevel = 0) {
   ctx.process.push({ name: 'runAggregate' + aggregationLevel, timestamp: getTimestamp() });
+
+  ctx.log.info(`aggregatedNdgeojsonBase: ${aggregatedNdgeojsonBase}`);
+
+  // honestly best guess as to why bergen county was failing
+  // - it would lock up and memory would climb until 32GB (filled machine)
+  // - was maybe i was overflowing the buffer from my file reads
+  // - or too many console writes (which go to files)
+  // finally worked when i slowed it down (by uploading clusterFilePath to S3 using await)
+  // replicating that in a sense here
+  await sleep(3000);
 
   // @ts-ignore
   let queue = new TinyQueue([], (a, b) => {
@@ -33,6 +43,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
   let geojson_feature_count = 0;
   const excludedFeatures = []; // features previously marked as __frozen which will not be aggregated, but which will be included in output
   let excludedCount = 0;
+  let clusterFeaturesRead = 0;
 
   /*** Initial index creation and calculation ***/
 
@@ -44,6 +55,11 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     fs.createReadStream(`${clusterFilePath}`)
       .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
+        if (clusterFeaturesRead % 1000 === 0) {
+          ctx.log.info(`${clusterFeaturesRead} records collected.`);
+        }
+
+        clusterFeaturesRead++;
         // make a new feature with only __po_id, __frozen
         obj.properties = {
           [idPrefix]: obj.properties[idPrefix],
@@ -57,25 +73,34 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
         return reject(err);
       })
       .on('end', async () => {
-        ctx.log.info(geojson_feature_count + ' records read and indexed');
+        ctx.log.info(clusterFeaturesRead + ' records collected');
         return resolve();
       });
   });
 
   // use mapshaper to snap and correct imperfections in dataset.
+  ctx.log.info('running mapshaper on dataset to clean geometry.');
   const input = { 'input.geojson': JSON.stringify(collection) };
   const cmd = '-i input.geojson snap -clean -o output.geojson';
   const output = await mapshaper.applyCommands(cmd, input);
   const cleaned = JSON.parse(output['output.geojson'].toString()).features;
   ctx.log.info(`cleaned ${cleaned.length} features`);
 
-  ctx.log.info(`0 features indexed.`);
   cleaned.forEach(obj => {
     // only "not huge" features get indexed
     // Think Summit County's Master Parcel
     // (all encompasing parcel that makes up all 'unused' land in County)
     // these parcels can be very complex with hundreds of holes
     // javascript processing cant handle them without locking for sometimes hours
+
+    if ((geojson_feature_count + excludedCount) % 1000 === 0) {
+      ctx.log.info(
+        `${
+          geojson_feature_count + excludedCount
+        } features sifted.  ${geojson_feature_count} kept, ${excludedCount} excluded`,
+      );
+    }
+
     if (!obj.properties.__frozen) {
       tree.insert(obj);
       keyed_geojson[obj.properties[idPrefix]] = obj;
@@ -84,12 +109,8 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
       excludedFeatures.push(obj);
       excludedCount++;
     }
-
-    if ((geojson_feature_count + excludedCount) % 5000 === 0) {
-      ctx.log.info(`${geojson_feature_count} features indexed.`);
-    }
   });
-  ctx.log.info(`${cleaned.length} features indexed.`);
+  ctx.log.info(`${geojson_feature_count} features indexed.`);
   ctx.log.info(`${excludedCount} features were too complex for quick aggregation`);
 
   // initially seed queue
@@ -165,7 +186,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
       }
     }
 
-    if (geojson_feature_count % 100 === 0) {
+    if (geojson_feature_count % 1000 === 0) {
       const progress =
         ((STARTING_GEOJSON_FEATURE_COUNT - geojson_feature_count) / REDUCTIONS_NEEDED) * 100;
       ctx.log.info(`aggregate progress ${progress.toFixed(2)} %`);

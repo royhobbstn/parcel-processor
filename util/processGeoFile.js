@@ -141,7 +141,7 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
   ctx.process.push({ name: 'addUniqueIdNdjson', timestamp: getTimestamp() });
 
   const tree = geojsonRbush(); // to detect duplicates
-  const additionalFeatures = {}; // key[id] = [array of feature properties]  : duplicate features
+  // const additionalFeatures = {}; // key[id] = [array of feature properties]  : duplicate features
   let additionalCount = 0;
   let filteredOut = 0;
 
@@ -157,9 +157,21 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
       .on('finish', () => {
         ctx.log.info(`processing complete. autoincrement id: ${idPrefix} added.`);
         ctx.log.info(`misc filtered out: ${filteredOut}`);
-        ctx.log.info(`additional feature count (overlaps): ${additionalCount}`);
         unwindStack(ctx, 'addUniqueIdNdjson');
-        return resolve(additionalFeatures);
+        return resolve();
+      });
+
+    const additionalFeaturesStream = fs
+      .createWriteStream(`${outputPath}.add.ndgeojson`)
+      .on('error', err => {
+        ctx.log.error('Error in additional features writeStream: ', {
+          error: err.message,
+          stack: err.stack,
+        });
+      })
+      .on('finish', () => {
+        ctx.log.info(`finished writing additional features to file.`);
+        ctx.log.info(`additional feature count (overlaps): ${additionalCount}`);
       });
 
     const readStream = fs
@@ -249,12 +261,11 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
                   // don't need this showing up in attributes file
                   delete feature.properties.__frozen;
 
-                  // add current features attributes to key(id): [array of additional features]
-                  if (additionalFeatures[id]) {
-                    additionalFeatures[id].push(feature.properties);
-                  } else {
-                    additionalFeatures[id] = [feature.properties];
-                  }
+                  // send to additional features stream
+                  additionalFeaturesStream.write(
+                    JSON.stringify({ id, properties: feature.properties }) + '\n',
+                    'utf8',
+                  );
 
                   // dont write new feature to ndgeojson
                   writeNewFeature = false;
@@ -272,10 +283,12 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
           }
 
           if (writeNewFeature) {
-            const continueWriting = writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
-            if (!continueWriting) {
-              await new Promise(resolve => writeStream.once('drain', resolve));
-            }
+            writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
+
+            // const continueWriting = writeStream.write(JSON.stringify(feature) + '\n', 'utf8');
+            // if (!continueWriting) {
+            //   await new Promise(resolve => writeStream.once('drain', resolve));
+            // }
 
             // still write the frozen features, but dont index them
             if (!feature.properties.__frozen) {
@@ -297,6 +310,46 @@ exports.addUniqueIdNdjson = function (ctx, inputPath, outputPath) {
       .on('end', async () => {
         ctx.log.info(transformed + ' records read');
         writeStream.end();
+        additionalFeaturesStream.end();
+      });
+  });
+};
+
+exports.loadAdditionalFeatures = async function (ctx, path) {
+  //
+
+  return new Promise((resolve, reject) => {
+    const additionalFeatures = {};
+    let counted = 0;
+
+    const readStream = fs
+      .createReadStream(`${path}.ndgeojson`)
+      .pipe(ndjson.parse({ strict: false }))
+      .on('data', obj => {
+        if (counted % 5000 === 0) {
+          ctx.log.info(counted + ' additional feature records read');
+        }
+
+        counted++;
+
+        // { id, properties: feature.properties }
+        const id = obj.id;
+        const properties = obj.properties;
+
+        // add current feature attributes to key(id): [array of additional features]
+        if (additionalFeatures[id]) {
+          additionalFeatures[id].push(properties);
+        } else {
+          additionalFeatures[id] = [properties];
+        }
+      })
+      .on('error', err => {
+        ctx.log.warn('Error', { err: err.message, stack: err.stack });
+        return reject(err);
+      })
+      .on('end', async () => {
+        ctx.log.info(counted + ' additional features counted');
+        return resolve(additionalFeatures);
       });
   });
 };
@@ -628,6 +681,7 @@ exports.createClusterIdHull = async function (ctx, outputPath, lookup) {
         ctx.log.info(transformed + ' records processed');
 
         const hulls = Object.keys(clusterGeo).map(key => {
+          ctx.log.info(`Creating convex cluster hull: ${key}`);
           const layer = turf.convex(turf.featureCollection(clusterGeo[key]));
           layer.properties = { [clusterPrefix]: key };
           return layer;
@@ -736,6 +790,7 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
   const attributeLookupFile = {};
   const fileNames = {};
   let completedFileWrites = 0;
+  let countRecords = 0;
 
   await new Promise((resolve, reject) => {
     const readStream = fs
@@ -743,6 +798,11 @@ exports.divideIntoClusters = async function (ctx, augmentedBase, miniNdgeojsonBa
       .pipe(ndjson.parse({ strict: false }))
       .on('data', async function (obj) {
         readStream.pause();
+
+        if (countRecords % 5000 === 0) {
+          ctx.log.info(countRecords + ' divideIntoCluster records processed');
+        }
+        countRecords++;
 
         // save attributes to lookup file
         attributeLookupFile[obj.properties[idPrefix]] = JSON.parse(JSON.stringify(obj.properties));

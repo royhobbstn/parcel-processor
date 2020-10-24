@@ -33,6 +33,7 @@ const {
   addUniqueIdNdjson,
   divideIntoClusters,
   aggregateAggregatedClusters,
+  loadAdditionalFeatures,
 } = require('../util/processGeoFile');
 const { generateRef, gzipTileAttributes } = require('../util/crypto');
 const { zipShapefile, createDirectories } = require('../util/filesystemUtil');
@@ -374,7 +375,7 @@ exports.processProducts = async function (ctx, data) {
     try {
       // flatten, unstack and add prefixId
       const augmentedBase = `${convertToFormatBase}.aug`;
-      const additionalFeatures = await addUniqueIdNdjson(ctx, convertToFormatBase, augmentedBase);
+      await addUniqueIdNdjson(ctx, convertToFormatBase, augmentedBase);
 
       // -- start golang
       const [points, propertyCount, centroidsFilename] = await extractPointsFromNdGeoJson(
@@ -471,6 +472,8 @@ exports.processProducts = async function (ctx, data) {
       ctx.log.info(`writing cluster hull`);
       const buffer = zlib.gzipSync(JSON.stringify(clusterHull));
       fs.writeFileSync(`${tilesDir}/cluster_hull.geojson`, buffer);
+
+      const additionalFeatures = loadAdditionalFeatures(ctx, `${augmentedBase}.add`);
 
       await writeTileAttributes(ctx, augmentedBase, tilesDir, lookup, additionalFeatures);
       await gzipTileAttributes(ctx, `${tilesDir}/attributes`);

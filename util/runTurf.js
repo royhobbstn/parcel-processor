@@ -1,56 +1,56 @@
-// @ts-check
+const { fork } = require('child_process');
 
-const turf = require('@turf/turf');
+let turfWorker = fork('./util/turfWorker.js');
 
-process.on('message', messageObject => {
-  // example
-  if (messageObject.parentMsg === 'add') {
-    try {
-      const response = messageObject.params[0] + messageObject.params[1];
-      process.send({ response, isError: false });
-    } catch (err) {
-      process.send({ response: err.message, isError: true });
+const TIMEOUT = '__timeout';
+
+async function runTurf(ctx, funcName, paramsArr) {
+  const realPromise = new Promise((resolve, reject) => {
+    turfWorker.on('message', response => {
+      resolve(response);
+    });
+
+    turfWorker.on('error', err => {
+      reject(err);
+    });
+
+    turfWorker.send({ parentMsg: funcName, params: paramsArr });
+  });
+
+  const timeoutPromise = new Promise((resolve, reject) => {
+    setTimeout(resolve, 5000, { response: TIMEOUT, isError: true });
+  });
+
+  let response;
+
+  try {
+    const result = await Promise.race([realPromise, timeoutPromise]);
+    if (result.response === TIMEOUT) {
+      ctx.log.warn('Forked process stalled.', { funcName, paramsArr });
+      turfWorker.kill('SIGINT');
+      ctx.log.info('old process killed.  recreating worker');
+      turfWorker = fork('../util/runTurf.js');
+      response = null;
+    } else if (result.isError) {
+      ctx.log.warn('Forked process errored in routine operation.');
+      response = null;
+    } else {
+      response = result.response;
     }
+  } catch (err) {
+    ctx.log.error('There was an unexpected error.  Restarting Forked Process.');
+    turfWorker.kill('SIGINT');
+    ctx.log.info('old process killed.  recreating worker');
+    turfWorker = fork('../util/runTurf.js');
+    response = null;
   }
 
-  // turf functions
-  if (messageObject.parentMsg === 'intersect') {
-    try {
-      const response = turf.intersect(messageObject.params[0], messageObject.params[1]);
-      process.send({ response, isError: false });
-    } catch (err) {
-      process.send({ response: err.message, isError: true });
-    }
-  }
+  return response;
+}
 
-  if (messageObject.parentMsg === 'union') {
-    try {
-      const response = turf.union(messageObject.params[0], messageObject.params[1]);
-      process.send({ response, isError: false });
-    } catch (err) {
-      process.send({ response: err.message, isError: true });
-    }
-  }
+exports.runTurf = runTurf;
 
-  if (messageObject.parentMsg === 'area') {
-    try {
-      const response = turf.area(messageObject.params[0]);
-      process.send({ response, isError: false });
-    } catch (err) {
-      process.send({ response: err.message, isError: true });
-    }
-  }
-
-  if (messageObject.parentMsg === 'err') {
-    try {
-      const response = turf.undef.this.that;
-      process.send({ response, isError: false });
-    } catch (err) {
-      process.send({ response: err.message, isError: true });
-    }
-  }
-
-  if (messageObject.parentMsg === 'end') {
-    process.exit();
-  }
-});
+// runTurf('add', [5, 6]).then(response => {
+//   console.log(response);
+//   turfWorker.send({ parentMsg: 'end' });
+// });
