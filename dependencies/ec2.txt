@@ -1,12 +1,6 @@
 fresh ec2 setup
 --------------
-sudo apt-get update
-sudo snap install docker
-OR sudo apt-get install docker.io
-sudo apt-get install awscli
-aws configure
-
-sudo sysctl -w vm.max_map_count=6553000
+sudo apt-get update && sudo apt-get install docker.io -y && sudo apt-get install awscli -y && sudo sysctl -w vm.max_map_count=6553000 && aws configure
 
 sudo $(aws ecr get-login --no-include-email --region us-east-2)
 sudo docker pull 000009394762.dkr.ecr.us-east-2.amazonaws.com/parcel-outlet:latest

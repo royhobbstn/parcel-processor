@@ -473,7 +473,7 @@ exports.processProducts = async function (ctx, data) {
       const buffer = zlib.gzipSync(JSON.stringify(clusterHull));
       fs.writeFileSync(`${tilesDir}/cluster_hull.geojson`, buffer);
 
-      const additionalFeatures = loadAdditionalFeatures(ctx, `${augmentedBase}.add`);
+      const additionalFeatures = await loadAdditionalFeatures(ctx, `${augmentedBase}.add`);
 
       await writeTileAttributes(ctx, augmentedBase, tilesDir, lookup, additionalFeatures);
       await gzipTileAttributes(ctx, `${tilesDir}/attributes`);
