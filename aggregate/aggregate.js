@@ -13,7 +13,13 @@ const mapshaper = require('mapshaper');
 
 exports.runAggregate = runAggregate;
 
-async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggregationLevel = 0) {
+async function runAggregate(
+  ctx,
+  clusterFilePath,
+  aggregatedNdgeojsonBase,
+  aggregationLevel = 0,
+  featureCache,
+) {
   ctx.process.push({ name: 'runAggregate' + aggregationLevel, timestamp: getTimestamp() });
 
   ctx.log.info(`aggregatedNdgeojsonBase: ${aggregatedNdgeojsonBase}`);
@@ -24,7 +30,8 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
   // - or too many console writes (which go to files)
   // finally worked when i slowed it down (by uploading clusterFilePath to S3 using await)
   // replicating that in a sense here
-  await sleep(3000);
+  // await sleep(3000);
+  // i did the above but Bergen failed in prod
 
   // @ts-ignore
   let queue = new TinyQueue([], (a, b) => {
@@ -51,40 +58,49 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
 
   const collection = turf.featureCollection([]);
 
-  await new Promise((resolve, reject) => {
-    fs.createReadStream(`${clusterFilePath}`)
-      .pipe(ndjson.parse({ strict: false }))
-      .on('data', async function (obj) {
-        if (clusterFeaturesRead % 1000 === 0) {
-          ctx.log.info(`${clusterFeaturesRead} records collected.`);
-        }
+  let cleaned;
 
-        clusterFeaturesRead++;
-        // make a new feature with only __po_id, __frozen
-        obj.properties = {
-          [idPrefix]: obj.properties[idPrefix],
-          __frozen: obj.properties.__frozen,
-        };
+  if (!featureCache) {
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(`${clusterFilePath}`)
+        .pipe(ndjson.parse({ strict: false }))
+        .on('data', async function (obj) {
+          if (clusterFeaturesRead % 1000 === 0) {
+            ctx.log.info(`${clusterFeaturesRead} records collected.`);
+          }
 
-        collection.features.push(obj);
-      })
-      .on('error', err => {
-        ctx.log.warn('Error', { err: err.message, stack: err.stack });
-        return reject(err);
-      })
-      .on('end', async () => {
-        ctx.log.info(clusterFeaturesRead + ' records collected');
-        return resolve();
-      });
-  });
+          clusterFeaturesRead++;
+          // make a new feature with only __po_id, __frozen
+          obj.properties = {
+            [idPrefix]: obj.properties[idPrefix],
+            __frozen: obj.properties.__frozen,
+          };
 
-  // use mapshaper to snap and correct imperfections in dataset.
-  ctx.log.info('running mapshaper on dataset to clean geometry.');
-  const input = { 'input.geojson': JSON.stringify(collection) };
-  const cmd = '-i input.geojson snap -clean -o output.geojson';
-  const output = await mapshaper.applyCommands(cmd, input);
-  const cleaned = JSON.parse(output['output.geojson'].toString()).features;
-  ctx.log.info(`cleaned ${cleaned.length} features`);
+          collection.features.push(obj);
+        })
+        .on('error', err => {
+          ctx.log.warn('Error', { err: err.message, stack: err.stack });
+          return reject(err);
+        })
+        .on('end', async () => {
+          ctx.log.info(clusterFeaturesRead + ' records collected');
+          return resolve();
+        });
+    });
+
+    // use mapshaper to snap and correct imperfections in dataset.
+    ctx.log.info('running mapshaper on dataset to clean geometry.');
+    const input = { 'input.geojson': JSON.stringify(collection) };
+    const cmd = '-i input.geojson snap -clean -o output.geojson';
+    const output = await mapshaper.applyCommands(cmd, input);
+    cleaned = JSON.parse(output['output.geojson'].toString()).features;
+    ctx.log.info(`cleaned ${cleaned.length} features`);
+
+    // cache features here
+    featureCache = JSON.parse(JSON.stringify(cleaned));
+  } else {
+    cleaned = JSON.parse(JSON.stringify(featureCache));
+  }
 
   cleaned.forEach(obj => {
     // only "not huge" features get indexed
@@ -336,7 +352,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
     });
 
     unwindStack(ctx, 'runAggregate' + aggregationLevel);
-    return;
+    return [undefined, undefined];
   }
 
   if (aggregationLevel >= 14) {
@@ -348,7 +364,7 @@ async function runAggregate(ctx, clusterFilePath, aggregatedNdgeojsonBase, aggre
 
   unwindStack(ctx, 'runAggregate' + aggregationLevel);
 
-  return aggregationLevel + 1;
+  return [aggregationLevel + 1, featureCache];
 }
 
 // percent of features that will be retained at each zoom level

@@ -408,8 +408,15 @@ exports.processProducts = async function (ctx, data) {
       for (const [index, filename] of filenames.entries()) {
         // loop through mini (clustered) pieces of the full ndgeojson
         let nextLevel = 0;
+        let featureCache = null;
         do {
-          nextLevel = await runAggregate(ctx, filename, aggregatedNdgeojsonBase, nextLevel);
+          [nextLevel, featureCache] = await runAggregate(
+            ctx,
+            filename,
+            aggregatedNdgeojsonBase,
+            nextLevel,
+            featureCache,
+          );
         } while (nextLevel !== undefined);
         ctx.log.info(`Completed Aggregating ${index + 1}/${numClusters}`);
       }
