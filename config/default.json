@@ -24,7 +24,10 @@
   },
   "DataExport": {
     "localPath": "",
-    "remotePath": ""
+    "remotePath": "",
+    "valuePath": "",
+    "sitemapLocalPath": "",
+    "sitemapRemotePath": ""
   },
   "Cloudfront": {
     "websiteDistributionId": ""

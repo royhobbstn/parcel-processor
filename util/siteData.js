@@ -14,7 +14,7 @@ const {
   totalAreasCount,
   countySubPopulation,
 } = require('../lookup/popLookup');
-const { CostExplorer } = require('aws-sdk');
+const { createSitemap } = require('./createSitemap');
 
 exports.siteData = siteData;
 
@@ -109,6 +109,9 @@ async function siteData(ctx) {
     }
   });
 
+  // create sitemap (prod only)
+  const siteMapData = createSitemap(ctx, Object.keys(data));
+
   let populationAccountedFor = 0;
   let areasAccountedFor = 0;
 
@@ -167,6 +170,7 @@ async function siteData(ctx) {
     JSON.stringify(highestValueAreas.slice(0, 50), null, '  '),
     'utf8',
   );
+  fs.writeFileSync(config.get('DataExport.sitemapLocalPath'), siteMapData, 'utf8');
 
   // production - put data on server
   if (config.get('env') === 'production') {
@@ -179,6 +183,15 @@ async function siteData(ctx) {
       true,
       false,
     );
+    await putFileToS3(
+      ctx,
+      config.get('Buckets.websiteBucket'),
+      config.get('DataExport.sitemapRemotePath'),
+      config.get('DataExport.sitemapLocalPath'),
+      'text/xml',
+      false,
+      false,
+    );
   }
 
   // dev and prod, copy to repo folder
@@ -187,8 +200,16 @@ async function siteData(ctx) {
     `../parcel-outlet/public/${config.get('DataExport.remotePath')}`,
   );
 
+  fs.copyFileSync(
+    config.get('DataExport.sitemapLocalPath'),
+    `../parcel-outlet/public/${config.get('DataExport.sitemapRemotePath')}`,
+  );
+
   if (config.get('env') === 'production') {
-    await invalidateFiles(ctx, [`/${config.get('DataExport.remotePath')}`]);
+    await invalidateFiles(ctx, [
+      `/${config.get('DataExport.remotePath')}`,
+      `/${config.get('DataExport.sitemapRemotePath')}`,
+    ]);
   }
 }
 

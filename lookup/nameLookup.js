@@ -1,4 +1,4 @@
-exports.countyNameLookup = function countNameLookup(fips) {
+exports.countyNameLookup = function countyNameLookup(fips) {
   const codes = {
     '31039': 'Cuming County',
     '53069': 'Wahkiakum County',
