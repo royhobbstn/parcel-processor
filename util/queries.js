@@ -353,3 +353,14 @@ exports.deleteRecordById = async function (ctx, table, idName, value) {
   unwindStack(ctx, 'deleteRecordById');
   return response;
 };
+
+exports.getTileDatasets = async function (ctx, createdBefore, limit) {
+  ctx.process.push({ name: 'getTileDatasets', timestamp: getTimestamp() });
+  const query = await slsAuroraClient.query({
+    sql:
+      'SELECT * from products p join messages m on p.message_id=m.message_id where product_type="pbf" and p.created < :createdBefore order by p.created limit :limit',
+    parameters: { createdBefore, limit },
+  });
+  unwindStack(ctx, 'getTileDatasets');
+  return query.records;
+};

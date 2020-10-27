@@ -2,7 +2,10 @@ const fs = require('fs');
 const { StatContext } = require('../util/StatContext');
 
 async function main() {
-  const statCounter = new StatContext({ log: console, process: [] }, `./Hartley.ndgeojson`);
+  const statCounter = new StatContext(
+    { log: console, process: [], timeBank: {}, timeStack: [] },
+    `./Hartley.ndgeojson`,
+  );
 
   await statCounter.init();
 
