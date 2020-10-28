@@ -326,7 +326,7 @@ exports.loadAdditionalFeatures = async function (ctx, path) {
       .createReadStream(`${path}.ndgeojson`)
       .pipe(ndjson.parse({ strict: false }))
       .on('data', obj => {
-        if (counted % 5000 === 0) {
+        if (counted % 500 === 0) {
           ctx.log.info(counted + ' additional feature records read');
         }
 

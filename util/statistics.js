@@ -3,7 +3,7 @@
 const fs = require('fs');
 const ss = require('simple-statistics');
 const ndjson = require('ndjson');
-const { unwindStack, getTimestamp } = require('./misc');
+const { unwindStack, getTimestamp, sleep } = require('./misc');
 const { sampleSize } = require('lodash');
 
 const SAMPLE = 25000;
@@ -124,6 +124,7 @@ async function parseFieldStatistics(ctx, statsFilePath, convertToFormatBase) {
 
   // numeric fields go through breaks
   for (let fieldName of numericFields) {
+    await sleep(20); // otherwise will lock cpu
     ctx.log.info('Calculating breaks for ' + fieldName);
     const computedBreaks = calcBreaks(ctx, values[fieldName]);
     fieldMetadata.numeric[fieldName] = computedBreaks;

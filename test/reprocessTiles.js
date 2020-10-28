@@ -8,7 +8,7 @@ const { deleteItem } = require('../util/deleteItems');
 const ctx = { log: console, process: [], timeBank: {}, timeStack: [] };
 
 const createdBefore = '2020-10-26 22:34:41';
-const limit = 1;
+const limit = 1000;
 
 async function main() {
   // require NODE_ENV  to be explicitly set
@@ -19,6 +19,11 @@ async function main() {
 
   // get all tile records from database
   const tileDatasets = await getTileDatasets(ctx, createdBefore, limit);
+
+  if (!tileDatasets.length) {
+    ctx.log.warn('no eligible datasets left');
+    return;
+  }
 
   // for each tile record
   for (let dataset of tileDatasets) {

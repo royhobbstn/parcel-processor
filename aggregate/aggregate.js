@@ -65,10 +65,6 @@ async function runAggregate(
       fs.createReadStream(`${clusterFilePath}`)
         .pipe(ndjson.parse({ strict: false }))
         .on('data', async function (obj) {
-          if (clusterFeaturesRead % 1000 === 0) {
-            ctx.log.info(`${clusterFeaturesRead} records collected.`);
-          }
-
           clusterFeaturesRead++;
           // make a new feature with only __po_id, __frozen
           obj.properties = {
@@ -109,14 +105,6 @@ async function runAggregate(
     // these parcels can be very complex with hundreds of holes
     // javascript processing cant handle them without locking for sometimes hours
 
-    if ((geojson_feature_count + excludedCount) % 1000 === 0) {
-      ctx.log.info(
-        `${
-          geojson_feature_count + excludedCount
-        } features sifted.  ${geojson_feature_count} kept, ${excludedCount} excluded`,
-      );
-    }
-
     if (!obj.properties.__frozen) {
       tree.insert(obj);
       keyed_geojson[obj.properties[idPrefix]] = obj;
@@ -132,9 +120,6 @@ async function runAggregate(
   // initially seed queue
   for (let [index, key] of Object.keys(keyed_geojson).entries()) {
     computeFeature(ctx, keyed_geojson[key], tree, queue);
-    if (index % 5000 === 0) {
-      ctx.log.info(`${index} features computed.`);
-    }
   }
   ctx.log.info(`${Object.keys(keyed_geojson).length} features computed.`);
   ctx.log.info(`finished feature computation.  Ready to aggregate.`);
@@ -189,7 +174,6 @@ async function runAggregate(
             resolve();
           });
 
-          ctx.log.info(`sending ${geojson_array.length} features to write stream`);
           for (let row of geojson_array) {
             output.write(JSON.stringify(row) + '\n');
           }
@@ -197,12 +181,11 @@ async function runAggregate(
             output.write(JSON.stringify(excludedFeature) + '\n');
           }
           output.end();
-          ctx.log.info('sent all geojson features to write stream.');
         });
       }
     }
 
-    if (geojson_feature_count % 1000 === 0) {
+    if (geojson_feature_count % 500 === 0) {
       const progress =
         ((STARTING_GEOJSON_FEATURE_COUNT - geojson_feature_count) / REDUCTIONS_NEEDED) * 100;
       ctx.log.info(`aggregate progress ${progress.toFixed(2)} %`);
