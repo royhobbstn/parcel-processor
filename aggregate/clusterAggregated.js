@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const turf = require('@turf/turf');
 const { clustersKmeans } = require('../util/modKmeans.js');
 const { idPrefix, zoomLevels, directories, clusterPrefix } = require('../util/constants');
-const { unwindStack, getTimestamp } = require('../util/misc');
+const { unwindStack, getTimestamp, sleep } = require('../util/misc');
 const ndjson = require('ndjson');
 
 // const tilesDir = `${directories.tilesDir + ctx.directoryId}/${dirName}`;
@@ -81,7 +81,7 @@ exports.clusterAggregated = async function (
       continue;
     }
 
-    console.log(`counted ${count} features for zoomLevel ${currentZoom}`);
+    ctx.log.info(`counted ${count} features for zoomLevel ${currentZoom}`);
 
     const point_array = filtered.map(feature => {
       return turf.centroid(feature.geometry, { properties: feature.properties });
@@ -126,8 +126,9 @@ exports.clusterAggregated = async function (
   }
 
   for (const cluster of totalClusters) {
+    await sleep(20);
     const obj = {};
-    console.log('building feature file for cluster: ' + cluster);
+    ctx.log.info('building feature file for cluster: ' + cluster);
     Object.keys(cluster_obj).forEach(key => {
       if (cluster_obj[key] === cluster) {
         for (let attr of Object.keys(featureProperties[key])) {
@@ -151,6 +152,7 @@ exports.clusterAggregated = async function (
     });
 
     for (let attr of Object.keys(obj)) {
+      await sleep(20);
       const buffer = zlib.gzipSync(JSON.stringify(obj[attr]));
       fs.writeFileSync(`${tilesDir}/featureAttributes/${cluster}__${attr}.json`, buffer);
     }

@@ -11,12 +11,7 @@ const { createInstanceLogger, getUniqueLogfileName } = require('./logger');
 const { sendAlertMail } = require('./email');
 const { directories, directoryIdLength } = require('./constants');
 const { generateRef } = require('./crypto');
-const {
-  initiateProgressHeartbeat,
-  unwindStack,
-  initiateFreeMemoryQuery,
-  initiateDiskSpaceQuery,
-} = require('./misc');
+const { initiateProgressHeartbeat, unwindStack } = require('./misc');
 const { cleanDirectory } = require('./filesystemUtil');
 
 exports.createContext = function (processor) {
@@ -52,8 +47,6 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
   let errorFlag = false;
 
   const progressInterval = initiateProgressHeartbeat(ctx, 30);
-  const freeMemoryQuery = initiateFreeMemoryQuery(ctx, 60);
-  const diskSpaceQuery = initiateDiskSpaceQuery(ctx, 45);
 
   // fork a process to keep database alive and constantly reset sqs visibility timeout
   const keepAlive = fork('./util/keepAlive.js');
@@ -69,8 +62,6 @@ exports.runProcess = async function (ctx, queueUrl, messageProcessor, messages) 
     // discontinue updating visibility timeout
     keepAlive.send({ msg: 'end', data: null });
     clearInterval(progressInterval);
-    clearInterval(freeMemoryQuery);
-    clearInterval(diskSpaceQuery);
 
     if (!errorFlag) {
       await deleteMessage(ctx, deleteParams);
