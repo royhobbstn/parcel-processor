@@ -1,0 +1,8 @@
+use node 6 - nvm use 6
+
+agsout -s ./services.txt -o ./data
+
+in services.txt:
+http://lcmaps.lanecounty.org/arcgis/rest/services/PATS/LakePATSReference/MapServer/7|Taxlots|5000
+
+(which is URL|Name|TimeoutMS)

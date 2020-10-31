@@ -1,0 +1,1 @@
+http://lcmaps.lanecounty.org/arcgis/rest/services/PATS/LakePATSReference/MapServer/7|Taxlots|5000

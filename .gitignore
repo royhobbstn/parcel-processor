@@ -32,6 +32,7 @@ test/*.json
 test/*.txt
 test/*.csv
 test/*.geojson
+test/data/*
 
 parcel_dataset_inventory.json
 parcel_dataset_inventory-dev.json
@@ -42,5 +43,6 @@ highest_value_counties-prod.json
 aggregate/*.json
 
 sitemap.xml
+sitemap-dev.xml
 
 robots.txt
