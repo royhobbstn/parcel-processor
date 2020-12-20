@@ -8,7 +8,7 @@ ENV GOROOT /opt/go
 ENV GOPATH /root/.go
 
 RUN apt-get update && apt-get -y install curl
-RUN curl -sL https://deb.nodesource.com/setup_14.x  | bash -
+RUN curl -sL https://deb.nodesource.com/setup_15.x  | bash -
 
 RUN apt-get update && apt-get -y install git build-essential libsqlite3-dev zlib1g-dev awscli gnupg jq nodejs unzip
 
@@ -34,5 +34,6 @@ COPY . /home/app
 
 RUN go get github.com/muesli/clusters && go get github.com/muesli/kmeans
 RUN npm install
+RUN node --version
 
 CMD npm run worker-test 
