@@ -384,6 +384,8 @@ function convertToFormat(ctx, format, outputPath, inputPath = '', chosenLayerNam
   return new Promise((resolve, reject) => {
     const application = 'ogr2ogr';
     const args = [
+      '-t_srs',
+      'EPSG:4326',
       '-fieldTypeToString',
       'DateTime',
       '-progress',
