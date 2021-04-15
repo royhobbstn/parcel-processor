@@ -24,6 +24,8 @@ yarn-error.log*
 
 config/development.json
 config/production.json
+config/test.json
+config/test-backup.json
 
 staging
 
